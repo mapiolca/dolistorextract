@@ -651,19 +651,26 @@ class ActionsDolistorextract extends CommonHookActions
 
 							// 4.2 Search for / create webmodule sale
 							if (isModEnabled("webhost")) {
-								$webmoduleResult = $this->addWebmoduleSales($product, $companyId);
-								if ($webmoduleResult <= 0) {
-									$orderError++;
-									$this->logOutput .= '<br/>-> <span class="error">Failed to create webmodule sale for <b>' . dol_escape_htmltag($product['item_name']) . '</b></span>';
+								$isDuplicate = $this->checkIfWebmoduleSaleExists(
+									$companyId,
+									$product['item_reference'],
+									$product['date_sale']
+								);
+								if ($isDuplicate) {
+									$this->logOutput .= '<br/>-> <span class="warning">Doublon détecté : Vente déjà enregistrée pour <b>' . dol_escape_htmltag($product['item_name']) . '</b>. (Ignorée)</span>';
 								} else {
-									$this->logOutput .= '<br/>-> <span class="ok">Webmodule sale created for <b>' . dol_escape_htmltag($product['item_name']) . '</b></span>';
+									$webmoduleResult = $this->addWebmoduleSales($product, $companyId);
+									if ($webmoduleResult <= 0) {
+										$orderError++;
+										$this->logOutput .= '<br/>-> <span class="error">Failed to create webmodule sale for <b>' . dol_escape_htmltag($product['item_name']) . '</b></span>';
+									} else {
+										$this->logOutput .= '<br/>-> <span class="ok">Webmodule sale created for <b>' . dol_escape_htmltag($product['item_name']) . '</b></span>';
+									}
 								}
 							}
-
 							// Save list of products for email message
 							$productList[] = $product['item_name'];
 						}
-
 						// Define emailToSend variable based on successful processing
 						$emailToSend = ($orderError == 0 && !empty($productList));
 
@@ -900,7 +907,6 @@ class ActionsDolistorextract extends CommonHookActions
 		if ($res && $this->db->num_rows($res) > 0) {
 			return true;
 		}
-
 		return false;
 	}
 }
