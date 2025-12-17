@@ -765,7 +765,7 @@ class ActionsDolistorextract extends CommonHookActions
 		// Check if a corresponding web module was found
 		if ($fk_webmodule > 0) {
 			// Convert the price to float and assign the data to the $webSales object
-			$webSales->amount = $this->convertToFloat($TItemDatas['item_price'] ?? 0);
+			$webSales->amount = $this->convertToFloat($TItemDatas['item_price_total'] ?? 0);
 			$webSales->qty = $TItemDatas['item_quantity'] ?? 1;  // Default value if not specified
 			$webSales->fk_soc = $socid;
 			$webSales->import_key = date('Ymd');  // Generate import key with current date
