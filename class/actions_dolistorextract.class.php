@@ -509,12 +509,11 @@ class ActionsDolistorextract extends CommonHookActions
 		// Arrays to store processing results
 		$orderResults = []; // Store success/failure by order reference
 
-		// Start global transaction
-		$this->db->begin();
 
 		if (!empty($orderData)) {
 			// 3. Loop through orders
 			foreach ($orderData as $orderRef => $orderDetails) {
+				$this->db->begin();
 
 				$this->logOutput .= '<br/><strong>Processing order:</strong> ' . $orderRef;
 				$orderError = 0;
@@ -707,9 +706,8 @@ class ActionsDolistorextract extends CommonHookActions
 							$emailFile = new CMailFile($subject, $sendTo, $from, $message, array(), array(), array(), $sendToCc, $sendToBcc, $deliveryreceipt, -1, '', '', $trackid);
 
 							if ($emailFile->error) {
-								++$error;
-								$this->logOutput .= '<br/><span class="error">Erreur lors de la création de l\'email : ' . $emailFile->error . '</span>';
 								dol_syslog('Dolistorextract::mail:' . $emailFile->error, LOG_ERR);
+								$this->logOutput .= '<br/><span class="error">Erreur lors de la création de l\'email : ' . $emailFile->error . '</span>';
 							} else {
 								$result = $emailFile->sendfile();
 								if ($result) {
@@ -726,33 +724,22 @@ class ActionsDolistorextract extends CommonHookActions
 						array_push($this->errors, 'No company found for order ' . $orderRef);
 					}
 				}
-
 				// Store the result for this order
 				$orderResults[$orderRef] = ($orderError == 0);
 				if ($orderError > 0) {
+					$this->db->rollback();
 					$this->logOutput .= '<br/><span class="error">Order <b>' . $orderRef . '</b> processed with errors</span>';
 					$error++;
 				} else {
+					$this->db->commit();
 					$this->logOutput .= '<br/><span class="ok">Order <b>' . $orderRef . '</b> processed successfully</span>';
 				}
 			}
-
-			// Commit or rollback based on overall success
 			if ($error) {
-				$this->db->rollback();
 				$this->nbErrors += $error;
-			} else {
-				$this->db->commit();
 			}
-
-			// Return the results by order reference
-			return $orderResults;
-		} else {
-			++$error;
-			$this->logOutput .= '<br/><strong class="error">No valid order data extracted from emails</strong>';
-			$this->db->rollback();
-			return -1;
 		}
+		return $orderResults;
 	}
 
 	/**
@@ -879,5 +866,41 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->errors[] = $message;
 		$this->logCat .= $message;
 		$error++;
+	}
+	/**
+	 * Vérifie si une vente existe déjà pour éviter les doublons
+	 * @param int $socid ID du client
+	 * @param string $dolistoreRef Référence du module (ex: "module_x")
+	 * @param int $dateSale Timestamp de la vente
+	 * @return bool True si existe déjà, False sinon
+	 */
+	private function checkIfWebmoduleSaleExists(int $socid, string $dolistoreRef, int $dateSale): bool
+	{
+		// 1. On récupère l'ID technique du module web (rowid dans llx_webmodule)
+		$fk_webmodule = $this->getWebmoduleIdByDolistoreId($dolistoreRef);
+
+		if (!$fk_webmodule) {
+			return false; // Module inconnu, donc pas de doublon possible en base
+		}
+
+		// 2. On cherche une vente correspondante
+		$sql = "SELECT rowid FROM " . $this->db->prefix() . "webmodulesales";
+		$sql .= " WHERE fk_soc = " . ((int)$socid);
+		$sql .= " AND fk_webmodule = " . ((int)$fk_webmodule);
+
+		// 3. Vérification de la date (Sécurité anti-doublon)
+		$dayStart = date('Y-m-d 00:00:00', $dateSale);
+		$dayEnd   = date('Y-m-d 23:59:59', $dateSale);
+
+		$sql .= " AND date_sale >= '" . $dayStart . "'";
+		$sql .= " AND date_sale <= '" . $dayEnd . "'";
+
+		$res = $this->db->query($sql);
+
+		if ($res && $this->db->num_rows($res) > 0) {
+			return true;
+		}
+
+		return false;
 	}
 }
