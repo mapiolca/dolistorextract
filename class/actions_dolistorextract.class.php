@@ -422,14 +422,12 @@ class ActionsDolistorextract extends CommonHookActions
 			$this->logOutput .= '<br/><span class="warning">Aucune commande valide trouvée.</span>';
 			return 0;
 		}
-
 		// 3. Traitement commande par commande
 		foreach ($ordersData as $orderRef => $orderDetails) {
 			// On délègue le traitement complet d'une commande à une méthode dédiée
 			$success = $this->processSingleOrder($user, $orderRef, $orderDetails);
 			$orderResults[$orderRef] = $success;
 		}
-
 		return $orderResults;
 	}
 	/**
@@ -453,8 +451,7 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		// B. Gestion Produits (Ventes & Events)
-		// Retourne la liste des produits succès pour l'email, ou false si erreur critique
-		$processedItems = $this->processOrderItems($user, $companyId, $orderDetails['items']);
+		$processedItems = $this->processOrderItems($user, $companyId, $orderRef, $orderDetails['items']); // Ajout de $orderRef
 
 		if ($processedItems === false) {
 			$this->db->rollback(); // Erreur technique lors de l'insertion
@@ -471,36 +468,6 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->db->commit();
 		$this->logOutput .= '<br/><span class="ok">Order <b>' . $orderRef . '</b> processed successfully</span>';
 		return true;
-	}
-	private function getOrCreateCustomer(\User $user, array $buyerData): int
-	{
-		$company = new \Societe($this->db);
-		$companyId = 0;
-
-		// 1. Recherche par Nom
-		if ($company->fetch(0, $buyerData['buyer_company']) > 0) {
-			$companyId = $company->id;
-		}
-		// 2. Recherche par Email
-		if (!$companyId && $company->fetch(0, '', '', '', '', '', '', '', '', '', $buyerData['buyer_email']) > 0) {
-			$companyId = $company->id;
-		}
-		// 3. Recherche par SIRET (Si applicable)
-		if (!$companyId && $buyerData['buyer_country_code'] == 'FR' && !empty($buyerData['buyer_idprof2'])) {
-			// ... (Insérer votre logique SQL Siret ici) ...
-			// Si trouvé : $companyId = ...
-		}
-
-		// 4. Création si introuvable
-		if (!$companyId) {
-			// Création Tiers + Contact
-			// Vous pouvez appeler ici votre méthode existante newCustomerFromDatas
-			$dolistoreMail = new \dolistoreMail();
-			$dolistoreMail->setDatas($buyerData);
-			$companyId = $this->newCustomerFromDatas($user, $dolistoreMail);
-		}
-
-		return $companyId;
 	}
 	/**
 	 * Adds a Dolibarr webmodule sale to the database, based on extracted product data and customer.
@@ -551,7 +518,6 @@ class ActionsDolistorextract extends CommonHookActions
 		// Return 0 if no web module was found
 		return 0;
 	}
-
 	/**
 	 * Retrieves the webmodule rowid from Dolistore ID (using extrafields linkage).
 	 *
@@ -583,7 +549,6 @@ class ActionsDolistorextract extends CommonHookActions
 		// Return the web module ID or 0 if not found
 		return $obj->rowid ?? 0;
 	}
-
 	/**
 	 * Converts a formatted string representing a monetary amount to a float.
 	 *
@@ -612,7 +577,132 @@ class ActionsDolistorextract extends CommonHookActions
 		// Return the converted float value
 		return $floatValue;
 	}
+	/**
+	 * @param User $user
+	 * @param array $buyerData
+	 * @return int
+	 */
+	/**
+	 * Retrieves an existing customer ID (by name, email, SIRET or Contact) or creates a new one.
+	 * Also handles the creation of the contact if the company exists.
+	 *
+	 * @param \User $user      Dolibarr user object.
+	 * @param array $buyerData Array of customer details extracted from the email.
+	 * @return int             ID of the company (socid), or 0 if failed.
+	 */
+	private function getOrCreateCustomer(\User $user, array $buyerData): int
+	{
+		$company = new \Societe($this->db);
+		$companyId = 0;
 
+		// 1. Search exactly by name
+		if ($company->fetch(0, $buyerData['buyer_company']) > 0) {
+			$companyId = $company->id;
+		}
+
+		// 2. Search exactly by email (Société)
+		if (!$companyId && $company->fetch(0, '', '', '', '', '', '', '', '', '', $buyerData['buyer_email']) > 0) {
+			$companyId = $company->id;
+		}
+
+		// 3. Search exactly by idprof2 / SIRET (FR Only)
+		if (!$companyId && $buyerData['buyer_country_code'] == 'FR' && !empty($buyerData['buyer_idprof2']) && is_numeric($buyerData['buyer_idprof2'])) {
+			$sql = '';
+			if (strlen($buyerData['buyer_idprof2']) == 14) {
+				$sql = 'SELECT rowid FROM ' . $this->db->prefix() . 'societe WHERE siret = "' . $this->db->escape($buyerData['buyer_idprof2']) . '"';
+			} elseif (strlen($buyerData['buyer_idprof2']) == 9) {
+				$sql = 'SELECT rowid FROM ' . $this->db->prefix() . 'societe WHERE siren = "' . $this->db->escape($buyerData['buyer_idprof2']) . '"';
+			}
+
+			if ($sql) {
+				$resql = $this->db->query($sql);
+				if ($resql) {
+					$obj = $this->db->fetch_object($resql);
+					if ($obj && $obj->rowid > 0) {
+						$companyId = (int)$obj->rowid;
+						$this->logOutput .= '<br/>-> <span class="ok">Company found by SIRET: <b>' . $companyId . '</b></span>';
+					}
+				}
+			}
+		}
+
+		// 4. Search via Contact Email (si toujours pas trouvé)
+		if (!$companyId) {
+			$contact = new \Contact($this->db);
+			$fetchResult = $contact->fetch('', '', '', trim($buyerData['buyer_email']));
+
+			if ($fetchResult > 0) {
+				if ($fetchResult > 1) { // Multiple contacts with this address
+					$q = 'SELECT s.rowid
+                          FROM ' . $this->db->prefix() . 'societe s
+                          INNER JOIN ' . $this->db->prefix() . 'socpeople sp ON (sp.fk_soc = s.rowid)
+                          WHERE sp.email = "' . $this->db->escape($buyerData['buyer_email']) . '"
+                          ORDER BY s.rowid ASC
+                          LIMIT 1';
+					$queryResult = $this->db->query($q);
+					if ($res = $this->db->fetch_object($queryResult)) {
+						$companyId = $res->rowid;
+						$this->logOutput .= '<br/>-> <span class="warning">Multiple contacts found, selected company ID: <b>' . $companyId . '</b></span>';
+					}
+				} else {
+					// Single contact found
+					if ($contact->socid > 0) {
+						$companyId = $contact->socid;
+						$this->logOutput .= '<br/>-> <span class="ok">Company found by contact email.</span>';
+					}
+				}
+			}
+		}
+
+		// 5. Validation critique : Nom de société manquant
+		if (empty($buyerData['buyer_company'])) {
+			$this->logOutput .= '<br/>-> <span class="error">No company name in order data, cannot proceed</span>';
+			// Note: On retourne 0 pour indiquer l'échec, le rollback se fera plus haut
+			return 0;
+		}
+
+		// 6. Gestion Contact pour Société Existante ou Création Tiers
+		if ($companyId > 0) {
+			// Société trouvée : On s'assure que le contact existe
+			$contact = new \Contact($this->db);
+			$sql = "SELECT rowid FROM " . $this->db->prefix() . "socpeople
+                    WHERE fk_soc = " . $companyId . "
+                    AND email = '" . $this->db->escape($buyerData['buyer_email']) . "'";
+			$resql = $this->db->query($sql);
+
+			// If no contact exists, create one
+			if ($resql && $this->db->num_rows($resql) == 0) {
+				// Utilisation de dolistoreMail pour nettoyer les noms/prénoms comme avant
+				$dolistoreMailTemp = new \dolistoreMail();
+				$dolistoreMailTemp->setDatas($buyerData);
+
+				$contact->socid = $companyId;
+				$contact->lastname  = $dolistoreMailTemp->buyer_lastname;
+				$contact->firstname = $buyerData['buyer_firstname'];
+				$contact->email     = $buyerData['buyer_email'];
+
+				$result = $contact->create($user);
+				if ($result < 0) {
+					$this->logOutput .= '<br/>-> <span class="error">Failed to create contact for existing company.</span>';
+				} else {
+					$this->logOutput .= '<br/>-> <span class="ok">Contact created for existing company.</span>';
+				}
+			} else {
+				$this->logOutput .= '<br/>-> <span class="ok">Contact found for this company</span>';
+			}
+		} else {
+			// 7. Customer not found => Create new company
+			$dolistoreMailTemp = new \dolistoreMail();
+			$dolistoreMailTemp->setDatas($buyerData);
+			$companyId = $this->newCustomerFromDatas($user, $dolistoreMailTemp);
+
+			if ($companyId <= 0) {
+				$this->logOutput .= '<br/>-> <span class="error">Failed to create new company</span>';
+			}
+		}
+
+		return $companyId;
+	}
 	/**
 	 * Logs an error message, adds it to the error array, and increments the error count.
 	 *
@@ -662,13 +752,13 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 		return false;
 	}
-	private function processOrderItems(\User $user, int $companyId, array $items): array|false
+	private function processOrderItems(\User $user, int $companyId, string $orderRef, array $items): array|false
 	{
 		$successList = [];
 
 		foreach ($items as $product) {
 			// 1. Création Event Agenda
-			$this->createEventFromExtractDatas($product, '', $companyId); // Ref passé vide ou à adapter
+			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passé vide ou à adapter
 
 			// 2. Création Vente WebHost
 			if (isModEnabled("webhost")) {
@@ -693,5 +783,149 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		return $successList;
+	}
+	/**
+	 * Sends a thank you email to the customer using a template based on their language.
+	 * Checks configuration to ensure sending is enabled.
+	 *
+	 * @param \User  $user         Dolibarr user object.
+	 * @param array  $orderDetails Array containing buyer data and language.
+	 * @param array  $productList  List of valid product names to include in the email.
+	 * @return void
+	 */
+	private function sendThankYouEmail(\User $user, array $orderDetails, array $productList): void
+	{
+		// 1. Check configuration
+		if (getDolGlobalString('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU')) {
+			// Logically skipped
+			return;
+		}
+
+		// 2. Prepare dependencies
+		require_once DOL_DOCUMENT_ROOT . '/core/class/CMailFile.class.php';
+		require_once DOL_DOCUMENT_ROOT . '/core/class/html.formmail.class.php';
+
+		$formMail = new \FormMail($this->db);
+		// We use the helper class to format data (names, etc.) cleanly
+		$dolistoreMail = new \dolistoreMail();
+		$dolistoreMail->setDatas($orderDetails['buyer_data']);
+
+		$from = getDolGlobalString('MAIN_INFO_SOCIETE_NOM') . ' <dolistore@atm-consulting.fr>';
+		$sendTo = $dolistoreMail->buyer_email;
+
+		// 3. Select Template (EN or FR)
+		$templateId = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_EN');
+		if (preg_match('/fr.*/', $orderDetails['lang'])) {
+			$templateId = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR');
+		}
+
+		$usedTemplate = $formMail->getEMailTemplate($this->db, 'dolistore_extract', $user, '', $templateId);
+
+		// 4. Substitutions
+		$productListString = implode(', ', $productList);
+		$arraySubstitution = [
+			'__DOLISTORE_ORDER_NAME__'        => $dolistoreMail->order_name,
+			'__DOLISTORE_INVOICE_FIRSTNAME__' => $dolistoreMail->buyer_firstname,
+			'__DOLISTORE_INVOICE_COMPANY__'   => $dolistoreMail->buyer_company,
+			'__DOLISTORE_INVOICE_LASTNAME__'  => $dolistoreMail->buyer_lastname,
+			'__DOLISTORE_LIST_PRODUCTS__'     => $productListString
+		];
+
+		$subject = make_substitutions($usedTemplate->topic, $arraySubstitution);
+		$message = make_substitutions($usedTemplate->content, $arraySubstitution);
+
+		// 5. Send Email
+		$emailFile = new \CMailFile($subject, $sendTo, $from, $message, [], [], [], '', '', 0, -1);
+
+		if ($emailFile->error) {
+			dol_syslog(__METHOD__ . ' Error creating email: ' . $emailFile->error, LOG_ERR);
+			$this->logOutput .= '<br/><span class="error">Erreur création email : ' . $emailFile->error . '</span>';
+		} else {
+			if ($emailFile->sendfile()) {
+				$this->logOutput .= '<br/><span class="ok">Email de remerciement envoyé à ' . dol_escape_htmltag($sendTo) . '</span>';
+			} else {
+				$this->logOutput .= '<br/><span class="error">Échec envoi email à ' . dol_escape_htmltag($sendTo) . '</span>';
+			}
+		}
+	}
+	private function loadRequiredClasses(): void
+	{
+		if (!class_exists('Societe')) require_once(DOL_DOCUMENT_ROOT . '/societe/class/societe.class.php');
+		if (!class_exists('Contact')) require_once(DOL_DOCUMENT_ROOT . '/contact/class/contact.class.php');
+		if (!class_exists('dolistoreMailExtract')) require_once __DIR__ . "/dolistoreMailExtract.class.php";
+		if (!class_exists('dolistoreMail')) require_once __DIR__ . "/dolistoreMail.class.php";
+	}
+	/**
+	 * Parses raw IMAP emails to extract structured order data (read-only operation).
+	 *
+	 * @param array $emails Raw email objects.
+	 * @return array Structured array of orders indexed by order reference.
+	 */
+	private function extractOrdersData(array $emails): array
+	{
+		$orderData = [];
+
+		if (empty($emails)) {
+			$this->logOutput .= '<br/><span class="warning">No emails to process (IMAP inbox is empty)</span>';
+			return [];
+		}
+
+		foreach ($emails as $email) {
+			// Only mails from Dolistore and not seen
+			if (strpos($email->header->subject, 'DoliStore') !== false && !$email->header->seen) {
+				$this->logOutput .= '<br/><strong>Processing email:</strong> ' . $email->header->subject;
+
+				// Data extraction
+				$dolistoreMailExtract = new \dolistoreMailExtract($this->db, $email->message->text);
+				$emailLanguage = $dolistoreMailExtract->detectLang($email->header->subject);
+				$data = $dolistoreMailExtract->extractAllDatas();
+
+				// Validation
+				if (!empty($data) && !empty($data['order_ref']) && !empty($data['buyer_email'])) {
+					$orderRef = $data['order_ref'];
+					$this->logOutput .= '<br/>-> <span class="ok">Data extracted successfully for order <b>' . $orderRef . '</b></span>';
+
+					// Initialize the order if it doesn't exist yet
+					if (!isset($orderData[$orderRef])) {
+						$orderData[$orderRef] = [
+							'buyer_data' => $data,
+							'items' => [],
+							'lang' => $emailLanguage
+						];
+					}
+
+					// Loop through each item in the order
+					if (!empty($data['items']) && is_array($data['items'])) {
+						foreach ($data['items'] as $item) {
+							if (!empty($item['item_reference']) && !empty($item['item_name'])) {
+
+								$dateRaw = $email->header->date;
+								$dateSale = strtotime($dateRaw); // IMPORTANT: Conversion date pour BDD et check doublon
+
+								// Add the product to the order structure
+								$orderData[$orderRef]['items'][] = [
+									'item_reference'   => $item['item_reference'],
+									'item_name'        => $item['item_name'],
+									'item_price'       => $item['item_price'],
+									'item_quantity'    => $item['item_quantity'],
+									'item_price_total' => $item['item_price_total'],
+									'item_refunded'    => $item['item_refunded'] ?? null,
+									'date_sale'        => $dateSale
+								];
+
+								$this->logOutput .= '<br/>-- <span class="ok">Product extracted: ' . $item['item_name'] . '</span>';
+							} else {
+								$this->logOutput .= '<br/>-- <strong class="error">Incomplete product data, skipping item</strong>';
+							}
+						}
+					} else {
+						$this->logOutput .= '<br/>-- <strong class="warning">No items found in this order</strong>';
+					}
+				} else {
+					$this->logOutput .= '<br/>-> <strong class="error">Failed to extract data from email: missing order_ref or buyer_email</strong>';
+				}
+			}
+		}
+		return $orderData;
 	}
 }
