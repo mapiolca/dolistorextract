@@ -49,6 +49,7 @@ class ActionsDolistorextract extends CommonHookActions
 	public $template;
 
 	public $logCat = '';
+	public $logOutput = '';
 
 	/**
 	 *    Constructor
@@ -156,11 +157,11 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$socStatic->client = 2; // Prospect / client
 		$socid = $socStatic->create($user);
-		$this->logOutput .= '<br/>-> <span class="ok"> Thirdparty created: ' . $dolistoreMail->buyer_company . ' (ID: '.$socStatic->id.')';
+		$this->logOutput .= '<br/>-> <span class="ok"> Thirdparty created: ' . $dolistoreMail->buyer_company . ' (ID: '.$socStatic->id.') </span>';
 
 		if ($socid > 0) {
 			$res = $socStatic->create_individual($user);
-			$this->logOutput .= '<br/>-> Contact created: ' . $socStatic->firstname . ' ' . $socStatic->lastname . ' (ID: '.$socStatic->id.')';
+			$this->logOutput .= '<br/>-> Contact created: ' . $socStatic->firstname . ' ' . $socStatic->lastname . ' (ID: '.$socStatic->id.') </span>';
 
 		} else if (is_array($socStatic->errors)) {
 			$this->errors = array_merge($this->errors, $socStatic->errors);
@@ -175,9 +176,9 @@ class ActionsDolistorextract extends CommonHookActions
 	 * @param array  $productDatas  Product/item array (extracted from email)
 	 * @param string $orderRef      Dolistore order reference
 	 * @param int    $socid         Thirdparty/Customer rowid
-	 * @return int|false            New event rowid, 0 if already exists, -1 if error
+	 * @return int            New event rowid, 0 if already exists, -1 if error
 	 */
-	public function createEventFromExtractDatas(array $productDatas, string $orderRef, int $socid) : int|false
+	public function createEventFromExtractDatas(array $productDatas, string $orderRef, int $socid) : int
 	{
 		global $conf, $langs;
 
@@ -211,7 +212,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$actionStatic->note = 'ORDER:' . $orderRef . ':' . $productDatas['item_reference'];
 		// Check if import already done
 		if (! $this->isAlreadyImported($actionStatic->note)) {
-			$res = $actionStatic->create($userStatic);
+			$res = (int) $actionStatic->create($userStatic);
 		}
 
 		return $res;
@@ -223,25 +224,17 @@ class ActionsDolistorextract extends CommonHookActions
 	 * @param string $noteString Tag/note to search (e.g., 'ORDER:...:...')
 	 * @return int|false Rowid if exists, false if not, -1 if error
 	 */
-	private function isAlreadyImported( string $noteString) : int|false
+	private function isAlreadyImported( string $noteString) : bool
 	{
 		$sql = "SELECT id FROM " . $this->db->prefix() . "actioncomm WHERE note='" . $this->db->escape($noteString) . "'";
 
-		dol_syslog(__METHOD__, LOG_DEBUG);
 		$resql = $this->db->query($sql);
-		$result = 0;
 		if ($resql) {
-			if ($this->db->num_rows($resql)) {
-				$obj = $this->db->fetch_object($resql);
-				$result = $obj->id;
-			}
-			$this->db->free($resql);
-			return $result;
-		} else {
-			$this->error = "Error " . $this->db->lasterror();
-			dol_syslog(__METHOD__ . " " . $this->error, LOG_ERR);
-			return -1;
+			$num = $this->db->num_rows($resql);
+			$this->db->free($resql); // Toujours libérer le curseur après usage
+			return ($num > 0);
 		}
+		return false;
 	}
 
 	/**
@@ -757,8 +750,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$successList = [];
 
 		foreach ($items as $product) {
-			// 1. Création Event Agenda
-			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passé vide ou à adapter
+			$itemCreatedInThisPass = false;
 
 			// 2. Création Vente WebHost
 			if (isModEnabled("webhost")) {
@@ -767,16 +759,19 @@ class ActionsDolistorextract extends CommonHookActions
 				if ($this->checkIfWebmoduleSaleExists($companyId, $product['item_reference'], $product['date_sale'])) {
 					$this->logOutput .= '<br/>-> <span class="warning">Doublon (Vente existe déjà) : ' . $product['item_name'] . '</span>';
 					// Ce n'est pas une erreur, on continue
-				}
-				else {
-					// CRÉATION
-					$res = $this->addWebmoduleSales($product, $companyId);
-					if ($res <= 0) {
+				}else {
+					$resVente = $this->addWebmoduleSales($product, $companyId);
+					if ($resVente <= 0) {
 						$this->logOutput .= '<br/>-> <span class="error">Erreur création vente : ' . $product['item_name'] . '</span>';
-						return false; // Erreur bloquante -> Rollback global de la commande
+						return false;
+					} else {
+						$itemCreatedInThisPass = true;
 					}
-					$this->logOutput .= '<br/>-> <span class="ok">Vente créée : ' . $product['item_name'] . '</span>';
 				}
+			}
+			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passé vide ou à adapter
+			if ($itemCreatedInThisPass) {
+				$this->logOutput .= '<br/>-> <span class="ok">Vente créée : ' . $product['item_name'] . '</span>';
 			}
 
 			$successList[] = $product['item_name'];
