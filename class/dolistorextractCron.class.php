@@ -17,20 +17,26 @@
 
 /**
  * Cron class for module dolistorextract
- * @author jfefe
+ * @author jfefe <jfefe@example.com>
  *
  */
 class dolistorextractCron
 {
 
 	public $db;
-
-	function __construct( DoliDB &$db) {
+	/**
+	 * Constructor
+	 *
+	 * @param DoliDB $db Database handler
+	 */
+	public function __construct(DoliDB &$db)
+	{
 		$this->db = $db;
 	}
-
 	/**
-	 * Method to call with CRON module
+	 * Run import
+	 *
+	 * @return int 0 if OK, < 0 if KO
 	 */
 	public function runImport() : int
 	{
@@ -46,20 +52,20 @@ class dolistorextractCron
 		if ($res < 0) {
 			$this->output.= 'erreur import dolistore lié au métadonnées du mail!';
 
-			if(!empty($dolistorextractActions->error)){
+			if (!empty($dolistorextractActions->error)) {
 				$this->output.= '<br/>'.$dolistorextractActions->error;
 			}
 
-			if(!empty($dolistorextractActions->errors) && is_array($dolistorextractActions->errors)){
-				$this->output.= implode('<br/>',$dolistorextractActions->errors);
+			if (!empty($dolistorextractActions->errors) && is_array($dolistorextractActions->errors)) {
+				$this->output.= implode('<br/>', $dolistorextractActions->errors);
 			}
 
 			return -1;
 		}
 
-		if($res >= 0) {
+		if ($res >= 0) {
 			$this->output.= $dolistorextractActions->logOutput;
-			$this->output.= '<br/>' . $res . ' ventes intégrées';
+			$this->output.= '<br/>' . $res . ' ventes traitée(s)';
 			return 0;
 		}
 	}

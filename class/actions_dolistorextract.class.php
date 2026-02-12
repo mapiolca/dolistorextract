@@ -56,7 +56,7 @@ class ActionsDolistorextract extends CommonHookActions
 	 *
 	 *    @param DoliDB $db Database handler
 	 */
-	public function __construct( DoliDB $db)
+	public function __construct(DoliDB $db)
 	{
 		$this->db = $db;
 	}
@@ -69,7 +69,7 @@ class ActionsDolistorextract extends CommonHookActions
 	 * @param HookManager  $hookmanager Hook manager instance
 	 * @return int 0 if OK, -1 if error
 	 */
-	public function emailElementlist( array $parameters, ?object &$object, string &$action, HookManager $hookmanager) : int
+	public function emailElementlist(array $parameters, ?object &$object, string &$action, HookManager $hookmanager) : int
 	{
 		global $langs;
 
@@ -162,8 +162,7 @@ class ActionsDolistorextract extends CommonHookActions
 		if ($socid > 0) {
 			$res = $socStatic->create_individual($user);
 			$this->logOutput .= '<br/>-> Contact created: ' . $socStatic->firstname . ' ' . $socStatic->lastname . ' (ID: '.$socStatic->id.') </span>';
-
-		} else if (is_array($socStatic->errors)) {
+		} elseif (is_array($socStatic->errors)) {
 			$this->errors = array_merge($this->errors, $socStatic->errors);
 		}
 		return $socid;
@@ -224,7 +223,7 @@ class ActionsDolistorextract extends CommonHookActions
 	 * @param string $noteString Tag/note to search (e.g., 'ORDER:...:...')
 	 * @return int|false Rowid if exists, false if not, -1 if error
 	 */
-	private function isAlreadyImported( string $noteString) : bool
+	private function isAlreadyImported(string $noteString) : bool
 	{
 		$sql = "SELECT id FROM " . $this->db->prefix() . "actioncomm WHERE note='" . $this->db->escape($noteString) . "'";
 
@@ -424,7 +423,12 @@ class ActionsDolistorextract extends CommonHookActions
 		return $orderResults;
 	}
 	/**
-	 * Traite une commande unique de A à Z avec transaction
+	 * Process a single order
+	 *
+	 * @param User   $user         User object
+	 * @param string $orderRef     Order reference
+	 * @param array  $orderDetails Order details
+	 * @return bool                True if success, False if error
 	 */
 	private function processSingleOrder(\User $user, string $orderRef, array $orderDetails): bool
 	{
@@ -446,7 +450,7 @@ class ActionsDolistorextract extends CommonHookActions
 		// B. Gestion Produits (Ventes & Events)
 		$processedItems = $this->processOrderItems($user, $companyId, $orderRef, $orderDetails['items']); // Ajout de $orderRef
 
-		if ($processedItems === false) {
+		if ($processedItems === null) {
 			$this->db->rollback(); // Erreur technique lors de l'insertion
 			$this->nbErrors++;
 			return false;
@@ -459,7 +463,14 @@ class ActionsDolistorextract extends CommonHookActions
 
 		// SUCCÈS TOTAL
 		$this->db->commit();
-		$this->logOutput .= '<br/><span class="ok">Order <b>' . $orderRef . '</b> processed successfully</span>';
+		// D. Feedback Log intelligent
+		if (empty($processedItems)) {
+			// Cas du doublon intégral : On a traité la commande, mais rien inséré
+			$this->logOutput .= '<br/><span class="warning">Commande <b>' . $orderRef . '</b> déjà connue (Doublon ignoré).</span>';
+		} else {
+			// Cas normal : On a inséré des ventes
+			$this->logOutput .= '<br/><span class="ok">Commande <b>' . $orderRef . '</b> importée avec succès.</span>';
+		}
 		return true;
 	}
 	/**
@@ -520,13 +531,11 @@ class ActionsDolistorextract extends CommonHookActions
 	public function getWebmoduleIdByDolistoreId(string $fk_dolistore): int
 	{
 		// Build SQL query to get the web module ID
-		$sql =
-			/** @lang SQL */
-			'SELECT DISTINCT w.rowid
-            FROM ' . $this->db->prefix() . 'webmodule as w
-                INNER JOIN ' . $this->db->prefix() . 'webmodule_version wv ON w.rowid = wv.fk_webmodule
-                INNER JOIN ' . $this->db->prefix() . 'webmodule_version_extrafields wve ON wv.rowid = wve.fk_object
-            WHERE wve.iddolistore = "' . $this->db->escape($fk_dolistore) . '"';
+		$sql = 'SELECT DISTINCT w.rowid';
+		$sql .= ' FROM ' . $this->db->prefix() . 'webmodule as w';
+		$sql .= ' INNER JOIN ' . $this->db->prefix() . 'webmodule_version wv ON w.rowid = wv.fk_webmodule';
+		$sql .= ' INNER JOIN ' . $this->db->prefix() . 'webmodule_version_extrafields wve ON wv.rowid = wve.fk_object';
+		$sql .= ' WHERE wve.iddolistore = "' . $this->db->escape($fk_dolistore) . '"';
 
 		// Execute the query
 		$resql = $this->db->query($sql);
@@ -612,7 +621,7 @@ class ActionsDolistorextract extends CommonHookActions
 				if ($resql) {
 					$obj = $this->db->fetch_object($resql);
 					if ($obj && $obj->rowid > 0) {
-						$companyId = (int)$obj->rowid;
+						$companyId = (int) $obj->rowid;
 						$this->logOutput .= '<br/>-> <span class="ok">Company found by SIRET: <b>' . $companyId . '</b></span>';
 					}
 				}
@@ -727,9 +736,9 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		// 2. On cherche une vente correspondante
-		$sql = "SELECT rowid FROM " . $this->db->prefix() . "webmodulesales";
-		$sql .= " WHERE fk_soc = " . ((int)$socid);
-		$sql .= " AND fk_webmodule = " . ((int)$fk_webmodule);
+		$sql = "SELECT rowid FROM " . $this->db->prefix() . "webmodule_sales";
+		$sql .= " WHERE fk_soc = " . ((int) $socid);
+		$sql .= " AND fk_webmodule = " . ((int) $fk_webmodule);
 
 		// 3. Vérification de la date (Sécurité anti-doublon)
 		$dayStart = date('Y-m-d 00:00:00', $dateSale);
@@ -745,7 +754,16 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 		return false;
 	}
-	private function processOrderItems(\User $user, int $companyId, string $orderRef, array $items): array|false
+	/**
+	 * Process order items (Sales & Events)
+	 *
+	 * @param \User  $user      User object
+	 * @param int    $companyId Company ID
+	 * @param string $orderRef  Order reference
+	 * @param array  $items     List of items
+	 * @return array|null       List of success items, or null on critical error
+	 */
+	private function processOrderItems(\User $user, int $companyId, string $orderRef, array $items): ?array
 	{
 		$successList = [];
 
@@ -754,16 +772,15 @@ class ActionsDolistorextract extends CommonHookActions
 
 			// 2. Création Vente WebHost
 			if (isModEnabled("webhost")) {
-
 				// CHECK DOUBLON
 				if ($this->checkIfWebmoduleSaleExists($companyId, $product['item_reference'], $product['date_sale'])) {
 					$this->logOutput .= '<br/>-> <span class="warning">Doublon (Vente existe déjà) : ' . $product['item_name'] . '</span>';
 					// Ce n'est pas une erreur, on continue
-				}else {
+				} else {
 					$resVente = $this->addWebmoduleSales($product, $companyId);
 					if ($resVente <= 0) {
 						$this->logOutput .= '<br/>-> <span class="error">Erreur création vente : ' . $product['item_name'] . '</span>';
-						return false;
+						return null;
 					} else {
 						$itemCreatedInThisPass = true;
 					}
@@ -774,8 +791,11 @@ class ActionsDolistorextract extends CommonHookActions
 				$this->logOutput .= '<br/>-> <span class="ok">Vente créée : ' . $product['item_name'] . '</span>';
 			}
 
-			$successList[] = $product['item_name'];
+			if ($itemCreatedInThisPass) {
+				$successList[] = $product['item_name'];
+			}
 		}
+
 
 		return $successList;
 	}
@@ -843,10 +863,15 @@ class ActionsDolistorextract extends CommonHookActions
 			}
 		}
 	}
+	/**
+	 * Load required classes if not already loaded
+	 *
+	 * @return void
+	 */
 	private function loadRequiredClasses(): void
 	{
-		if (!class_exists('Societe')) require_once(DOL_DOCUMENT_ROOT . '/societe/class/societe.class.php');
-		if (!class_exists('Contact')) require_once(DOL_DOCUMENT_ROOT . '/contact/class/contact.class.php');
+		if (!class_exists('Societe')) require_once DOL_DOCUMENT_ROOT . '/societe/class/societe.class.php';
+		if (!class_exists('Contact')) require_once DOL_DOCUMENT_ROOT . '/contact/class/contact.class.php';
 		if (!class_exists('dolistoreMailExtract')) require_once __DIR__ . "/dolistoreMailExtract.class.php";
 		if (!class_exists('dolistoreMail')) require_once __DIR__ . "/dolistoreMail.class.php";
 	}
@@ -893,7 +918,6 @@ class ActionsDolistorextract extends CommonHookActions
 					if (!empty($data['items']) && is_array($data['items'])) {
 						foreach ($data['items'] as $item) {
 							if (!empty($item['item_reference']) && !empty($item['item_name'])) {
-
 								$dateRaw = $email->header->date;
 								$dateSale = strtotime($dateRaw); // IMPORTANT: Conversion date pour BDD et check doublon
 
