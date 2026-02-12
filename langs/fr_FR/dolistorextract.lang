@@ -71,3 +71,12 @@ InvalidFileType=Le type de fichier attendu est CSV
 GenericDomainFoundFor=Société non trouvé & domaine de l'adresse mail générique %s
 ManyThirdpartiesFound=Plusieurs sociétés trouvés pour l'adresse mail %s
 SelectCompanyInitWebsale=Choisir le tiers qui sera utilisé si aucune société n'est trouvée (si non défini, déclenchera des erreurs et donc rollback de tout l'import)
+
+DolistoreNoValidOrderFound=Aucune commande valide trouvée.
+DolistoreCustomerMgmtFailed=Échec de la gestion client. Annulation de la transaction (Rollback).
+DolistoreOrderAlreadyExists=Commande %s déjà connue (Doublon ignoré).
+DolistoreOrderImported=Commande %s importée avec succès.
+DolistoreDuplicateSale=Doublon (Vente déjà existante) : %s
+DolistoreSaleCreationError=Erreur lors de la création de la vente : %s
+DolistoreImportErrorMetadata=Erreur d'import Dolistore liée aux métadonnées du mail.
+DolistoreSalesProcessed=ventes traitée(s)

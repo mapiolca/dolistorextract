@@ -1,0 +1,73 @@
+# EN lang file for module dolistorextract
+# Copyright (C) 2017 Jean-François Ferry <jfefe@aternatik.fr>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+
+#
+# Generic
+#
+Module500000Name = Dolistorextract
+Module500000Desc = Dolistorextract module description
+
+#
+# Setup page
+#
+DolistorextractSetup = Dolistorextract module setup
+Settings = Settings
+DolistorextractSetupPage = Dolistorextract module setup page
+
+DolistorExtractImapServer = IMAP Server
+DolistorExtractImapServerPort = IMAP Server connection port
+DolistorExtractImapUser = IMAP User
+DolistorExtractImapPassword = IMAP Password
+DolistorExtractUserForActions = User assigned to events created by the module
+DolistorExtractEmailTemplateFr = Email template for French messages
+DolistorExtractEmailTemplateEn = Email template for English messages
+
+#
+# Menu
+#
+DolistorextractMenuTitle = Dolistore Mails
+
+#
+# Agenda Action
+#
+DolistorextractLabelActionForSale = Module purchase %s
+
+#
+# List emails
+#
+DolistoreMailsList = Dolistore emails list
+DolistoreMailShow = Dolistore message
+
+DolistorExtractImapFolder = IMAP folder to read
+DolistorExtractImapFolderArchive = Folder to archive processed emails (if empty, remains in original location)
+DolistorExtractImapFolderError = Folder to store emails with errors (if empty, remains in original location)
+DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU = Disable sending thank you emails
+ImportCSVData = Import WebSale CSV
+SelectFile = Select file
+ImportCSVDescription = This section allows you to import data into the system from a CSV file. The file must be in <strong>CSV</strong> format and match the specified column structure. The columns must be as follows: <ul><li><strong>Module sell nb</strong>: Module sale identifier</li><li><strong>Customer</strong>: Customer name</li><li><strong>Customer date creation</strong>: Customer creation date</li><li><strong>Customer email</strong>: Customer email address</li><li><strong>Customer country</strong>: Customer country</li><li><strong>Date sell</strong>: Sale date</li><li><strong>Product id</strong>: Product identifier</li><li><strong>Product label</strong>: Product label or name</li><li><strong>Product ref</strong>: Product reference</li><li><strong>Amount earned</strong>: Amount earned from the sale</li><li><strong>Amount origin</strong>: Original amount before any adjustments</li><li><strong>Note</strong>: Additional notes related to the sale</li><li><strong>Année</strong>: Year of sale</li><li><strong>Mois</strong>: Month of sale</li></ul> This file will populate the sales data in the webmodule tab. Ensure data is correctly exported from Dolistore to avoid issues during import. Click on "<strong>Choose a file</strong>" to select your CSV file, then click on "<strong>Import</strong>" to start the process.
+FailedToGetSocieteFor = Failed to find third party or contact with email
+FileProcessedSuccessfully = File imported successfully
+RollbackCauseOfErrors = Import cancelled due to errors: %s
+FailedToInsertDataFor = Failed to add websale data for Dolistore ref %s
+InvalidFileType = Expected file type is CSV
+GenericDomainFoundFor = Third party not found & generic email domain %s
+ManyThirdpartiesFound = Multiple third parties found for email address %s
+SelectCompanyInitWebsale = Choose the third party to be used if no company is found (if not defined, errors will trigger a full rollback of the import)
+
+#
+# New logs & feedback (GEM Refactor)
+#
+DolistoreNoValidOrderFound = No valid order found.
+DolistoreCustomerMgmtFailed = Customer management failed. Transaction rollback.
+DolistoreOrderAlreadyExists = Order %s already exists (Duplicate ignored).
+DolistoreOrderImported = Order %s imported successfully.
+DolistoreDuplicateSale = Duplicate (Sale already exists): %s
+DolistoreSaleCreationError = Error creating sale: %s
+DolistoreImportErrorMetadata = Dolistore import error related to email metadata.
+DolistoreSalesProcessed = sales processed

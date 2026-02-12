@@ -395,7 +395,7 @@ class ActionsDolistorextract extends CommonHookActions
 	 */
 	public function launchImportProcess(array $emails): array|int
 	{
-		global $conf;
+		global $conf, $langs;
 		dol_syslog(__METHOD__ . ' launch import process for ' . count($emails) . ' messages', LOG_DEBUG);
 
 		$this->nbErrors = 0;
@@ -411,7 +411,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$ordersData = $this->extractOrdersData($emails);
 
 		if (empty($ordersData)) {
-			$this->logOutput .= '<br/><span class="warning">Aucune commande valide trouvée.</span>';
+			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreNoValidOrderFound").'</span>';
 			return 0;
 		}
 		// 3. Traitement commande par commande
@@ -432,6 +432,7 @@ class ActionsDolistorextract extends CommonHookActions
 	 */
 	private function processSingleOrder(\User $user, string $orderRef, array $orderDetails): bool
 	{
+		global $langs;
 		$this->logOutput .= '<br/><strong>Processing order:</strong> ' . $orderRef;
 
 		// DÉBUT TRANSACTION
@@ -442,7 +443,7 @@ class ActionsDolistorextract extends CommonHookActions
 
 		if ($companyId <= 0) {
 			$this->db->rollback();
-			$this->logOutput .= '<br/>-> <span class="error">Échec gestion client. Rollback.</span>';
+			$this->logOutput .= '<br/>-> <span class="error">'.$langs->trans("DolistoreCustomerMgmtFailed").'</span>';
 			$this->nbErrors++;
 			return false;
 		}
@@ -466,10 +467,10 @@ class ActionsDolistorextract extends CommonHookActions
 		// D. Feedback Log intelligent
 		if (empty($processedItems)) {
 			// Cas du doublon intégral : On a traité la commande, mais rien inséré
-			$this->logOutput .= '<br/><span class="warning">Commande <b>' . $orderRef . '</b> déjà connue (Doublon ignoré).</span>';
+			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreOrderAlreadyExists", $orderRef).'</span>';
 		} else {
 			// Cas normal : On a inséré des ventes
-			$this->logOutput .= '<br/><span class="ok">Commande <b>' . $orderRef . '</b> importée avec succès.</span>';
+			$this->logOutput .= '<br/><span class="ok">'.$langs->trans("DolistoreOrderImported", $orderRef).'</span>';
 		}
 		return true;
 	}
@@ -765,6 +766,7 @@ class ActionsDolistorextract extends CommonHookActions
 	 */
 	private function processOrderItems(\User $user, int $companyId, string $orderRef, array $items): ?array
 	{
+		global $langs;
 		$successList = [];
 
 		foreach ($items as $product) {
@@ -774,12 +776,12 @@ class ActionsDolistorextract extends CommonHookActions
 			if (isModEnabled("webhost")) {
 				// CHECK DOUBLON
 				if ($this->checkIfWebmoduleSaleExists($companyId, $product['item_reference'], $product['date_sale'])) {
-					$this->logOutput .= '<br/>-> <span class="warning">Doublon (Vente existe déjà) : ' . $product['item_name'] . '</span>';
+					$this->logOutput .= '<br/>-> <span class="warning">'.$langs->trans("DolistoreDuplicateSale").' '.$product['item_name'] . '</span>';
 					// Ce n'est pas une erreur, on continue
 				} else {
 					$resVente = $this->addWebmoduleSales($product, $companyId);
 					if ($resVente <= 0) {
-						$this->logOutput .= '<br/>-> <span class="error">Erreur création vente : ' . $product['item_name'] . '</span>';
+						$this->logOutput .= '<br/>-> <span class="error">'.$langs->trans("DolistoreSaleCreationError").' '.$product['item_name'] . '</span>';
 						return null;
 					} else {
 						$itemCreatedInThisPass = true;
