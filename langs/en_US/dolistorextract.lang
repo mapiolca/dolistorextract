@@ -98,3 +98,4 @@ DolistoreErrorMovingMessage=Error moving message %s to %s
 DolistoreOrderProcessingFailed=Error: Order %s processing failed.
 DolistoreProcessFail=FAIL
 DolistoreProcessingOrder=Processing order: %s
+DolistoreCompanyFoundBySiret=Company found by SIRET: %s

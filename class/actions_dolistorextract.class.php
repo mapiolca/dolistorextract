@@ -448,7 +448,7 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		// B. Product Management (Sales & Events)
-		$processedItems = $this->processOrderItems($user, $companyId, $orderRef, $orderDetails['items']); // Ajout de $orderRef
+		$processedItems = $this->processOrderItems($user, $companyId, $orderRef, $orderDetails['items']); // Add $orderRef
 
 		if ($processedItems === null) {
 			$this->db->rollback(); // Technical error during insertion
@@ -618,13 +618,13 @@ class ActionsDolistorextract extends CommonHookActions
 					$obj = $this->db->fetch_object($resql);
 					if ($obj && $obj->rowid > 0) {
 						$companyId = (int) $obj->rowid;
-						$this->logOutput .= '<br/>-> <span class="ok">Company found by SIRET: <b>' . $companyId . '</b></span>';
+						$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreCompanyFoundBySiret", $companyId) . '</span>';
 					}
 				}
 			}
 		}
 
-		// 4. Search via Contact Email (si toujours pas trouvé)
+		// 4. Search via Contact Email (if still not found)
 		if (!$companyId) {
 			$contact = new \Contact($this->db);
 			$fetchResult = $contact->fetch('', '', '', trim($buyerData['buyer_email']));
@@ -716,27 +716,28 @@ class ActionsDolistorextract extends CommonHookActions
 		$error++;
 	}
 	/**
-	 * Vérifie si une vente existe déjà pour éviter les doublons
-	 * @param int $socid ID du client
-	 * @param string $dolistoreRef Référence du module (ex: "module_x")
-	 * @param int $dateSale Timestamp de la vente
-	 * @return bool True si existe déjà, False sinon
+	 * Check if a sale already exists to prevent duplicates.
+	 *
+	 * @param int    $socid        Customer rowid
+	 * @param string $dolistoreRef Module reference (e.g., "module_x")
+	 * @param int    $dateSale     Sale timestamp
+	 * @return bool                True if it already exists, false otherwise
 	 */
 	private function checkIfWebmoduleSaleExists(int $socid, string $dolistoreRef, int $dateSale): bool
 	{
-		// 1. On récupère l'ID technique du module web (rowid dans llx_webmodule)
+		// 1. Retrieve the technical ID of the web module (rowid in llx_webmodule)
 		$fk_webmodule = $this->getWebmoduleIdByDolistoreId($dolistoreRef);
 
 		if (!$fk_webmodule) {
-			return false; // Module inconnu, donc pas de doublon possible en base
+			return false; // Unknown module, therefore no duplicate possible in database
 		}
 
-		// 2. On cherche une vente correspondante
+		// 2. We are looking for a matching sale
 		$sql = "SELECT rowid FROM " . $this->db->prefix() . "webmodule_sales";
 		$sql .= " WHERE fk_soc = " . ((int) $socid);
 		$sql .= " AND fk_webmodule = " . ((int) $fk_webmodule);
 
-		// 3. Vérification de la date (Sécurité anti-doublon)
+		// 3. Date verification (Duplicate prevention)
 		$dayStart = date('Y-m-d 00:00:00', $dateSale);
 		$dayEnd   = date('Y-m-d 23:59:59', $dateSale);
 
@@ -769,7 +770,7 @@ class ActionsDolistorextract extends CommonHookActions
 
 			// WebHost Creation and Sales
 			if (isModEnabled("webhost")) {
-				// CHECK DOUBLON
+				// CHECK DUPLICATE
 				if ($this->checkIfWebmoduleSaleExists($companyId, $product['item_reference'], $product['date_sale'])) {
 					$this->logOutput .= '<br/>-> <span class="warning">'.$langs->trans("DolistoreDuplicateSale").' '.$product['item_name'] . '</span>';
 					// This is not an error, we continue
@@ -783,7 +784,7 @@ class ActionsDolistorextract extends CommonHookActions
 					}
 				}
 			}
-			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passé vide ou à adapter
+			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passed empty or to be adapted
 			if ($itemCreatedInThisPass) {
 				$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreSaleCreated", dol_escape_htmltag($product['item_name'])) . '</span>';
 			}
@@ -918,7 +919,7 @@ class ActionsDolistorextract extends CommonHookActions
 						foreach ($data['items'] as $item) {
 							if (!empty($item['item_reference']) && !empty($item['item_name'])) {
 								$dateRaw = $email->header->date;
-								$dateSale = strtotime($dateRaw); // IMPORTANT: Conversion date pour BDD et check doublon
+								$dateSale = strtotime($dateRaw); // IMPORTANT: Date conversion for database and duplicate check
 
 								// Add the product to the order structure
 								$orderData[$orderRef]['items'][] = [

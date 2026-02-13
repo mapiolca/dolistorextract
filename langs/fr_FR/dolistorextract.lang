@@ -107,3 +107,4 @@ DolistoreErrorMovingMessage=Erreur lors du déplacement du message %s vers %s
 DolistoreOrderProcessingFailed=Erreur : Le traitement de la commande %s a échoué.
 DolistoreProcessFail=ÉCHEC
 DolistoreProcessingOrder=Traitement de la commande : %s
+DolistoreCompanyFoundBySiret=Société trouvée par SIRET : %s
