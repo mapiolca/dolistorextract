@@ -96,7 +96,7 @@ class ActionsDolistorextract extends CommonHookActions
 	 */
 	public function newCustomerFromDatas(User $user, dolistoreMail $dolistoreMail) : int
 	{
-		global $conf;
+		global $conf, $langs;
 
 		$socStatic = new Societe($this->db);
 
@@ -157,11 +157,11 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$socStatic->client = 2; // Prospect / client
 		$socid = $socStatic->create($user);
-		$this->logOutput .= '<br/>-> <span class="ok"> Thirdparty created: ' . $dolistoreMail->buyer_company . ' (ID: '.$socStatic->id.') </span>';
+		$this->logOutput .= '<br/>-> ' . $langs->trans("DolistoreThirdPartyCreatedWithID", $socStatic->firstname, $socStatic->lastname, $socStatic->id) . ' </span>';
 
 		if ($socid > 0) {
 			$res = $socStatic->create_individual($user);
-			$this->logOutput .= '<br/>-> Contact created: ' . $socStatic->firstname . ' ' . $socStatic->lastname . ' (ID: '.$socStatic->id.') </span>';
+			$this->logOutput .= '<br/>-> ' . $langs->trans("DolistoreContactCreatedWithID", $socStatic->firstname, $socStatic->lastname, $socStatic->id) . ' </span>';
 		} elseif (is_array($socStatic->errors)) {
 			$this->errors = array_merge($this->errors, $socStatic->errors);
 		}
@@ -267,10 +267,10 @@ class ActionsDolistorextract extends CommonHookActions
 
 		// Fetch all the messages in the current folder
 		$emails = $imap->getMessages();
-		$this->logOutput .= '<br/><strong>Mail to process</strong>: ' . count($emails);
+		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreMailsToProcess", count($emails)) . '</strong>';
 
 		if (getDolGlobalString('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU')) {
-			$this->logOutput .= '<br/><strong class="error">Mail send disabled</strong>';
+			$this->logOutput .= '<br/><strong class="error">' . $langs->trans("DolistoreMailSendDisabled") . '</strong>';
 		}
 
 		// Filter only unread Dolistore emails
@@ -282,11 +282,11 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		if (empty($dolistoreEmails)) {
-			$this->logOutput .= '<br/>No unread Dolistore email found.';
+			$this->logOutput .= '<br/>' . $langs->trans("DolistoreNoUnreadMailFound");
 			return 0;
 		}
 
-		$this->logOutput .= '<br/><strong>Dolistore emails to process</strong>: ' . count($dolistoreEmails);
+		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreEmailsToProcessCount", count($dolistoreEmails)) . '</strong>';
 
 		// Process all emails at once
 		$result = $this->launchImportProcess($dolistoreEmails);
@@ -310,7 +310,7 @@ class ActionsDolistorextract extends CommonHookActions
 					if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR')) {
 						$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
 						if (!$moveResult) {
-							$this->logOutput .= '<br/>Error moving message ' . $email->header->uid . ' TO ' . getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR');
+							$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
 						}
 					}
 				}
@@ -330,7 +330,7 @@ class ActionsDolistorextract extends CommonHookActions
 							if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE')) {
 								$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
 								if (!$moveResult) {
-									$this->logOutput .= '<br/>Error moving message ' . $email->header->uid . ' TO ' . getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE');
+									$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
 								}
 							}
 						}
@@ -341,11 +341,11 @@ class ActionsDolistorextract extends CommonHookActions
 							if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR')) {
 								$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREEXTRACT_IMAP_FOLDER_ERROR'));
 								if (!$moveResult) {
-									$this->logOutput .= '<br/>Error moving message ' . $email->header->uid . ' TO ' . getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR');
+									$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
 								}
 							}
 						}
-						$this->logOutput .= '<br/>-> <strong class="error">Order ' . $orderRef . ' processing failed</strong>';
+						$this->logOutput .= '<br/>-> <strong class="error">' . $langs->trans("DolistoreOrderProcessingFailed", $orderRef) . '</strong>';
 					}
 				}
 			}
@@ -366,7 +366,7 @@ class ActionsDolistorextract extends CommonHookActions
 					if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR')) {
 						$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
 						if (!$moveResult) {
-							$this->logOutput .= '<br/>Error moving message ' . $email->header->uid . ' TO ' . getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR');
+							$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
 						}
 					}
 				}
@@ -378,7 +378,7 @@ class ActionsDolistorextract extends CommonHookActions
 					if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE')) {
 						$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
 						if (!$moveResult) {
-							$this->logOutput .= '<br/>Error moving message ' . $email->header->uid . ' TO ' . getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE');
+							$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
 						}
 					}
 				}
@@ -401,22 +401,22 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->nbErrors = 0;
 		$orderResults = [];
 
-		// 1. Chargement des classes nécessaires
+		// 1. Loading the necessary classes
 		$this->loadRequiredClasses();
 
 		$user = new \User($this->db);
 		$user->fetch(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'));
 
-		// 2. Extraction des données (Lecture seule)
+		// 2. Data extraction (read-only)
 		$ordersData = $this->extractOrdersData($emails);
 
 		if (empty($ordersData)) {
 			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreNoValidOrderFound").'</span>';
 			return 0;
 		}
-		// 3. Traitement commande par commande
+		// 3. Order-by-order processing
 		foreach ($ordersData as $orderRef => $orderDetails) {
-			// On délègue le traitement complet d'une commande à une méthode dédiée
+			// The entire processing of an order is delegated to a dedicated method.
 			$success = $this->processSingleOrder($user, $orderRef, $orderDetails);
 			$orderResults[$orderRef] = $success;
 		}
@@ -430,15 +430,14 @@ class ActionsDolistorextract extends CommonHookActions
 	 * @param array  $orderDetails Order details
 	 * @return bool                True if success, False if error
 	 */
-	private function processSingleOrder(\User $user, string $orderRef, array $orderDetails): bool
+	private function processSingleOrder(User $user, string $orderRef, array $orderDetails): bool
 	{
 		global $langs;
-		$this->logOutput .= '<br/><strong>Processing order:</strong> ' . $orderRef;
+		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreProcessingOrder", $orderRef) . '</strong>';
 
-		// DÉBUT TRANSACTION
 		$this->db->begin();
 
-		// A. Gestion Client
+		// A. Customer Management
 		$companyId = $this->getOrCreateCustomer($user, $orderDetails['buyer_data']);
 
 		if ($companyId <= 0) {
@@ -448,28 +447,28 @@ class ActionsDolistorextract extends CommonHookActions
 			return false;
 		}
 
-		// B. Gestion Produits (Ventes & Events)
+		// B. Product Management (Sales & Events)
 		$processedItems = $this->processOrderItems($user, $companyId, $orderRef, $orderDetails['items']); // Ajout de $orderRef
 
 		if ($processedItems === null) {
-			$this->db->rollback(); // Erreur technique lors de l'insertion
+			$this->db->rollback(); // Technical error during insertion
 			$this->nbErrors++;
 			return false;
 		}
 
-		// C. Envoi Email (Uniquement si succès BDD)
+		// C. Email dispatch (only if database successful)
 		if (!empty($processedItems)) {
 			$this->sendThankYouEmail($user, $orderDetails, $processedItems);
 		}
 
-		// SUCCÈS TOTAL
+		// TOTAL SUCCESS
 		$this->db->commit();
 		// D. Feedback Log intelligent
 		if (empty($processedItems)) {
-			// Cas du doublon intégral : On a traité la commande, mais rien inséré
+			// Case of complete duplicate: The order has been processed, but nothing has been inserted.
 			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreOrderAlreadyExists", $orderRef).'</span>';
 		} else {
-			// Cas normal : On a inséré des ventes
+			// Normal case: Sales have been entered.
 			$this->logOutput .= '<br/><span class="ok">'.$langs->trans("DolistoreOrderImported", $orderRef).'</span>';
 		}
 		return true;
@@ -581,20 +580,16 @@ class ActionsDolistorextract extends CommonHookActions
 		return $floatValue;
 	}
 	/**
-	 * @param User $user
-	 * @param array $buyerData
-	 * @return int
-	 */
-	/**
 	 * Retrieves an existing customer ID (by name, email, SIRET or Contact) or creates a new one.
 	 * Also handles the creation of the contact if the company exists.
 	 *
-	 * @param \User $user      Dolibarr user object.
+	 * @param User $user      Dolibarr user object.
 	 * @param array $buyerData Array of customer details extracted from the email.
 	 * @return int             ID of the company (socid), or 0 if failed.
 	 */
-	private function getOrCreateCustomer(\User $user, array $buyerData): int
+	private function getOrCreateCustomer(User $user, array $buyerData): int
 	{
+		global $langs;
 		$company = new \Societe($this->db);
 		$companyId = 0;
 
@@ -657,16 +652,16 @@ class ActionsDolistorextract extends CommonHookActions
 			}
 		}
 
-		// 5. Validation critique : Nom de société manquant
+		// 5. Critical validation: Company name missing
 		if (empty($buyerData['buyer_company'])) {
 			$this->logOutput .= '<br/>-> <span class="error">No company name in order data, cannot proceed</span>';
-			// Note: On retourne 0 pour indiquer l'échec, le rollback se fera plus haut
+			// Note: We return 0 to indicate failure; the rollback will be performed higher up.
 			return 0;
 		}
 
-		// 6. Gestion Contact pour Société Existante ou Création Tiers
+		// 6. Contact Management for Existing Companies or Third-Party Creation
 		if ($companyId > 0) {
-			// Société trouvée : On s'assure que le contact existe
+			// Company found: We make sure that the contact exists.
 			$contact = new \Contact($this->db);
 			$sql = "SELECT rowid FROM " . $this->db->prefix() . "socpeople
                     WHERE fk_soc = " . $companyId . "
@@ -675,7 +670,7 @@ class ActionsDolistorextract extends CommonHookActions
 
 			// If no contact exists, create one
 			if ($resql && $this->db->num_rows($resql) == 0) {
-				// Utilisation de dolistoreMail pour nettoyer les noms/prénoms comme avant
+				// Use dolistoreMail to clean up first and last names as before
 				$dolistoreMailTemp = new \dolistoreMail();
 				$dolistoreMailTemp->setDatas($buyerData);
 
@@ -686,12 +681,12 @@ class ActionsDolistorextract extends CommonHookActions
 
 				$result = $contact->create($user);
 				if ($result < 0) {
-					$this->logOutput .= '<br/>-> <span class="error">Failed to create contact for existing company.</span>';
+					$this->logOutput .= '<br/>-> <span class="error">'.$langs->trans("DolistoreContactCreationError").'</span>';
 				} else {
-					$this->logOutput .= '<br/>-> <span class="ok">Contact created for existing company.</span>';
+					$this->logOutput .= '<br/>-> <span class="ok">'.$langs->trans("DolistoreContactCreated").'</span>';
 				}
 			} else {
-				$this->logOutput .= '<br/>-> <span class="ok">Contact found for this company</span>';
+				$this->logOutput .= '<br/>-> <span class="ok">'.$langs->trans("DolistoreContactFound").'</span>';
 			}
 		} else {
 			// 7. Customer not found => Create new company
@@ -700,7 +695,7 @@ class ActionsDolistorextract extends CommonHookActions
 			$companyId = $this->newCustomerFromDatas($user, $dolistoreMailTemp);
 
 			if ($companyId <= 0) {
-				$this->logOutput .= '<br/>-> <span class="error">Failed to create new company</span>';
+				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreFailedToCreateNewCompany") . '</span>';
 			}
 		}
 
@@ -758,13 +753,13 @@ class ActionsDolistorextract extends CommonHookActions
 	/**
 	 * Process order items (Sales & Events)
 	 *
-	 * @param \User  $user      User object
+	 * @param User  $user      User object
 	 * @param int    $companyId Company ID
 	 * @param string $orderRef  Order reference
 	 * @param array  $items     List of items
 	 * @return array|null       List of success items, or null on critical error
 	 */
-	private function processOrderItems(\User $user, int $companyId, string $orderRef, array $items): ?array
+	private function processOrderItems(User $user, int $companyId, string $orderRef, array $items): ?array
 	{
 		global $langs;
 		$successList = [];
@@ -772,12 +767,12 @@ class ActionsDolistorextract extends CommonHookActions
 		foreach ($items as $product) {
 			$itemCreatedInThisPass = false;
 
-			// 2. Création Vente WebHost
+			// WebHost Creation and Sales
 			if (isModEnabled("webhost")) {
 				// CHECK DOUBLON
 				if ($this->checkIfWebmoduleSaleExists($companyId, $product['item_reference'], $product['date_sale'])) {
 					$this->logOutput .= '<br/>-> <span class="warning">'.$langs->trans("DolistoreDuplicateSale").' '.$product['item_name'] . '</span>';
-					// Ce n'est pas une erreur, on continue
+					// This is not an error, we continue
 				} else {
 					$resVente = $this->addWebmoduleSales($product, $companyId);
 					if ($resVente <= 0) {
@@ -790,7 +785,7 @@ class ActionsDolistorextract extends CommonHookActions
 			}
 			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passé vide ou à adapter
 			if ($itemCreatedInThisPass) {
-				$this->logOutput .= '<br/>-> <span class="ok">Vente créée : ' . $product['item_name'] . '</span>';
+				$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreSaleCreated", dol_escape_htmltag($product['item_name'])) . '</span>';
 			}
 
 			if ($itemCreatedInThisPass) {
@@ -805,13 +800,14 @@ class ActionsDolistorextract extends CommonHookActions
 	 * Sends a thank you email to the customer using a template based on their language.
 	 * Checks configuration to ensure sending is enabled.
 	 *
-	 * @param \User  $user         Dolibarr user object.
+	 * @param User  $user         Dolibarr user object.
 	 * @param array  $orderDetails Array containing buyer data and language.
 	 * @param array  $productList  List of valid product names to include in the email.
 	 * @return void
 	 */
-	private function sendThankYouEmail(\User $user, array $orderDetails, array $productList): void
+	private function sendThankYouEmail(User $user, array $orderDetails, array $productList): void
 	{
+		global $langs;
 		// 1. Check configuration
 		if (getDolGlobalString('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU')) {
 			// Logically skipped
@@ -856,12 +852,12 @@ class ActionsDolistorextract extends CommonHookActions
 
 		if ($emailFile->error) {
 			dol_syslog(__METHOD__ . ' Error creating email: ' . $emailFile->error, LOG_ERR);
-			$this->logOutput .= '<br/><span class="error">Erreur création email : ' . $emailFile->error . '</span>';
+			$this->logOutput .= '<br/><span class="error">' . $langs->trans("DolistoreEmailCreationError", dol_escape_htmltag($emailFile->error)) . '</span>';
 		} else {
 			if ($emailFile->sendfile()) {
-				$this->logOutput .= '<br/><span class="ok">Email de remerciement envoyé à ' . dol_escape_htmltag($sendTo) . '</span>';
+				$this->logOutput .= '<br/><span class="ok">' . $langs->trans("DolistoreEmailSentTo", dol_escape_htmltag($sendTo)) . '</span>';
 			} else {
-				$this->logOutput .= '<br/><span class="error">Échec envoi email à ' . dol_escape_htmltag($sendTo) . '</span>';
+				$this->logOutput .= '<br/><span class="error">' . $langs->trans("DolistoreEmailSentFailed", dol_escape_htmltag($sendTo)) . '</span>';
 			}
 		}
 	}
@@ -885,6 +881,7 @@ class ActionsDolistorextract extends CommonHookActions
 	 */
 	private function extractOrdersData(array $emails): array
 	{
+		global $langs;
 		$orderData = [];
 
 		if (empty($emails)) {
@@ -895,7 +892,7 @@ class ActionsDolistorextract extends CommonHookActions
 		foreach ($emails as $email) {
 			// Only mails from Dolistore and not seen
 			if (strpos($email->header->subject, 'DoliStore') !== false && !$email->header->seen) {
-				$this->logOutput .= '<br/><strong>Processing email:</strong> ' . $email->header->subject;
+				$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreProcessingEmail", dol_escape_htmltag($email->header->subject)) . '</strong>';
 
 				// Data extraction
 				$dolistoreMailExtract = new \dolistoreMailExtract($this->db, $email->message->text);
@@ -905,7 +902,7 @@ class ActionsDolistorextract extends CommonHookActions
 				// Validation
 				if (!empty($data) && !empty($data['order_ref']) && !empty($data['buyer_email'])) {
 					$orderRef = $data['order_ref'];
-					$this->logOutput .= '<br/>-> <span class="ok">Data extracted successfully for order <b>' . $orderRef . '</b></span>';
+					$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreDataExtracted", '<b>' . dol_escape_htmltag($orderRef) . '</b>') . '</span>';
 
 					// Initialize the order if it doesn't exist yet
 					if (!isset($orderData[$orderRef])) {
@@ -934,16 +931,16 @@ class ActionsDolistorextract extends CommonHookActions
 									'date_sale'        => $dateSale
 								];
 
-								$this->logOutput .= '<br/>-- <span class="ok">Product extracted: ' . $item['item_name'] . '</span>';
+								$this->logOutput .= '<br/>-- <span class="ok">' . $langs->trans("DolistoreProductExtracted", dol_escape_htmltag($item['item_name'])) . '</span>';
 							} else {
-								$this->logOutput .= '<br/>-- <strong class="error">Incomplete product data, skipping item</strong>';
+								$this->logOutput .= '<br/>-- <strong class="error">' . $langs->trans("DolistoreIncompleteProductData") . '</strong>';
 							}
 						}
 					} else {
-						$this->logOutput .= '<br/>-- <strong class="warning">No items found in this order</strong>';
+						$this->logOutput .= '<br/>-- <strong class="warning">' . $langs->trans("DolistoreNoItemsFound") . '</strong>';
 					}
 				} else {
-					$this->logOutput .= '<br/>-> <strong class="error">Failed to extract data from email: missing order_ref or buyer_email</strong>';
+					$this->logOutput .= '<br/>-> <strong class="error">' . $langs->trans("DolistoreExtractionFailed") . '</strong>';
 				}
 			}
 		}
