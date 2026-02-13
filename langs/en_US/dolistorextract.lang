@@ -88,7 +88,7 @@ DolistoreIncompleteProductData=Incomplete product data, skipping item
 DolistoreNoItemsFound=No items found in this order
 DolistoreExtractionFailed=Failed to extract data from email: missing order_ref or buyer_email
 
-DolistoreThirdPartyCreatedWithID=Thirdparty created: %s %s (ID: %s)
+DolistoreThirdPartyCreatedWithID=Thirdparty created: %s (ID: %s)
 DolistoreContactCreatedWithID=Contact created: %s %s (ID: %s)
 DolistoreMailsToProcess=Mails to process: %s
 DolistoreMailSendDisabled=Mail send disabled.
@@ -97,4 +97,4 @@ DolistoreEmailsToProcessCount=Dolistore emails to process: %s
 DolistoreErrorMovingMessage=Error moving message %s to %s
 DolistoreOrderProcessingFailed=Error: Order %s processing failed.
 DolistoreProcessFail=FAIL
-DolistoreProcessingOrder=Traitement de la commande : %s
+DolistoreProcessingOrder=Processing order: %s

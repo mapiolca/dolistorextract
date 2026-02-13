@@ -97,7 +97,7 @@ DolistoreIncompleteProductData=Données produit incomplètes, article ignoré
 DolistoreNoItemsFound=Aucun article trouvé dans cette commande
 DolistoreExtractionFailed=Échec de l'extraction des données de l'email : référence ou email acheteur manquant
 
-DolistoreThirdPartyCreatedWithID=Tier créé : %s %s (ID : %s)
+DolistoreThirdPartyCreatedWithID=Tier créé : %s (ID : %s)
 DolistoreContactCreatedWithID=Contact créé : %s %s (ID : %s)
 DolistoreMailsToProcess=E-mails à traiter : %s
 DolistoreMailSendDisabled=L'envoi d'e-mails est désactivé.
@@ -106,4 +106,4 @@ DolistoreEmailsToProcessCount=E-mails Dolistore à traiter : %s
 DolistoreErrorMovingMessage=Erreur lors du déplacement du message %s vers %s
 DolistoreOrderProcessingFailed=Erreur : Le traitement de la commande %s a échoué.
 DolistoreProcessFail=ÉCHEC
-DolistoreProcessingOrder=Processing order: %s
+DolistoreProcessingOrder=Traitement de la commande : %s

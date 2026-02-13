@@ -157,11 +157,11 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$socStatic->client = 2; // Prospect / client
 		$socid = $socStatic->create($user);
-		$this->logOutput .= '<br/>-> ' . $langs->trans("DolistoreThirdPartyCreatedWithID", $socStatic->firstname, $socStatic->lastname, $socStatic->id) . ' </span>';
+		$this->logOutput .= '<br/><span class="ok">-> ' . $langs->trans("DolistoreThirdPartyCreatedWithID", $dolistoreMail->buyer_company, $socStatic->id) . ' </span>';
 
 		if ($socid > 0) {
 			$res = $socStatic->create_individual($user);
-			$this->logOutput .= '<br/>-> ' . $langs->trans("DolistoreContactCreatedWithID", $socStatic->firstname, $socStatic->lastname, $socStatic->id) . ' </span>';
+			$this->logOutput .= '<br/><span class="ok">-> ' . $langs->trans("DolistoreContactCreatedWithID", $socStatic->firstname, $socStatic->lastname, $socStatic->id) . ' </span>';
 		} elseif (is_array($socStatic->errors)) {
 			$this->errors = array_merge($this->errors, $socStatic->errors);
 		}
