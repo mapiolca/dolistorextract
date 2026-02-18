@@ -123,6 +123,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$socStatic->address = $dolistoreMail->buyer_address1;
 		$socStatic->zip = $dolistoreMail->buyer_postal_code;
 		$socStatic->town = $dolistoreMail->buyer_city;
+		$socStatic->email = $dolistoreMail->buyer_email;
 		$socStatic->phone = $dolistoreMail->buyer_phone;
 		$socStatic->country_code = $dolistoreMail->buyer_country_code;
 		$socStatic->state = $dolistoreMail->buyer_state;
@@ -160,7 +161,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->logOutput .= '<br/><span class="ok">-> ' . $langs->trans("DolistoreThirdPartyCreatedWithID", $dolistoreMail->buyer_company, $socStatic->id) . ' </span>';
 
 		if ($socid > 0) {
-			$res = $socStatic->create_individual($user);
+			$socStatic->create_individual($user);
 			$this->logOutput .= '<br/><span class="ok">-> ' . $langs->trans("DolistoreContactCreatedWithID", $socStatic->firstname, $socStatic->lastname, $socStatic->id) . ' </span>';
 		} elseif (is_array($socStatic->errors)) {
 			$this->errors = array_merge($this->errors, $socStatic->errors);
@@ -590,7 +591,7 @@ class ActionsDolistorextract extends CommonHookActions
 	private function getOrCreateCustomer(User $user, array $buyerData): int
 	{
 		global $langs;
-		$company = new \Societe($this->db);
+		$company = new Societe($this->db);
 		$companyId = 0;
 
 		// 1. Search exactly by name

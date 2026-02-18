@@ -4,6 +4,7 @@
 
 
 ## Release 1.6
+- FIX : Missing email in company and contact  - 1.6.4 - *18/12/2025* 
 - FIX : change addWebmoduleSales item_price by item_price_total  - 1.6.3 - *17/12/2025* 
 - FIX : Add more details on error message linked to import of orders - 1.6.2 - *22/08/2025* 
 - FIX : Feedback refacto of DolistoreExtract module
