@@ -42,13 +42,13 @@ class dolistoreMailExtract
 
 	/**
 	 * @param Db $db
-	 * @param string $textBody
+	 * @param string|null $textBody
 	 */
-	function __construct( DoliDB $db, string $textBody = '')
+	function __construct(DoliDB $db, ?string $textBody = '')
 	{
 		$this->db = $db;
-		if (!empty($textBody)) {
-			$this->textBody = $textBody;
+		$this->textBody = (string) $textBody;
+		if (!empty($this->textBody)) {
 
 			$jsonTxt = str_replace(array("\r\n", "\n", "\r"), " ", $this->textBody);
 
