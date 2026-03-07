@@ -876,7 +876,7 @@ class ActionsDolistorextract extends CommonHookActions
 			$templateId = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR');
 		}
 
-		$usedTemplate = $formMail->getEMailTemplate($this->db, 'dolistore_extract', $user, '', $templateId);
+		$usedTemplate = $formMail->getEMailTemplate($this->db, 'dolistore_extract', $user, $langs, $templateId);
 
 		// 4. Substitutions
 		$productListString = implode(', ', $productList);
