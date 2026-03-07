@@ -28,6 +28,25 @@ use SSilence\ImapClient\ImapClientException;
 use SSilence\ImapClient\ImapConnect;
 use SSilence\ImapClient\ImapClient as Imap;
 
+if (!class_exists('CommonHookActions')) {
+	// EN: Load the native Dolibarr CommonHookActions class when it exists.
+	// FR: Charger la classe native Dolibarr CommonHookActions lorsqu'elle existe.
+	dol_include_once('/core/class/commonhookactions.class.php');
+}
+
+if (!class_exists('CommonHookActions')) {
+	/**
+	 * EN: Compatibility fallback for Dolibarr versions that do not provide CommonHookActions.
+	 * FR: Fallback de compatibilité pour les versions Dolibarr qui ne fournissent pas CommonHookActions.
+	 */
+	class CommonHookActions
+	{
+		public $resprints = '';
+		public $results = array();
+		public $errors = array();
+	}
+}
+
 
 /**
  * Class ActionsDolistorextract
