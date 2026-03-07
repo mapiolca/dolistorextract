@@ -28,6 +28,25 @@ use SSilence\ImapClient\ImapClientException;
 use SSilence\ImapClient\ImapConnect;
 use SSilence\ImapClient\ImapClient as Imap;
 
+if (!class_exists('CommonHookActions')) {
+	// EN: Load the native Dolibarr CommonHookActions class when it exists.
+	// FR: Charger la classe native Dolibarr CommonHookActions lorsqu'elle existe.
+	dol_include_once('/core/class/commonhookactions.class.php');
+}
+
+if (!class_exists('CommonHookActions')) {
+	/**
+	 * EN: Compatibility fallback for Dolibarr versions that do not provide CommonHookActions.
+	 * FR: Fallback de compatibilité pour les versions Dolibarr qui ne fournissent pas CommonHookActions.
+	 */
+	class CommonHookActions
+	{
+		public $resprints = '';
+		public $results = array();
+		public $errors = array();
+	}
+}
+
 
 /**
  * Class ActionsDolistorextract
@@ -524,6 +543,29 @@ class ActionsDolistorextract extends CommonHookActions
 		return 0;
 	}
 	/**
+	 * Search a category linked to a Dolistore product reference.
+	 *
+	 * Kept for backward compatibility with mails.php.
+	 *
+	 * @param string $productReference Dolistore product reference
+	 * @return int                     Category id if found, 0 otherwise
+	 */
+	public function searchCategoryDolistore(string $productReference): int
+	{
+		if (empty($productReference)) {
+			return 0;
+		}
+
+		$category = new Categorie($this->db);
+		$res = $category->fetch('', $productReference);
+		if ($res > 0) {
+			return (int) $category->id;
+		}
+
+		return 0;
+	}
+
+	/**
 	 * Retrieves the webmodule rowid from Dolistore ID (using extrafields linkage).
 	 *
 	 * @param string $fk_dolistore Dolistore product reference
@@ -834,7 +876,7 @@ class ActionsDolistorextract extends CommonHookActions
 			$templateId = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR');
 		}
 
-		$usedTemplate = $formMail->getEMailTemplate($this->db, 'dolistore_extract', $user, '', $templateId);
+		$usedTemplate = $formMail->getEMailTemplate($this->db, 'dolistore_extract', $user, $langs, $templateId);
 
 		// 4. Substitutions
 		$productListString = implode(', ', $productList);

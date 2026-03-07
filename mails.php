@@ -143,7 +143,7 @@ if ($action == 'import') {
 	$email = $imap->getMessage((int) $id);
 
 	$dolistorextractActions = new \ActionsDolistorextract($db);
-	$res = $dolistorextractActions->launchImportProcess($email);
+	$res = $dolistorextractActions->launchImportProcess(array($email));
 	$action = 'read';
 }
 
@@ -225,7 +225,7 @@ if ($action == 'read') {
 	if(preg_match('/fr.*/', $langEmail)) {
 		$idTemplate = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR');
 	}
-	$usedTemplate = $formMail->getEMailTemplate($db, 'dolistore_extract', $user, '',$idTemplate);
+	$usedTemplate = $formMail->getEMailTemplate($db, 'dolistore_extract', $user, $langs, $idTemplate);
 	$listProductString = implode(', ', $listProduct);
 	$arraySubstitutionDolistore = [
 			'__DOLISTORE_ORDER_NAME__' => $dolistoreMail->order_name,

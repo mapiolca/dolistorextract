@@ -42,13 +42,13 @@ class dolistoreMailExtract
 
 	/**
 	 * @param Db $db
-	 * @param string $textBody
+	 * @param string|null $textBody
 	 */
-	function __construct( DoliDB $db, string $textBody = '')
+	function __construct(DoliDB $db, ?string $textBody = '')
 	{
 		$this->db = $db;
-		if (!empty($textBody)) {
-			$this->textBody = $textBody;
+		$this->textBody = (string) $textBody;
+		if (!empty($this->textBody)) {
 
 			$jsonTxt = str_replace(array("\r\n", "\n", "\r"), " ", $this->textBody);
 
@@ -148,6 +148,38 @@ class dolistoreMailExtract
 		}
 
 		return (array) $datas;
+	}
+
+
+	/**
+	 * Extract order identifiers from email subject
+	 *
+	 * @param string $subject
+	 * @param string $lang
+	 * @return array{id:string,ref:string}
+	 */
+	public static function extractOrderDatasFromSubject(string $subject, string $lang = '') : array
+	{
+		$subjectDecoded = $subject;
+		if (function_exists('mb_decode_mimeheader')) {
+			$subjectDecoded = mb_decode_mimeheader($subjectDecoded);
+		}
+
+		$orderDatas = array('id' => '', 'ref' => '');
+
+		if (preg_match('/n\s*[°ºo]?\s*([0-9]{2,})/iu', $subjectDecoded, $matches)) {
+			$orderDatas['id'] = (string) $matches[1];
+		}
+
+		if (preg_match('/-\s*([A-Z0-9][A-Z0-9_-]{4,})\s*$/u', $subjectDecoded, $matches)) {
+			$orderDatas['ref'] = (string) $matches[1];
+		}
+
+		if (empty($orderDatas['ref']) && preg_match('/(?:order|commande|pedido|ordine|bestellung)\s*[:#-]\s*([A-Z0-9][A-Z0-9_-]{4,})/iu', $subjectDecoded, $matches)) {
+			$orderDatas['ref'] = strtoupper((string) $matches[1]);
+		}
+
+		return $orderDatas;
 	}
 
 	/**
