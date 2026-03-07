@@ -143,7 +143,7 @@ if ($action == 'import') {
 	$email = $imap->getMessage((int) $id);
 
 	$dolistorextractActions = new \ActionsDolistorextract($db);
-	$res = $dolistorextractActions->launchImportProcess($email);
+	$res = $dolistorextractActions->launchImportProcess(array($email));
 	$action = 'read';
 }
 
