@@ -23,6 +23,7 @@
  */
 //require_once "dolistorextract.class.php";
 require_once DOL_DOCUMENT_ROOT . '/core/lib/files.lib.php';
+require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
 require_once __DIR__ . "/../include/ssilence/php-imap-client/autoload.php";
 use SSilence\ImapClient\ImapClientException;
 use SSilence\ImapClient\ImapConnect;
@@ -593,6 +594,39 @@ class ActionsDolistorextract extends CommonHookActions
 
 		// Return the web module ID or 0 if not found
 		return $obj->rowid ?? 0;
+	}
+
+	/**
+	 * Retrieves a Dolibarr service rowid from a Dolistore identifier stored in product extrafields.
+	 * Search is strictly limited to services.
+	 *
+	 * @param string $fk_dolistore Dolistore identifier
+	 * @return int                 Service rowid (>0) if found, 0 otherwise
+	 */
+	public function getServiceIdByDolistoreId(string $fk_dolistore): int
+	{
+		if (empty($fk_dolistore)) {
+			return 0;
+		}
+
+		$sql = 'SELECT p.rowid';
+		$sql .= ' FROM ' . $this->db->prefix() . 'product as p';
+		$sql .= ' INNER JOIN ' . $this->db->prefix() . 'product_extrafields as pe ON pe.fk_object = p.rowid';
+		$sql .= ' WHERE pe.iddolistore = "' . $this->db->escape($fk_dolistore) . '"';
+		$sql .= ' AND p.fk_product_type = ' . ((int) Product::TYPE_SERVICE);
+		$sql .= ' AND p.entity IN (' . getEntity('product') . ')';
+		$sql .= ' ORDER BY p.rowid ASC';
+		$sql .= ' LIMIT 1';
+
+		$resql = $this->db->query($sql);
+		if (! $resql) {
+			return 0;
+		}
+
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+
+		return !empty($obj->rowid) ? (int) $obj->rowid : 0;
 	}
 	/**
 	 * Converts a formatted string representing a monetary amount to a float.
