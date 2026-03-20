@@ -135,3 +135,4 @@ DolistoreOrderLineItemRefHelp=Technical DoliStore item reference used for import
 DolistoreOrderLineDescHeader=DoliStore item
 DolistoreOrderLineDescItemRef=DoliStore item ref
 DolistoreOrderLineDescSupport=Standard support included: 1 year
+DolistoreOrderLineDescRefund=Remboursement DoliStore

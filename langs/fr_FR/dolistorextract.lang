@@ -144,3 +144,4 @@ DolistoreOrderLineItemRefHelp=Référence technique de l'item DoliStore utilisé
 DolistoreOrderLineDescHeader=Item DoliStore
 DolistoreOrderLineDescItemRef=Réf item DoliStore
 DolistoreOrderLineDescSupport=Support standard inclus : 1 an
+DolistoreOrderLineDescRefund=Remboursement DoliStore

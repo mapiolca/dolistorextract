@@ -1050,11 +1050,21 @@ class ActionsDolistorextract extends CommonHookActions
 		foreach ($items as $item) {
 			$itemReference = (string) ($item['item_reference'] ?? '');
 			$itemQty = !empty($item['item_quantity']) ? (float) $item['item_quantity'] : 1;
-			$itemPrice = !empty($item['item_price_total']) ? $this->convertToFloat((string) $item['item_price_total']) : $this->convertToFloat((string) ($item['item_price'] ?? '0'));
+			$itemQty = abs($itemQty) > 0 ? abs($itemQty) : 1;
+			$itemTotal = !empty($item['item_price_total']) ? $this->convertToFloat((string) $item['item_price_total']) : $this->convertToFloat((string) ($item['item_price'] ?? '0'));
+			$itemUnitPrice = $itemTotal;
+			if (!empty($item['item_price_total']) && $itemQty > 0) {
+				$itemUnitPrice = $itemTotal / $itemQty;
+			}
+			$isRefunded = !empty($item['item_refunded']);
+			if ($isRefunded) {
+				$itemUnitPrice = -1 * abs($itemUnitPrice);
+				dol_syslog(__METHOD__ . ' refund line normalized for item_reference=' . $itemReference . ' qty=' . $itemQty . ' unit_price=' . $itemUnitPrice, LOG_INFO);
+			}
 			$serviceId = $this->getServiceIdByDolistoreId($itemReference);
-			$itemDesc = $this->buildDolistoreOrderLineDescription($item);
+			$itemDesc = $this->buildDolistoreOrderLineDescription($item, $isRefunded);
 
-			$lineId = $order->addline($itemDesc, $itemPrice, $itemQty, 0, 0, 0, $serviceId, 0, 'HT', 0, '', '', self::DOLISTORE_PRODUCT_TYPE_SERVICE);
+			$lineId = $order->addline($itemDesc, $itemUnitPrice, $itemQty, 0, 0, 0, $serviceId, 0, 'HT', 0, '', '', self::DOLISTORE_PRODUCT_TYPE_SERVICE);
 			if ($lineId <= 0) {
 				dol_syslog(__METHOD__ . ' failed addline for order_id=' . ((int) $order->id) . ' item_reference=' . $itemReference . ' error=' . $order->error, LOG_ERR);
 				return -1;
@@ -1082,10 +1092,11 @@ class ActionsDolistorextract extends CommonHookActions
 	/**
 	 * Builds customer order line description from Dolistore item data.
 	 *
-	 * @param array $item Dolistore extracted item
+	 * @param array $item       Dolistore extracted item
+	 * @param bool  $isRefunded Refund flag
 	 * @return string     Formatted line description
 	 */
-	private function buildDolistoreOrderLineDescription(array $item): string
+	private function buildDolistoreOrderLineDescription(array $item, bool $isRefunded = false): string
 	{
 		global $langs;
 
@@ -1093,6 +1104,9 @@ class ActionsDolistorextract extends CommonHookActions
 		$itemReference = (string) ($item['item_reference'] ?? '');
 
 		$lines = array();
+		if ($isRefunded) {
+			$lines[] = $langs->transnoentitiesnoconv("DolistoreOrderLineDescRefund");
+		}
 		$lines[] = $itemName !== '' ? $itemName : $langs->transnoentitiesnoconv("DolistoreOrderLineDescHeader");
 		$lines[] = $langs->transnoentitiesnoconv("DolistoreOrderLineDescItemRef") . ': ' . ($itemReference !== '' ? $itemReference : $langs->transnoentitiesnoconv("DolistorePrivateNoteNotAvailable"));
 		$lines[] = $langs->transnoentitiesnoconv("DolistoreOrderLineDescSupport");
