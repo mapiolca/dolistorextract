@@ -723,6 +723,27 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
+	 * Builds a lightweight manual mapping proposal payload for UI usage.
+	 *
+	 * @param string $itemReference Dolistore item reference
+	 * @param string $itemName      Dolistore item label
+	 * @param array  $candidates    Candidate services
+	 * @return array<string,mixed>  Structured proposal
+	 */
+	public function buildServiceMappingProposal(string $itemReference, string $itemName, array $candidates = array()): array
+	{
+		return array(
+			'dolistore_ref' => trim($itemReference),
+			'dolistore_label' => trim($itemName),
+			'candidates' => $candidates,
+			'actions' => array(
+				'can_create_service' => true,
+				'can_link_existing_service' => !empty($candidates)
+			)
+		);
+	}
+
+	/**
 	 * Finds one Dolibarr service by a supported mapping field.
 	 *
 	 * @param string $fieldName  Supported field name (iddolistore|ref)
@@ -981,8 +1002,10 @@ class ActionsDolistorextract extends CommonHookActions
 			$product = $this->enforceDolistoreServiceBusinessRule($product);
 			$product['fk_service'] = $this->getServiceIdByDolistoreId((string) ($product['item_reference'] ?? ''));
 			$product['service_candidates'] = array();
+			$product['service_mapping_proposal'] = array();
 			if (empty($product['fk_service'])) {
 				$product['service_candidates'] = $this->findServiceCandidatesFromDolistoreData((string) ($product['item_reference'] ?? ''), (string) ($product['item_name'] ?? ''));
+				$product['service_mapping_proposal'] = $this->buildServiceMappingProposal((string) ($product['item_reference'] ?? ''), (string) ($product['item_name'] ?? ''), $product['service_candidates']);
 				if (!empty($product['service_candidates'])) {
 					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceMappingCandidatesFound", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag((string) ($product['item_name'] ?? '')), count($product['service_candidates'])) . '</span>';
 					dol_syslog(__METHOD__ . ' no exact service mapping for ref=' . ((string) ($product['item_reference'] ?? '')) . ' label=' . ((string) ($product['item_name'] ?? '')) . ', candidates=' . count($product['service_candidates']), LOG_INFO);
