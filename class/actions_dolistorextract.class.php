@@ -469,6 +469,14 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$this->db->begin();
 
+		$existingOrderId = $this->isOrderAlreadyImported($orderRef);
+		if ($existingOrderId > 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreOrderAlreadyImportedSkip", $orderRef, $existingOrderId) . '</span>';
+			dol_syslog(__METHOD__ . ' skip import for already imported order_ref=' . $orderRef . ' existing_order_id=' . $existingOrderId, LOG_WARNING);
+			return true;
+		}
+
 		// A. Customer Management
 		$companyId = $this->getOrCreateCustomer($user, $orderDetails['buyer_data']);
 

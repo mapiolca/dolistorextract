@@ -146,3 +146,4 @@ DolistoreOrderLineDescItemRef=Réf item DoliStore
 DolistoreOrderLineDescSupport=Support standard inclus : 1 an
 DolistoreOrderLineDescRefund=Remboursement DoliStore
 DolistoreOrderManualAlreadyExists=Une commande client existe déjà pour la référence DoliStore %s (commande %s).
+DolistoreOrderAlreadyImportedSkip=La commande DoliStore %s est déjà importée (id commande client existante : %s). Import ignoré.
