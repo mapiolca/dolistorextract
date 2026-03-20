@@ -99,3 +99,5 @@ DolistoreOrderProcessingFailed=Error: Order %s processing failed.
 DolistoreProcessFail=FAIL
 DolistoreProcessingOrder=Processing order: %s
 DolistoreCompanyFoundBySiret=Company found by SIRET: %s
+
+DolistoreServiceRuleEnforced=Service-only Dolistore rule automatically applied for %s (never a physical product)

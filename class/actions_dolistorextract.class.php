@@ -23,6 +23,7 @@
  */
 //require_once "dolistorextract.class.php";
 require_once DOL_DOCUMENT_ROOT . '/core/lib/files.lib.php';
+require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
 require_once __DIR__ . "/../include/ssilence/php-imap-client/autoload.php";
 use SSilence\ImapClient\ImapClientException;
 use SSilence\ImapClient\ImapConnect;
@@ -56,6 +57,16 @@ if (!class_exists('CommonHookActions')) {
  */
 class ActionsDolistorextract extends CommonHookActions
 {
+	/**
+	 * Dolistore items are always business services in Dolibarr.
+	 */
+	public const DOLISTORE_PRODUCT_TYPE_SERVICE = 1;
+
+	/**
+	 * Standard support duration for Dolistore services (1 year).
+	 */
+	public const DOLISTORE_SERVICE_SUPPORT_DURATION_MONTHS = 12;
+
 	public $db;
 	public $dao;
 	public $mesg;
@@ -594,6 +605,164 @@ class ActionsDolistorextract extends CommonHookActions
 		// Return the web module ID or 0 if not found
 		return $obj->rowid ?? 0;
 	}
+
+	/**
+	 * Retrieves a Dolibarr service rowid from a Dolistore identifier.
+	 * First search is done on extrafield iddolistore, then fallback on native product ref.
+	 *
+	 * @param string $fk_dolistore Dolistore identifier
+	 * @return int                 Service rowid (>0) if found, 0 otherwise
+	 */
+	public function getServiceIdByDolistoreId(string $fk_dolistore): int
+	{
+		if (empty($fk_dolistore)) {
+			return 0;
+		}
+
+		$serviceId = $this->findServiceIdByField('iddolistore', $fk_dolistore);
+		if ($serviceId > 0) {
+			dol_syslog(__METHOD__ . ' service found by extrafield iddolistore=' . $fk_dolistore . ' => ' . $serviceId, LOG_DEBUG);
+			return $serviceId;
+		}
+
+		dol_syslog(__METHOD__ . ' no service found by extrafield iddolistore=' . $fk_dolistore . ', fallback on ref', LOG_DEBUG);
+
+		$serviceId = $this->findServiceIdByField('ref', $fk_dolistore);
+		if ($serviceId > 0) {
+			dol_syslog(__METHOD__ . ' service found by ref=' . $fk_dolistore . ' => ' . $serviceId, LOG_DEBUG);
+			return $serviceId;
+		}
+
+		dol_syslog(__METHOD__ . ' no service mapping found for identifier=' . $fk_dolistore, LOG_WARNING);
+
+		return 0;
+	}
+
+	/**
+	 * Finds service candidates to assist manual mapping in UI.
+	 * This method never creates or links anything automatically.
+	 *
+	 * @param string $itemReference Dolistore item reference
+	 * @param string $itemName      Dolistore item label
+	 * @param int    $limit         Maximum number of candidates
+	 * @return array<int,array<string,mixed>> Candidate list for manual interface
+	 */
+	public function findServiceCandidatesFromDolistoreData(string $itemReference, string $itemName, int $limit = 10): array
+	{
+		$itemReference = trim($itemReference);
+		$itemName = trim($itemName);
+		$limit = max(1, min(50, $limit));
+
+		if ($itemReference === '' && $itemName === '') {
+			return array();
+		}
+
+		$refEscaped = $this->db->escape($itemReference);
+		$nameEscaped = $this->db->escape($itemName);
+		$searchOnRef = ($itemReference !== '');
+		$searchOnName = ($itemName !== '');
+
+		$sql = 'SELECT p.rowid, p.ref, p.label, pe.iddolistore,';
+		$sql .= ' (';
+		if ($searchOnRef) {
+			$sql .= ' (CASE WHEN p.ref = "' . $refEscaped . '" THEN 100 ELSE 0 END)';
+			$sql .= ' + (CASE WHEN p.ref LIKE "' . $refEscaped . '%" THEN 60 ELSE 0 END)';
+			$sql .= ' + (CASE WHEN p.ref LIKE "%' . $refEscaped . '%" THEN 40 ELSE 0 END)';
+			$sql .= ' + (CASE WHEN pe.iddolistore = "' . $refEscaped . '" THEN 30 ELSE 0 END)';
+		}
+		if ($searchOnRef && $searchOnName) {
+			$sql .= ' + ';
+		}
+		if ($searchOnName) {
+			$sql .= ' (CASE WHEN p.label LIKE "%' . $nameEscaped . '%" THEN 35 ELSE 0 END)';
+			$sql .= ' + (CASE WHEN p.description LIKE "%' . $nameEscaped . '%" THEN 15 ELSE 0 END)';
+		}
+		$sql .= ' ) as match_score';
+		$sql .= ' FROM ' . $this->db->prefix() . 'product as p';
+		$sql .= ' LEFT JOIN ' . $this->db->prefix() . 'product_extrafields as pe ON pe.fk_object = p.rowid';
+		$sql .= ' WHERE p.fk_product_type = ' . ((int) Product::TYPE_SERVICE);
+		$sql .= ' AND p.entity IN (' . getEntity('product') . ')';
+		$sql .= ' AND (';
+		$conditions = array();
+		if ($searchOnRef) {
+			$conditions[] = 'p.ref = "' . $refEscaped . '"';
+			$conditions[] = 'p.ref LIKE "' . $refEscaped . '%"';
+			$conditions[] = 'p.ref LIKE "%' . $refEscaped . '%"';
+			$conditions[] = 'pe.iddolistore = "' . $refEscaped . '"';
+		}
+		if ($searchOnName) {
+			$conditions[] = 'p.label LIKE "%' . $nameEscaped . '%"';
+			$conditions[] = 'p.description LIKE "%' . $nameEscaped . '%"';
+		}
+		$sql .= implode(' OR ', $conditions);
+		$sql .= ')';
+		$sql .= ' ORDER BY match_score DESC, p.ref ASC';
+		$sql .= ' LIMIT ' . ((int) $limit);
+
+		$resql = $this->db->query($sql);
+		if (! $resql) {
+			dol_syslog(__METHOD__ . ' SQL error while searching candidates for ref=' . $itemReference . ' name=' . $itemName, LOG_WARNING);
+			return array();
+		}
+
+		$candidates = array();
+		while ($obj = $this->db->fetch_object($resql)) {
+			$candidates[] = array(
+				'id' => (int) $obj->rowid,
+				'ref' => (string) $obj->ref,
+				'label' => (string) $obj->label,
+				'iddolistore' => (string) ($obj->iddolistore ?? ''),
+				'score' => (int) $obj->match_score
+			);
+		}
+		$this->db->free($resql);
+
+		dol_syslog(__METHOD__ . ' candidates proposed=' . count($candidates) . ' for ref=' . $itemReference . ' name=' . $itemName, LOG_DEBUG);
+
+		return $candidates;
+	}
+
+	/**
+	 * Finds one Dolibarr service by a supported mapping field.
+	 *
+	 * @param string $fieldName  Supported field name (iddolistore|ref)
+	 * @param string $fieldValue Value to search
+	 * @return int               Service rowid (>0) if found, 0 otherwise
+	 */
+	private function findServiceIdByField(string $fieldName, string $fieldValue): int
+	{
+		if (empty($fieldValue)) {
+			return 0;
+		}
+
+		$allowedFields = array(
+			'iddolistore' => 'pe.iddolistore',
+			'ref' => 'p.ref'
+		);
+
+		if (!isset($allowedFields[$fieldName])) {
+			return 0;
+		}
+
+		$sql = 'SELECT p.rowid';
+		$sql .= ' FROM ' . $this->db->prefix() . 'product as p';
+		$sql .= ' INNER JOIN ' . $this->db->prefix() . 'product_extrafields as pe ON pe.fk_object = p.rowid';
+		$sql .= ' WHERE ' . $allowedFields[$fieldName] . ' = "' . $this->db->escape($fieldValue) . '"';
+		$sql .= ' AND p.fk_product_type = ' . ((int) Product::TYPE_SERVICE);
+		$sql .= ' AND p.entity IN (' . getEntity('product') . ')';
+		$sql .= ' ORDER BY p.rowid ASC';
+		$sql .= ' LIMIT 1';
+
+		$resql = $this->db->query($sql);
+		if (! $resql) {
+			return 0;
+		}
+
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+
+		return !empty($obj->rowid) ? (int) $obj->rowid : 0;
+	}
 	/**
 	 * Converts a formatted string representing a monetary amount to a float.
 	 *
@@ -809,6 +978,12 @@ class ActionsDolistorextract extends CommonHookActions
 		$successList = [];
 
 		foreach ($items as $product) {
+			$product = $this->enforceDolistoreServiceBusinessRule($product);
+			$product['fk_service'] = $this->getServiceIdByDolistoreId((string) ($product['item_reference'] ?? ''));
+			$product['service_candidates'] = array();
+			if (empty($product['fk_service'])) {
+				$product['service_candidates'] = $this->findServiceCandidatesFromDolistoreData((string) ($product['item_reference'] ?? ''), (string) ($product['item_name'] ?? ''));
+			}
 			$itemCreatedInThisPass = false;
 
 			// WebHost Creation and Sales
@@ -839,6 +1014,28 @@ class ActionsDolistorextract extends CommonHookActions
 
 
 		return $successList;
+	}
+
+	/**
+	 * Enforces the Dolistore business rule for service-only items.
+	 * This central guard must be reused by any future service creation flow.
+	 *
+	 * @param array $itemData Raw extracted item data
+	 * @return array          Normalized item data for service workflows
+	 */
+	private function enforceDolistoreServiceBusinessRule(array $itemData): array
+	{
+		global $langs;
+
+		if (isset($itemData['product_type']) && (int) $itemData['product_type'] !== self::DOLISTORE_PRODUCT_TYPE_SERVICE) {
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceRuleEnforced", dol_escape_htmltag($itemData['item_reference'] ?? '')) . '</span>';
+		}
+
+		$itemData['product_type'] = self::DOLISTORE_PRODUCT_TYPE_SERVICE;
+		$itemData['support_duration'] = self::DOLISTORE_SERVICE_SUPPORT_DURATION_MONTHS;
+		$itemData['support_duration_unit'] = 'm';
+
+		return $itemData;
 	}
 	/**
 	 * Sends a thank you email to the customer using a template based on their language.
@@ -964,8 +1161,7 @@ class ActionsDolistorextract extends CommonHookActions
 								$dateRaw = $email->header->date;
 								$dateSale = strtotime($dateRaw); // IMPORTANT: Date conversion for database and duplicate check
 
-								// Add the product to the order structure
-								$orderData[$orderRef]['items'][] = [
+								$itemData = [
 									'item_reference'   => $item['item_reference'],
 									'item_name'        => $item['item_name'],
 									'item_price'       => $item['item_price'],
@@ -974,6 +1170,9 @@ class ActionsDolistorextract extends CommonHookActions
 									'item_refunded'    => $item['item_refunded'] ?? null,
 									'date_sale'        => $dateSale
 								];
+
+								// Keep service typing logic centralized for all current and future service creations.
+								$orderData[$orderRef]['items'][] = $this->enforceDolistoreServiceBusinessRule($itemData);
 
 								$this->logOutput .= '<br/>-- <span class="ok">' . $langs->trans("DolistoreProductExtracted", dol_escape_htmltag($item['item_name'])) . '</span>';
 							} else {
