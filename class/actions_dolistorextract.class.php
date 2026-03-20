@@ -1013,19 +1013,12 @@ class ActionsDolistorextract extends CommonHookActions
 			return $result;
 		}
 
-		foreach ($items as $item) {
-			$itemDesc = (string) ($item['item_name'] ?? $orderRefClient);
-			$itemQty = !empty($item['item_quantity']) ? (float) $item['item_quantity'] : 1;
-			$itemPrice = !empty($item['item_price_total']) ? $this->convertToFloat((string) $item['item_price_total']) : $this->convertToFloat((string) ($item['item_price'] ?? '0'));
-			$serviceId = $this->getServiceIdByDolistoreId((string) ($item['item_reference'] ?? ''));
-
-			$lineResult = $order->addline($itemDesc, $itemPrice, $itemQty, 0, 0, 0, $serviceId, 0, 'HT', 0, '', '', self::DOLISTORE_PRODUCT_TYPE_SERVICE);
-			if ($lineResult <= 0) {
-				$this->db->rollback();
-				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->error)) . '</span>';
-				dol_syslog(__METHOD__ . ' failed to add line on order_id=' . ((int) $order->id) . ' error=' . $order->error, LOG_ERR);
-				return $result;
-			}
+		$lineResult = $this->createCustomerOrderLinesFromDolistoreItems($order, $items);
+		if ($lineResult < 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->error)) . '</span>';
+			dol_syslog(__METHOD__ . ' failed to create lines on order_id=' . ((int) $order->id) . ' error=' . $order->error, LOG_ERR);
+			return $result;
 		}
 
 		$this->db->commit();
@@ -1040,6 +1033,71 @@ class ActionsDolistorextract extends CommonHookActions
 		dol_syslog(__METHOD__ . ' order created order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' ref_client=' . $orderRefClient, LOG_INFO);
 
 		return $result;
+	}
+
+	/**
+	 * Creates native customer order lines from Dolistore extracted items.
+	 *
+	 * @param Commande $order Customer order object
+	 * @param array    $items Extracted items
+	 * @return int            Number of created lines, -1 on error
+	 */
+	private function createCustomerOrderLinesFromDolistoreItems(Commande $order, array $items): int
+	{
+		global $langs;
+
+		$createdLines = 0;
+		foreach ($items as $item) {
+			$itemReference = (string) ($item['item_reference'] ?? '');
+			$itemQty = !empty($item['item_quantity']) ? (float) $item['item_quantity'] : 1;
+			$itemPrice = !empty($item['item_price_total']) ? $this->convertToFloat((string) $item['item_price_total']) : $this->convertToFloat((string) ($item['item_price'] ?? '0'));
+			$serviceId = $this->getServiceIdByDolistoreId($itemReference);
+			$itemDesc = $this->buildDolistoreOrderLineDescription($item);
+
+			$lineId = $order->addline($itemDesc, $itemPrice, $itemQty, 0, 0, 0, $serviceId, 0, 'HT', 0, '', '', self::DOLISTORE_PRODUCT_TYPE_SERVICE);
+			if ($lineId <= 0) {
+				dol_syslog(__METHOD__ . ' failed addline for order_id=' . ((int) $order->id) . ' item_reference=' . $itemReference . ' error=' . $order->error, LOG_ERR);
+				return -1;
+			}
+
+			if (class_exists('OrderLine')) {
+				$orderLine = new OrderLine($this->db);
+				if ($orderLine->fetch($lineId) > 0) {
+					$orderLine->array_options['options_dolistore_item_ref'] = $itemReference;
+					$lineExtraResult = $orderLine->insertExtraFields();
+					if ($lineExtraResult < 0) {
+						dol_syslog(__METHOD__ . ' failed set line extrafield on line_id=' . ((int) $lineId), LOG_ERR);
+						return -1;
+					}
+				}
+			}
+
+			dol_syslog(__METHOD__ . ' created order line line_id=' . ((int) $lineId) . ' service_id=' . ((int) $serviceId) . ' dolistore_item_ref=' . $itemReference, LOG_INFO);
+			$createdLines++;
+		}
+
+		return $createdLines;
+	}
+
+	/**
+	 * Builds customer order line description from Dolistore item data.
+	 *
+	 * @param array $item Dolistore extracted item
+	 * @return string     Formatted line description
+	 */
+	private function buildDolistoreOrderLineDescription(array $item): string
+	{
+		global $langs;
+
+		$itemName = (string) ($item['item_name'] ?? '');
+		$itemReference = (string) ($item['item_reference'] ?? '');
+
+		$lines = array();
+		$lines[] = $itemName !== '' ? $itemName : $langs->transnoentitiesnoconv("DolistoreOrderLineDescHeader");
+		$lines[] = $langs->transnoentitiesnoconv("DolistoreOrderLineDescItemRef") . ': ' . ($itemReference !== '' ? $itemReference : $langs->transnoentitiesnoconv("DolistorePrivateNoteNotAvailable"));
+		$lines[] = $langs->transnoentitiesnoconv("DolistoreOrderLineDescSupport");
+
+		return implode("\n", $lines);
 	}
 
 	/**

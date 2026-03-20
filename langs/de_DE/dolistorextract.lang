@@ -31,3 +31,6 @@ DolistoreOrderManualCreated=Kundenauftrag aus DoliStore-Referenz %s erstellt (Au
 DolistoreOrderManualCreateError=Kundenauftrag für DoliStore-Referenz %s konnte nicht erstellt werden. Fehler: %s
 DolistoreOrderLineItemRefLabel=DoliStore-Elementreferenz
 DolistoreOrderLineItemRefHelp=Technische DoliStore-Elementreferenz für die Import-Nachverfolgbarkeit auf Kundenauftragszeilen.
+DolistoreOrderLineDescHeader=DoliStore-Element
+DolistoreOrderLineDescItemRef=DoliStore-Elementreferenz
+DolistoreOrderLineDescSupport=Standard-Support enthalten: 1 Jahr

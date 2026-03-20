@@ -132,3 +132,6 @@ DolistoreOrderManualCreated=Customer order created from DoliStore reference %s (
 DolistoreOrderManualCreateError=Failed to create customer order for DoliStore reference %s. Error: %s
 DolistoreOrderLineItemRefLabel=DoliStore item reference
 DolistoreOrderLineItemRefHelp=Technical DoliStore item reference used for import traceability on customer order lines.
+DolistoreOrderLineDescHeader=DoliStore item
+DolistoreOrderLineDescItemRef=DoliStore item ref
+DolistoreOrderLineDescSupport=Standard support included: 1 year

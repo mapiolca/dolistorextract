@@ -141,3 +141,6 @@ DolistoreOrderManualCreated=Commande client créée depuis la référence DoliSt
 DolistoreOrderManualCreateError=Impossible de créer la commande client pour la référence DoliStore %s. Erreur : %s
 DolistoreOrderLineItemRefLabel=Référence item DoliStore
 DolistoreOrderLineItemRefHelp=Référence technique de l'item DoliStore utilisée pour la traçabilité de l'import sur les lignes de commande client.
+DolistoreOrderLineDescHeader=Item DoliStore
+DolistoreOrderLineDescItemRef=Réf item DoliStore
+DolistoreOrderLineDescSupport=Support standard inclus : 1 an
