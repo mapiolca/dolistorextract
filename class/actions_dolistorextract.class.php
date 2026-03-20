@@ -998,6 +998,19 @@ class ActionsDolistorextract extends CommonHookActions
 		$orderRefClient = !empty($orderData['order_ref']) ? (string) $orderData['order_ref'] : '';
 		$dateOrder = !empty($orderData['date_order']) ? (int) $orderData['date_order'] : dol_now();
 
+		$existingOrderId = $this->isOrderAlreadyImported($orderRefClient);
+		if ($existingOrderId > 0) {
+			$existingOrder = new Commande($this->db);
+			$existingOrder->fetch($existingOrderId);
+			$result['success'] = true;
+			$result['code'] = 'already_exists';
+			$result['order_id'] = (int) $existingOrderId;
+			$result['order_ref'] = (string) $existingOrder->ref;
+			$result['message_key'] = 'DolistoreOrderManualAlreadyExists';
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreOrderManualAlreadyExists", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($existingOrder->ref)) . '</span>';
+			return $result;
+		}
+
 		$order = new Commande($this->db);
 		$order->socid = (int) $socid;
 		$order->date = $dateOrder;
@@ -1033,6 +1046,41 @@ class ActionsDolistorextract extends CommonHookActions
 		dol_syslog(__METHOD__ . ' order created order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' ref_client=' . $orderRefClient, LOG_INFO);
 
 		return $result;
+	}
+
+	/**
+	 * Checks if a customer order was already imported using Dolistore reference in ref_client.
+	 *
+	 * @param string $dolistoreRef Dolistore order reference
+	 * @return int                 Existing order id, or 0 if none
+	 */
+	public function isOrderAlreadyImported(string $dolistoreRef): int
+	{
+		$dolistoreRef = trim($dolistoreRef);
+		if ($dolistoreRef === '') {
+			return 0;
+		}
+
+		$sql = 'SELECT c.rowid';
+		$sql .= ' FROM ' . $this->db->prefix() . 'commande as c';
+		$sql .= ' WHERE c.ref_client = "' . $this->db->escape($dolistoreRef) . '"';
+		$sql .= ' AND c.entity IN (' . getEntity('commande') . ')';
+		$sql .= ' ORDER BY c.rowid DESC';
+		$sql .= ' LIMIT 1';
+
+		$resql = $this->db->query($sql);
+		if (! $resql) {
+			return 0;
+		}
+
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+		if (!empty($obj->rowid)) {
+			dol_syslog(__METHOD__ . ' duplicate order detected for ref_client=' . $dolistoreRef . ' order_id=' . ((int) $obj->rowid), LOG_WARNING);
+			return (int) $obj->rowid;
+		}
+
+		return 0;
 	}
 
 	/**

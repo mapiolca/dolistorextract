@@ -145,3 +145,4 @@ DolistoreOrderLineDescHeader=Item DoliStore
 DolistoreOrderLineDescItemRef=Réf item DoliStore
 DolistoreOrderLineDescSupport=Support standard inclus : 1 an
 DolistoreOrderLineDescRefund=Remboursement DoliStore
+DolistoreOrderManualAlreadyExists=Une commande client existe déjà pour la référence DoliStore %s (commande %s).
