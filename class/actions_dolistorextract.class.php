@@ -744,6 +744,34 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
+	 * Builds private note block for Dolistore automatic import metadata.
+	 *
+	 * @param array $importData Import metadata (lang, import_hash, order_ref, buyer_email)
+	 * @return string           Formatted private note block
+	 */
+	public function buildDolistoreImportPrivateNote(array $importData = array()): string
+	{
+		global $langs;
+
+		$langDetected = !empty($importData['lang']) ? (string) $importData['lang'] : $langs->defaultlang;
+		$importHash = !empty($importData['import_hash']) ? (string) $importData['import_hash'] : substr(hash('sha256', json_encode($importData)), 0, 16);
+
+		$lines = array();
+		$lines[] = $langs->transnoentitiesnoconv("DolistorePrivateNoteHeader");
+		$lines[] = $langs->transnoentitiesnoconv("DolistorePrivateNoteLangLabel") . ': ' . ($langDetected !== '' ? $langDetected : $langs->transnoentitiesnoconv("DolistorePrivateNoteNotAvailable"));
+		$lines[] = $langs->transnoentitiesnoconv("DolistorePrivateNoteHashLabel") . ': ' . ($importHash !== '' ? $importHash : $langs->transnoentitiesnoconv("DolistorePrivateNoteNotAvailable"));
+
+		if (!empty($importData['order_ref'])) {
+			$lines[] = $langs->transnoentitiesnoconv("DolistorePrivateNoteOrderRefLabel") . ': ' . (string) $importData['order_ref'];
+		}
+		if (!empty($importData['buyer_email'])) {
+			$lines[] = $langs->transnoentitiesnoconv("DolistorePrivateNoteBuyerEmailLabel") . ': ' . (string) $importData['buyer_email'];
+		}
+
+		return implode("\n", $lines);
+	}
+
+	/**
 	 * Manually creates a native Dolibarr service from Dolistore data.
 	 * This method must be called explicitly from a manual action.
 	 *
