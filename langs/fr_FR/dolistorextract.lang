@@ -112,3 +112,7 @@ DolistoreCompanyFoundBySiret=Société trouvée par SIRET : %s
 DolistoreServiceRuleEnforced=Règle DoliStore service-only appliquée automatiquement pour %s (jamais un produit physique)
 DolistoreServiceMappingNotFound=Aucun mapping de service Dolibarr trouvé pour la référence %s (%s).
 DolistoreServiceMappingCandidatesFound=Aucun mapping exact de service Dolibarr pour la référence %s (%s). %s candidat(s) disponible(s) pour une sélection manuelle.
+DolistoreServiceManualCreateDenied=Vous n'avez pas la permission de créer des services Dolibarr.
+DolistoreServiceManualAlreadyExists=Un service existe déjà pour la référence DoliStore %s (service %s).
+DolistoreServiceManualCreated=Service créé pour la référence DoliStore %s (service %s).
+DolistoreServiceManualCreateError=Impossible de créer le service pour la référence DoliStore %s (%s). Erreur : %s

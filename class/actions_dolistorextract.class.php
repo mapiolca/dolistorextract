@@ -744,6 +744,111 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
+	 * Manually creates a native Dolibarr service from Dolistore data.
+	 * This method must be called explicitly from a manual action.
+	 *
+	 * @param User   $user        User performing manual action
+	 * @param string $itemReference Dolistore reference
+	 * @param string $itemName    Dolistore label
+	 * @param string $proposedRef Optional proposed service ref
+	 * @return array<string,mixed> Result payload for UI
+	 */
+	public function createServiceFromDolistoreData(User $user, string $itemReference, string $itemName, string $proposedRef = ''): array
+	{
+		global $langs;
+
+		$result = array(
+			'success' => false,
+			'code' => 'error',
+			'service_id' => 0,
+			'service_ref' => '',
+			'message_key' => 'DolistoreServiceManualCreateError'
+		);
+
+		if (empty($user->rights->produit->creer)) {
+			$result['code'] = 'permission_denied';
+			$result['message_key'] = 'DolistoreServiceManualCreateDenied';
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateDenied") . '</span>';
+			dol_syslog(__METHOD__ . ' permission denied for user=' . ((int) $user->id), LOG_WARNING);
+			return $result;
+		}
+
+		$itemReference = trim($itemReference);
+		$itemName = trim($itemName);
+		$proposedRef = trim($proposedRef);
+
+		$existingId = $this->getServiceIdByDolistoreId($itemReference);
+		if ($existingId > 0) {
+			$existingProduct = new Product($this->db);
+			$existingProduct->fetch($existingId);
+			$result['success'] = true;
+			$result['code'] = 'already_exists';
+			$result['service_id'] = $existingId;
+			$result['service_ref'] = (string) $existingProduct->ref;
+			$result['message_key'] = 'DolistoreServiceManualAlreadyExists';
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceManualAlreadyExists", dol_escape_htmltag($itemReference), dol_escape_htmltag($existingProduct->ref)) . '</span>';
+			dol_syslog(__METHOD__ . ' service already exists for item_reference=' . $itemReference . ' service_id=' . $existingId, LOG_INFO);
+			return $result;
+		}
+
+		$serviceRef = $proposedRef;
+		if ($serviceRef === '') {
+			$serviceRef = $itemReference !== '' ? $itemReference : preg_replace('/[^A-Za-z0-9_-]+/', '-', $itemName);
+		}
+		$serviceRef = trim($serviceRef, '-_');
+		if ($serviceRef === '') {
+			$serviceRef = 'DOLISTORE-SERVICE';
+		}
+
+		$baseRef = $serviceRef;
+		$refIndex = 1;
+		while ($this->findServiceIdByField('ref', $serviceRef) > 0) {
+			$refIndex++;
+			$serviceRef = $baseRef . '-' . $refIndex;
+		}
+
+		$product = new Product($this->db);
+		$product->ref = $serviceRef;
+		$product->label = $itemName !== '' ? $itemName : $itemReference;
+		$product->description = $itemName;
+		$product->type = self::DOLISTORE_PRODUCT_TYPE_SERVICE;
+		$product->status = 1;
+		$product->status_buy = 0;
+		$product->duration = self::DOLISTORE_SERVICE_SUPPORT_DURATION_MONTHS . 'm';
+
+		$this->db->begin();
+		$createResult = $product->create($user);
+		if ($createResult <= 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateError", dol_escape_htmltag($itemReference), dol_escape_htmltag($itemName), dol_escape_htmltag($product->error)) . '</span>';
+			dol_syslog(__METHOD__ . ' failed to create service ref=' . $serviceRef . ' error=' . $product->error, LOG_ERR);
+			return $result;
+		}
+
+		$product->array_options = array('options_iddolistore' => $itemReference);
+		$extraResult = $product->insertExtraFields();
+		if ($extraResult < 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateError", dol_escape_htmltag($itemReference), dol_escape_htmltag($itemName), dol_escape_htmltag($product->error)) . '</span>';
+			dol_syslog(__METHOD__ . ' failed to set iddolistore extrafield for service_id=' . ((int) $product->id), LOG_ERR);
+			return $result;
+		}
+
+		$this->db->commit();
+
+		$result['success'] = true;
+		$result['code'] = 'created';
+		$result['service_id'] = (int) $product->id;
+		$result['service_ref'] = (string) $product->ref;
+		$result['message_key'] = 'DolistoreServiceManualCreated';
+
+		$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreServiceManualCreated", dol_escape_htmltag($itemReference), dol_escape_htmltag($product->ref)) . '</span>';
+		dol_syslog(__METHOD__ . ' service created manually service_id=' . ((int) $product->id) . ' ref=' . $product->ref . ' for item_reference=' . $itemReference, LOG_INFO);
+
+		return $result;
+	}
+
+	/**
 	 * Finds one Dolibarr service by a supported mapping field.
 	 *
 	 * @param string $fieldName  Supported field name (iddolistore|ref)

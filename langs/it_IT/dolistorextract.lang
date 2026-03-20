@@ -2,3 +2,7 @@
 DolistoreServiceRuleEnforced=Regola DoliStore solo-servizi applicata automaticamente per %s (mai prodotto fisico)
 DolistoreServiceMappingNotFound=Nessuna mappatura servizio Dolibarr trovata per il riferimento %s (%s).
 DolistoreServiceMappingCandidatesFound=Nessuna mappatura servizio Dolibarr esatta per il riferimento %s (%s). %s candidato(i) disponibile(i) per selezione manuale.
+DolistoreServiceManualCreateDenied=Non hai i permessi per creare servizi Dolibarr.
+DolistoreServiceManualAlreadyExists=Esiste già un servizio per il riferimento DoliStore %s (servizio %s).
+DolistoreServiceManualCreated=Servizio creato per il riferimento DoliStore %s (servizio %s).
+DolistoreServiceManualCreateError=Impossibile creare il servizio per il riferimento DoliStore %s (%s). Errore: %s
