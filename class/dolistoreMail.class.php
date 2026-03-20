@@ -38,6 +38,9 @@ class dolistoreMail
 	public $buyer_state= '';
 	public $buyer_phone= '';
 	public $buyer_email= '';
+	public $buyer_idprof2 = '';
+	public $buyer_intravat = '';
+	public $order_ref = '';
 	public $order_name= '';
 	public $order_currency= '';
 	public $iso_code= '';

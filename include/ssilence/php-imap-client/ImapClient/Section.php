@@ -128,7 +128,7 @@ class Section implements \JsonSerializable
      *
      * @return array
      */
-    public function jsonSerialize()
+    public function jsonSerialize(): mixed
     {
         $properties = get_object_vars($this);
         $outProperties = array();
