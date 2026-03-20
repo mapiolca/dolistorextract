@@ -736,7 +736,7 @@ class ActionsDolistorextract extends CommonHookActions
 			'message_key' => 'DolistoreServiceManualCreateError'
 		);
 
-		if (empty($user->rights->produit->creer)) {
+		if (!$this->hasServiceManagementPermission($user)) {
 			$result['code'] = 'permission_denied';
 			$result['message_key'] = 'DolistoreServiceManualCreateDenied';
 			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateDenied") . '</span>';
@@ -841,7 +841,7 @@ class ActionsDolistorextract extends CommonHookActions
 			'message_key' => 'DolistoreServiceManualLinkError'
 		);
 
-		if (empty($user->rights->produit->creer)) {
+		if (!$this->hasServiceManagementPermission($user)) {
 			$result['code'] = 'permission_denied';
 			$result['message_key'] = 'DolistoreServiceManualLinkDenied';
 			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkDenied") . '</span>';
@@ -931,7 +931,7 @@ class ActionsDolistorextract extends CommonHookActions
 			'message_key' => 'DolistoreOrderManualCreateError'
 		);
 
-		if (empty($user->rights->commande->creer)) {
+		if (!$this->hasOrderCreatePermission($user)) {
 			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", '', '') . '</span>';
 			dol_syslog(__METHOD__ . ' permission denied for user=' . ((int) $user->id), LOG_WARNING);
 			return $result;
@@ -1184,6 +1184,44 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->db->free($resql);
 
 		return (bool) $this->hasProductIddolistoreColumn;
+	}
+
+	/**
+	 * Checks if user can create customer orders.
+	 *
+	 * @param User $user User context
+	 * @return bool      True when permission is granted
+	 */
+	private function hasOrderCreatePermission(User $user): bool
+	{
+		if (!empty($user->admin)) {
+			return true;
+		}
+
+		if (method_exists($user, 'hasRight')) {
+			return (bool) $user->hasRight('commande', 'creer');
+		}
+
+		return !empty($user->rights->commande->creer);
+	}
+
+	/**
+	 * Checks if user can create/manage services.
+	 *
+	 * @param User $user User context
+	 * @return bool      True when permission is granted
+	 */
+	private function hasServiceManagementPermission(User $user): bool
+	{
+		if (!empty($user->admin)) {
+			return true;
+		}
+
+		if (method_exists($user, 'hasRight')) {
+			return (bool) $user->hasRight('produit', 'creer');
+		}
+
+		return !empty($user->rights->produit->creer);
 	}
 	/**
 	 * Converts a formatted string representing a monetary amount to a float.
