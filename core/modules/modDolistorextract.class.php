@@ -329,7 +329,7 @@ class modDolistorextract extends DolibarrModules
 
 		$label = $langs->transnoentitiesnoconv('DolistoreOrderLineItemRefLabel');
 		$help = $langs->transnoentitiesnoconv('DolistoreOrderLineItemRefHelp');
-		$res = $extrafields->addExtraField('dolistore_item_ref', $label, 'varchar', 100, 255, 'commandedet', 0, 0, '', '', '', 0, '', -1, '', $help);
+		$res = $extrafields->addExtraField('dolistore_item_ref', $label, 'varchar', 100, 255, 'commandedet', 0, 0, '', '', 0, '', -1, $help);
 		if ($res < 0) {
 			$this->error = $extrafields->error;
 			return -1;
