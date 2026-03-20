@@ -488,6 +488,7 @@ class ActionsDolistorextract extends CommonHookActions
 			$this->nbErrors++;
 			return false;
 		}
+		dol_syslog(__METHOD__ . ' customer/contact management kept and compatible with native order flow for order_ref=' . $orderRef . ' socid=' . $companyId, LOG_INFO);
 
 		// B. Product Management (Sales & Events)
 		$processedItems = $this->processOrderItems($user, $companyId, $orderRef, $orderDetails['items']); // Add $orderRef
