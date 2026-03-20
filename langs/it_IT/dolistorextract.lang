@@ -29,3 +29,5 @@ DolistorePrivateNoteBuyerEmailLabel=Email acquirente
 DolistorePrivateNoteNotAvailable=Non disponibile
 DolistoreOrderManualCreated=Ordine cliente creato dal riferimento DoliStore %s (ordine %s).
 DolistoreOrderManualCreateError=Impossibile creare l'ordine cliente per il riferimento DoliStore %s. Errore: %s
+DolistoreOrderLineItemRefLabel=Riferimento elemento DoliStore
+DolistoreOrderLineItemRefHelp=Riferimento tecnico dell'elemento DoliStore usato per la tracciabilità dell'import sulle righe ordine cliente.
