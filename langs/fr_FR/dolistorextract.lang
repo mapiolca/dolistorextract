@@ -110,3 +110,5 @@ DolistoreProcessingOrder=Traitement de la commande : %s
 DolistoreCompanyFoundBySiret=Société trouvée par SIRET : %s
 
 DolistoreServiceRuleEnforced=Règle DoliStore service-only appliquée automatiquement pour %s (jamais un produit physique)
+DolistoreServiceMappingNotFound=Aucun mapping de service Dolibarr trouvé pour la référence %s (%s).
+DolistoreServiceMappingCandidatesFound=Aucun mapping exact de service Dolibarr pour la référence %s (%s). %s candidat(s) disponible(s) pour une sélection manuelle.

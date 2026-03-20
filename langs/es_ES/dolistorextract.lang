@@ -1,2 +1,4 @@
 # ES lang file for module dolistorextract
 DolistoreServiceRuleEnforced=Regla de DoliStore solo-servicio aplicada automáticamente para %s (nunca producto físico)
+DolistoreServiceMappingNotFound=No se encontró mapeo de servicio Dolibarr para la referencia %s (%s).
+DolistoreServiceMappingCandidatesFound=No hay mapeo exacto de servicio Dolibarr para la referencia %s (%s). %s candidato(s) disponible(s) para selección manual.
