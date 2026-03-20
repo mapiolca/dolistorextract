@@ -849,6 +849,97 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
+	 * Manually links a Dolistore identifier to an existing Dolibarr service.
+	 * This method must be called explicitly from a manual action.
+	 *
+	 * @param User   $user          User performing manual action
+	 * @param string $itemReference Dolistore reference
+	 * @param string $itemName      Dolistore label
+	 * @param int    $serviceId     Target Dolibarr service id
+	 * @return array<string,mixed>  Result payload for UI
+	 */
+	public function associateDolistoreItemToExistingService(User $user, string $itemReference, string $itemName, int $serviceId): array
+	{
+		global $langs;
+
+		$result = array(
+			'success' => false,
+			'code' => 'error',
+			'service_id' => 0,
+			'service_ref' => '',
+			'message_key' => 'DolistoreServiceManualLinkError'
+		);
+
+		if (empty($user->rights->produit->creer)) {
+			$result['code'] = 'permission_denied';
+			$result['message_key'] = 'DolistoreServiceManualLinkDenied';
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkDenied") . '</span>';
+			dol_syslog(__METHOD__ . ' permission denied for user=' . ((int) $user->id), LOG_WARNING);
+			return $result;
+		}
+
+		$itemReference = trim($itemReference);
+		$itemName = trim($itemName);
+		$serviceId = (int) $serviceId;
+
+		$targetService = new Product($this->db);
+		if ($serviceId <= 0 || $targetService->fetch($serviceId) <= 0 || (int) $targetService->type !== (int) Product::TYPE_SERVICE) {
+			$result['code'] = 'invalid_target';
+			$result['message_key'] = 'DolistoreServiceManualLinkInvalidTarget';
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkInvalidTarget", $serviceId) . '</span>';
+			dol_syslog(__METHOD__ . ' invalid target service_id=' . $serviceId . ' for item_reference=' . $itemReference, LOG_WARNING);
+			return $result;
+		}
+
+		$targetService->fetch_optionals();
+		$currentMappedRef = (string) ($targetService->array_options['options_iddolistore'] ?? '');
+		if ($currentMappedRef !== '' && $currentMappedRef !== $itemReference) {
+			$result['code'] = 'target_conflict';
+			$result['service_id'] = (int) $targetService->id;
+			$result['service_ref'] = (string) $targetService->ref;
+			$result['message_key'] = 'DolistoreServiceManualLinkConflictTarget';
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkConflictTarget", dol_escape_htmltag($targetService->ref), dol_escape_htmltag($currentMappedRef)) . '</span>';
+			dol_syslog(__METHOD__ . ' target conflict service_id=' . ((int) $targetService->id) . ' existing_iddolistore=' . $currentMappedRef . ' requested=' . $itemReference, LOG_WARNING);
+			return $result;
+		}
+
+		$alreadyMappedServiceId = $this->getServiceIdByDolistoreId($itemReference);
+		if ($alreadyMappedServiceId > 0 && $alreadyMappedServiceId !== (int) $targetService->id) {
+			$alreadyMappedService = new Product($this->db);
+			$alreadyMappedService->fetch($alreadyMappedServiceId);
+			$result['code'] = 'reference_conflict';
+			$result['service_id'] = (int) $alreadyMappedService->id;
+			$result['service_ref'] = (string) $alreadyMappedService->ref;
+			$result['message_key'] = 'DolistoreServiceManualLinkConflictReference';
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkConflictReference", dol_escape_htmltag($itemReference), dol_escape_htmltag($alreadyMappedService->ref)) . '</span>';
+			dol_syslog(__METHOD__ . ' reference conflict item_reference=' . $itemReference . ' already linked to service_id=' . $alreadyMappedServiceId, LOG_WARNING);
+			return $result;
+		}
+
+		$this->db->begin();
+		$targetService->array_options['options_iddolistore'] = $itemReference;
+		$extraResult = $targetService->insertExtraFields();
+		if ($extraResult < 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkError", dol_escape_htmltag($itemReference), dol_escape_htmltag($itemName), dol_escape_htmltag($targetService->error)) . '</span>';
+			dol_syslog(__METHOD__ . ' failed to link service_id=' . ((int) $targetService->id) . ' item_reference=' . $itemReference, LOG_ERR);
+			return $result;
+		}
+		$this->db->commit();
+
+		$result['success'] = true;
+		$result['code'] = 'linked';
+		$result['service_id'] = (int) $targetService->id;
+		$result['service_ref'] = (string) $targetService->ref;
+		$result['message_key'] = 'DolistoreServiceManualLinked';
+
+		$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreServiceManualLinked", dol_escape_htmltag($itemReference), dol_escape_htmltag($targetService->ref)) . '</span>';
+		dol_syslog(__METHOD__ . ' linked item_reference=' . $itemReference . ' to service_id=' . ((int) $targetService->id), LOG_INFO);
+
+		return $result;
+	}
+
+	/**
 	 * Finds one Dolibarr service by a supported mapping field.
 	 *
 	 * @param string $fieldName  Supported field name (iddolistore|ref)
