@@ -1424,6 +1424,7 @@ class ActionsDolistorextract extends CommonHookActions
 	{
 		global $langs;
 		$successList = [];
+		$mappedItems = array();
 
 		foreach ($items as $product) {
 			$product = $this->enforceDolistoreServiceBusinessRule($product);
@@ -1440,35 +1441,31 @@ class ActionsDolistorextract extends CommonHookActions
 					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceMappingNotFound", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag((string) ($product['item_name'] ?? ''))) . '</span>';
 					dol_syslog(__METHOD__ . ' no service mapping and no candidates for ref=' . ((string) ($product['item_reference'] ?? '')) . ' label=' . ((string) ($product['item_name'] ?? '')), LOG_WARNING);
 				}
-			}
-			$itemCreatedInThisPass = false;
-
-			// WebHost Creation and Sales
-			if (isModEnabled("webhost")) {
-				// CHECK DUPLICATE
-				if ($this->checkIfWebmoduleSaleExists($companyId, $product['item_reference'], $product['date_sale'])) {
-					$this->logOutput .= '<br/>-> <span class="warning">'.$langs->trans("DolistoreDuplicateSale").' '.$product['item_name'] . '</span>';
-					// This is not an error, we continue
-				} else {
-					$resVente = $this->addWebmoduleSales($product, $companyId);
-					if ($resVente <= 0) {
-						$this->logOutput .= '<br/>-> <span class="error">'.$langs->trans("DolistoreSaleCreationError").' '.$product['item_name'] . '</span>';
-						return null;
-					} else {
-						$itemCreatedInThisPass = true;
-					}
-				}
-			}
-			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passed empty or to be adapted
-			if ($itemCreatedInThisPass) {
-				$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreSaleCreated", dol_escape_htmltag($product['item_name'])) . '</span>';
-			}
-
-			if ($itemCreatedInThisPass) {
+			} else {
+				$mappedItems[] = $product;
 				$successList[] = $product['item_name'];
 			}
+
+			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passed empty or to be adapted
 		}
 
+		if (empty($mappedItems)) {
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreNoServiceCandidate") . '</span>';
+			return array();
+		}
+
+		$orderMetadata = array(
+			'order_ref' => $orderRef,
+			'date_order' => !empty($mappedItems[0]['date_sale']) ? (int) $mappedItems[0]['date_sale'] : dol_now()
+		);
+		$resOrder = $this->createCustomerOrderFromDolistoreData($user, $companyId, $orderMetadata, $mappedItems);
+		if (empty($resOrder['success'])) {
+			return null;
+		}
+
+		if (!empty($resOrder['code']) && $resOrder['code'] === 'already_exists') {
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreOrderAlreadyExists", $orderRef) . '</span>';
+		}
 
 		return $successList;
 	}
