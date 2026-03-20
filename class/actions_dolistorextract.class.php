@@ -24,6 +24,7 @@
 //require_once "dolistorextract.class.php";
 require_once DOL_DOCUMENT_ROOT . '/core/lib/files.lib.php';
 require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
+require_once DOL_DOCUMENT_ROOT . '/commande/class/commande.class.php';
 require_once __DIR__ . "/../include/ssilence/php-imap-client/autoload.php";
 use SSilence\ImapClient\ImapClientException;
 use SSilence\ImapClient\ImapConnect;
@@ -963,6 +964,80 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreServiceManualLinked", dol_escape_htmltag($itemReference), dol_escape_htmltag($targetService->ref)) . '</span>';
 		dol_syslog(__METHOD__ . ' linked item_reference=' . $itemReference . ' to service_id=' . ((int) $targetService->id), LOG_INFO);
+
+		return $result;
+	}
+
+	/**
+	 * Manually creates a native Dolibarr customer order from Dolistore extracted data.
+	 *
+	 * @param User  $user      User performing manual action
+	 * @param int   $socid     Thirdparty id
+	 * @param array $orderData Order metadata (order_ref, date_order, lang, import_hash, buyer_email)
+	 * @param array $items     Extracted Dolistore items
+	 * @return array<string,mixed> Result payload for UI
+	 */
+	public function createCustomerOrderFromDolistoreData(User $user, int $socid, array $orderData = array(), array $items = array()): array
+	{
+		global $langs;
+
+		$result = array(
+			'success' => false,
+			'code' => 'error',
+			'order_id' => 0,
+			'order_ref' => '',
+			'message_key' => 'DolistoreOrderManualCreateError'
+		);
+
+		if (empty($user->rights->commande->creer)) {
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", '', '') . '</span>';
+			dol_syslog(__METHOD__ . ' permission denied for user=' . ((int) $user->id), LOG_WARNING);
+			return $result;
+		}
+
+		$orderRefClient = !empty($orderData['order_ref']) ? (string) $orderData['order_ref'] : '';
+		$dateOrder = !empty($orderData['date_order']) ? (int) $orderData['date_order'] : dol_now();
+
+		$order = new Commande($this->db);
+		$order->socid = (int) $socid;
+		$order->date = $dateOrder;
+		$order->ref_client = $orderRefClient;
+		$order->note_private = $this->buildDolistoreImportPrivateNote($orderData);
+
+		$this->db->begin();
+		$orderCreateResult = $order->create($user);
+		if ($orderCreateResult <= 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->error)) . '</span>';
+			dol_syslog(__METHOD__ . ' failed to create order for socid=' . ((int) $socid) . ' ref_client=' . $orderRefClient . ' error=' . $order->error, LOG_ERR);
+			return $result;
+		}
+
+		foreach ($items as $item) {
+			$itemDesc = (string) ($item['item_name'] ?? $orderRefClient);
+			$itemQty = !empty($item['item_quantity']) ? (float) $item['item_quantity'] : 1;
+			$itemPrice = !empty($item['item_price_total']) ? $this->convertToFloat((string) $item['item_price_total']) : $this->convertToFloat((string) ($item['item_price'] ?? '0'));
+			$serviceId = $this->getServiceIdByDolistoreId((string) ($item['item_reference'] ?? ''));
+
+			$lineResult = $order->addline($itemDesc, $itemPrice, $itemQty, 0, 0, 0, $serviceId, 0, 'HT', 0, '', '', self::DOLISTORE_PRODUCT_TYPE_SERVICE);
+			if ($lineResult <= 0) {
+				$this->db->rollback();
+				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->error)) . '</span>';
+				dol_syslog(__METHOD__ . ' failed to add line on order_id=' . ((int) $order->id) . ' error=' . $order->error, LOG_ERR);
+				return $result;
+			}
+		}
+
+		$this->db->commit();
+
+		$result['success'] = true;
+		$result['code'] = 'created';
+		$result['order_id'] = (int) $order->id;
+		$result['order_ref'] = (string) $order->ref;
+		$result['message_key'] = 'DolistoreOrderManualCreated';
+
+		$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreOrderManualCreated", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->ref)) . '</span>';
+		dol_syslog(__METHOD__ . ' order created order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' ref_client=' . $orderRefClient, LOG_INFO);
 
 		return $result;
 	}

@@ -128,3 +128,5 @@ DolistorePrivateNoteHashLabel=Import hash
 DolistorePrivateNoteOrderRefLabel=Order reference
 DolistorePrivateNoteBuyerEmailLabel=Buyer email
 DolistorePrivateNoteNotAvailable=Not available
+DolistoreOrderManualCreated=Customer order created from DoliStore reference %s (order %s).
+DolistoreOrderManualCreateError=Failed to create customer order for DoliStore reference %s. Error: %s
