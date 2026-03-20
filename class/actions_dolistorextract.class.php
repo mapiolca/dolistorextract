@@ -244,6 +244,8 @@ class ActionsDolistorextract extends CommonHookActions
 		// Check if import already done
 		if (! $this->isAlreadyImported($actionStatic->note)) {
 			$res = (int) $actionStatic->create($userStatic);
+		} else {
+			dol_syslog(__METHOD__ . ' event already exists, skip note=' . $actionStatic->note, LOG_INFO);
 		}
 
 		return $res;
