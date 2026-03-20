@@ -68,6 +68,13 @@ class ActionsDolistorextract extends CommonHookActions
 	 */
 	public const DOLISTORE_SERVICE_SUPPORT_DURATION_MONTHS = 12;
 
+	/**
+	 * Import behavior when a Dolistore service mapping is missing.
+	 */
+	public const DOLISTORE_UNMAPPED_BEHAVIOR_BLOCK = 'block';
+	public const DOLISTORE_UNMAPPED_BEHAVIOR_SKIP = 'skip';
+	public const DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL = 'manual';
+
 	public $db;
 	public $dao;
 	public $mesg;
@@ -81,6 +88,7 @@ class ActionsDolistorextract extends CommonHookActions
 
 	public $logCat = '';
 	public $logOutput = '';
+	public $lastOrderImportStatus = '';
 
 	/**
 	 *    Constructor
@@ -468,6 +476,7 @@ class ActionsDolistorextract extends CommonHookActions
 	{
 		global $langs;
 		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreProcessingOrder", $orderRef) . '</strong>';
+		$this->lastOrderImportStatus = '';
 
 		$this->db->begin();
 
@@ -508,8 +517,14 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->db->commit();
 		// D. Feedback Log intelligent
 		if (empty($processedItems)) {
-			// Case of complete duplicate: The order has been processed, but nothing has been inserted.
-			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreOrderAlreadyExists", $orderRef).'</span>';
+			if ($this->lastOrderImportStatus === 'manual_pending') {
+				$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreOrderPendingManualMapping", $orderRef) . '</span>';
+			} elseif ($this->lastOrderImportStatus === 'skipped_unmapped') {
+				$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreOrderImportedWithSkippedLines", $orderRef) . '</span>';
+			} else {
+				// Case of complete duplicate: The order has been processed, but nothing has been inserted.
+				$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreOrderAlreadyExists", $orderRef).'</span>';
+			}
 		} else {
 			// Normal case: Sales have been entered.
 			$this->logOutput .= '<br/><span class="ok">'.$langs->trans("DolistoreOrderImported", $orderRef).'</span>';
@@ -1438,6 +1453,8 @@ class ActionsDolistorextract extends CommonHookActions
 		global $langs;
 		$successList = [];
 		$mappedItems = array();
+		$hasUnmappedItems = false;
+		$unmappedBehavior = $this->getUnmappedServiceBehavior();
 
 		foreach ($items as $product) {
 			$product = $this->enforceDolistoreServiceBusinessRule($product);
@@ -1454,6 +1471,21 @@ class ActionsDolistorextract extends CommonHookActions
 					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceMappingNotFound", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag((string) ($product['item_name'] ?? ''))) . '</span>';
 					dol_syslog(__METHOD__ . ' no service mapping and no candidates for ref=' . ((string) ($product['item_reference'] ?? '')) . ' label=' . ((string) ($product['item_name'] ?? '')), LOG_WARNING);
 				}
+
+				$hasUnmappedItems = true;
+				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_BLOCK) {
+					$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreUnmappedPolicyBlockedOrder", dol_escape_htmltag($orderRef), dol_escape_htmltag((string) ($product['item_reference'] ?? ''))) . '</span>';
+					dol_syslog(__METHOD__ . ' blocking import for order_ref=' . $orderRef . ' because service mapping is missing for ref=' . ((string) ($product['item_reference'] ?? '')), LOG_ERR);
+					return null;
+				}
+				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP) {
+					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreUnmappedPolicySkippedLine", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag($orderRef)) . '</span>';
+					dol_syslog(__METHOD__ . ' skipping line for order_ref=' . $orderRef . ' item_reference=' . ((string) ($product['item_reference'] ?? '')) . ' because mapping is missing', LOG_WARNING);
+				}
+				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL) {
+					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreUnmappedPolicyManualPending", dol_escape_htmltag($orderRef), dol_escape_htmltag((string) ($product['item_reference'] ?? ''))) . '</span>';
+					dol_syslog(__METHOD__ . ' manual mapping required for order_ref=' . $orderRef . ' item_reference=' . ((string) ($product['item_reference'] ?? '')), LOG_INFO);
+				}
 			} else {
 				$mappedItems[] = $product;
 				$successList[] = $product['item_name'];
@@ -1462,7 +1494,13 @@ class ActionsDolistorextract extends CommonHookActions
 			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passed empty or to be adapted
 		}
 
+		if ($hasUnmappedItems && $unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL) {
+			$this->lastOrderImportStatus = 'manual_pending';
+			return array();
+		}
+
 		if (empty($mappedItems)) {
+			$this->lastOrderImportStatus = ($hasUnmappedItems && $unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP) ? 'skipped_unmapped' : '';
 			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreNoServiceCandidate") . '</span>';
 			return array();
 		}
@@ -1481,6 +1519,26 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		return $successList;
+	}
+
+	/**
+	 * Returns configured behavior when a Dolistore service mapping is missing.
+	 *
+	 * @return string One of self::DOLISTORE_UNMAPPED_BEHAVIOR_*
+	 */
+	private function getUnmappedServiceBehavior(): string
+	{
+		$behavior = trim((string) getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR'));
+		$allowed = array(
+			self::DOLISTORE_UNMAPPED_BEHAVIOR_BLOCK,
+			self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP,
+			self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL
+		);
+		if (!in_array($behavior, $allowed, true)) {
+			return self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL;
+		}
+
+		return $behavior;
 	}
 
 	/**
