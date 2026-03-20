@@ -89,6 +89,7 @@ class ActionsDolistorextract extends CommonHookActions
 	public $logCat = '';
 	public $logOutput = '';
 	public $lastOrderImportStatus = '';
+	public $hasProductIddolistoreColumn = null;
 
 	/**
 	 *    Constructor
@@ -544,13 +545,17 @@ class ActionsDolistorextract extends CommonHookActions
 			return 0;
 		}
 
-		$serviceId = $this->findServiceIdByField('iddolistore', $fk_dolistore);
-		if ($serviceId > 0) {
-			dol_syslog(__METHOD__ . ' service found by extrafield iddolistore=' . $fk_dolistore . ' => ' . $serviceId, LOG_DEBUG);
-			return $serviceId;
-		}
+		if ($this->hasProductIddolistoreColumn()) {
+			$serviceId = $this->findServiceIdByField('iddolistore', $fk_dolistore);
+			if ($serviceId > 0) {
+				dol_syslog(__METHOD__ . ' service found by extrafield iddolistore=' . $fk_dolistore . ' => ' . $serviceId, LOG_DEBUG);
+				return $serviceId;
+			}
 
-		dol_syslog(__METHOD__ . ' no service found by extrafield iddolistore=' . $fk_dolistore . ', fallback on ref', LOG_DEBUG);
+			dol_syslog(__METHOD__ . ' no service found by extrafield iddolistore=' . $fk_dolistore . ', fallback on ref', LOG_DEBUG);
+		} else {
+			dol_syslog(__METHOD__ . ' product extrafield iddolistore is missing, fallback on ref for ' . $fk_dolistore, LOG_WARNING);
+		}
 
 		$serviceId = $this->findServiceIdByField('ref', $fk_dolistore);
 		if ($serviceId > 0) {
@@ -586,14 +591,23 @@ class ActionsDolistorextract extends CommonHookActions
 		$nameEscaped = $this->db->escape($itemName);
 		$searchOnRef = ($itemReference !== '');
 		$searchOnName = ($itemName !== '');
+		$hasIddolistoreColumn = $this->hasProductIddolistoreColumn();
 
-		$sql = 'SELECT p.rowid, p.ref, p.label, pe.iddolistore,';
+		$sql = 'SELECT p.rowid, p.ref, p.label';
+		if ($hasIddolistoreColumn) {
+			$sql .= ', pe.iddolistore';
+		} else {
+			$sql .= ', "" as iddolistore';
+		}
+		$sql .= ',';
 		$sql .= ' (';
 		if ($searchOnRef) {
 			$sql .= ' (CASE WHEN p.ref = "' . $refEscaped . '" THEN 100 ELSE 0 END)';
 			$sql .= ' + (CASE WHEN p.ref LIKE "' . $refEscaped . '%" THEN 60 ELSE 0 END)';
 			$sql .= ' + (CASE WHEN p.ref LIKE "%' . $refEscaped . '%" THEN 40 ELSE 0 END)';
-			$sql .= ' + (CASE WHEN pe.iddolistore = "' . $refEscaped . '" THEN 30 ELSE 0 END)';
+			if ($hasIddolistoreColumn) {
+				$sql .= ' + (CASE WHEN pe.iddolistore = "' . $refEscaped . '" THEN 30 ELSE 0 END)';
+			}
 		}
 		if ($searchOnRef && $searchOnName) {
 			$sql .= ' + ';
@@ -604,7 +618,9 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 		$sql .= ' ) as match_score';
 		$sql .= ' FROM ' . $this->db->prefix() . 'product as p';
-		$sql .= ' LEFT JOIN ' . $this->db->prefix() . 'product_extrafields as pe ON pe.fk_object = p.rowid';
+		if ($hasIddolistoreColumn) {
+			$sql .= ' LEFT JOIN ' . $this->db->prefix() . 'product_extrafields as pe ON pe.fk_object = p.rowid';
+		}
 		$sql .= ' WHERE p.fk_product_type = ' . ((int) Product::TYPE_SERVICE);
 		$sql .= ' AND p.entity IN (' . getEntity('product') . ')';
 		$sql .= ' AND (';
@@ -613,7 +629,9 @@ class ActionsDolistorextract extends CommonHookActions
 			$conditions[] = 'p.ref = "' . $refEscaped . '"';
 			$conditions[] = 'p.ref LIKE "' . $refEscaped . '%"';
 			$conditions[] = 'p.ref LIKE "%' . $refEscaped . '%"';
-			$conditions[] = 'pe.iddolistore = "' . $refEscaped . '"';
+			if ($hasIddolistoreColumn) {
+				$conditions[] = 'pe.iddolistore = "' . $refEscaped . '"';
+			}
 		}
 		if ($searchOnName) {
 			$conditions[] = 'p.label LIKE "%' . $nameEscaped . '%"';
@@ -1109,6 +1127,7 @@ class ActionsDolistorextract extends CommonHookActions
 			return 0;
 		}
 
+		$hasIddolistoreColumn = $this->hasProductIddolistoreColumn();
 		$allowedFields = array(
 			'iddolistore' => 'pe.iddolistore',
 			'ref' => 'p.ref'
@@ -1117,10 +1136,15 @@ class ActionsDolistorextract extends CommonHookActions
 		if (!isset($allowedFields[$fieldName])) {
 			return 0;
 		}
+		if ($fieldName === 'iddolistore' && !$hasIddolistoreColumn) {
+			return 0;
+		}
 
 		$sql = 'SELECT p.rowid';
 		$sql .= ' FROM ' . $this->db->prefix() . 'product as p';
-		$sql .= ' INNER JOIN ' . $this->db->prefix() . 'product_extrafields as pe ON pe.fk_object = p.rowid';
+		if ($hasIddolistoreColumn) {
+			$sql .= ' INNER JOIN ' . $this->db->prefix() . 'product_extrafields as pe ON pe.fk_object = p.rowid';
+		}
 		$sql .= ' WHERE ' . $allowedFields[$fieldName] . ' = "' . $this->db->escape($fieldValue) . '"';
 		$sql .= ' AND p.fk_product_type = ' . ((int) Product::TYPE_SERVICE);
 		$sql .= ' AND p.entity IN (' . getEntity('product') . ')';
@@ -1136,6 +1160,30 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->db->free($resql);
 
 		return !empty($obj->rowid) ? (int) $obj->rowid : 0;
+	}
+
+	/**
+	 * Checks if iddolistore column exists on product extrafields table.
+	 *
+	 * @return bool True when column exists
+	 */
+	private function hasProductIddolistoreColumn(): bool
+	{
+		if ($this->hasProductIddolistoreColumn !== null) {
+			return (bool) $this->hasProductIddolistoreColumn;
+		}
+
+		$sql = 'SHOW COLUMNS FROM ' . $this->db->prefix() . 'product_extrafields LIKE "iddolistore"';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->hasProductIddolistoreColumn = false;
+			return false;
+		}
+
+		$this->hasProductIddolistoreColumn = ($this->db->num_rows($resql) > 0);
+		$this->db->free($resql);
+
+		return (bool) $this->hasProductIddolistoreColumn;
 	}
 	/**
 	 * Converts a formatted string representing a monetary amount to a float.
