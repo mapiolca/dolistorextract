@@ -179,7 +179,8 @@ if ($action == 'read') {
 	// Search exactly by name
 	$filterSearch = array();
 
-	$searchSoc = $socStatic->fetch('', $datas['invoice_company']);  // Retourne -2 si on trouve plusieurs Tiers
+	$invoiceCompany = !empty($datas['invoice_company']) ? $datas['invoice_company'] : (isset($datas['buyer_company']) ? $datas['buyer_company'] : '');
+	$searchSoc = $socStatic->fetch('', $invoiceCompany);  // Retourne -2 si on trouve plusieurs Tiers
 
 	if($searchSoc < 0) {
 		print "Erreur recherche client";
