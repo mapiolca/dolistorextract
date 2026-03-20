@@ -56,6 +56,16 @@ if (!class_exists('CommonHookActions')) {
  */
 class ActionsDolistorextract extends CommonHookActions
 {
+	/**
+	 * Dolistore items are always business services in Dolibarr.
+	 */
+	public const DOLISTORE_PRODUCT_TYPE_SERVICE = 1;
+
+	/**
+	 * Standard support duration for Dolistore services (1 year).
+	 */
+	public const DOLISTORE_SERVICE_SUPPORT_DURATION_MONTHS = 12;
+
 	public $db;
 	public $dao;
 	public $mesg;
@@ -809,6 +819,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$successList = [];
 
 		foreach ($items as $product) {
+			$product = $this->enforceDolistoreServiceBusinessRule($product);
 			$itemCreatedInThisPass = false;
 
 			// WebHost Creation and Sales
@@ -839,6 +850,28 @@ class ActionsDolistorextract extends CommonHookActions
 
 
 		return $successList;
+	}
+
+	/**
+	 * Enforces the Dolistore business rule for service-only items.
+	 * This central guard must be reused by any future service creation flow.
+	 *
+	 * @param array $itemData Raw extracted item data
+	 * @return array          Normalized item data for service workflows
+	 */
+	private function enforceDolistoreServiceBusinessRule(array $itemData): array
+	{
+		global $langs;
+
+		if (isset($itemData['product_type']) && (int) $itemData['product_type'] !== self::DOLISTORE_PRODUCT_TYPE_SERVICE) {
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceRuleEnforced", dol_escape_htmltag($itemData['item_reference'] ?? '')) . '</span>';
+		}
+
+		$itemData['product_type'] = self::DOLISTORE_PRODUCT_TYPE_SERVICE;
+		$itemData['support_duration'] = self::DOLISTORE_SERVICE_SUPPORT_DURATION_MONTHS;
+		$itemData['support_duration_unit'] = 'm';
+
+		return $itemData;
 	}
 	/**
 	 * Sends a thank you email to the customer using a template based on their language.
@@ -964,8 +997,7 @@ class ActionsDolistorextract extends CommonHookActions
 								$dateRaw = $email->header->date;
 								$dateSale = strtotime($dateRaw); // IMPORTANT: Date conversion for database and duplicate check
 
-								// Add the product to the order structure
-								$orderData[$orderRef]['items'][] = [
+								$itemData = [
 									'item_reference'   => $item['item_reference'],
 									'item_name'        => $item['item_name'],
 									'item_price'       => $item['item_price'],
@@ -974,6 +1006,9 @@ class ActionsDolistorextract extends CommonHookActions
 									'item_refunded'    => $item['item_refunded'] ?? null,
 									'date_sale'        => $dateSale
 								];
+
+								// Keep service typing logic centralized for all current and future service creations.
+								$orderData[$orderRef]['items'][] = $this->enforceDolistoreServiceBusinessRule($itemData);
 
 								$this->logOutput .= '<br/>-- <span class="ok">' . $langs->trans("DolistoreProductExtracted", dol_escape_htmltag($item['item_name'])) . '</span>';
 							} else {

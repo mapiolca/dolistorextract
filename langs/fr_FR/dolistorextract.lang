@@ -108,3 +108,5 @@ DolistoreOrderProcessingFailed=Erreur : Le traitement de la commande %s a échou
 DolistoreProcessFail=ÉCHEC
 DolistoreProcessingOrder=Traitement de la commande : %s
 DolistoreCompanyFoundBySiret=Société trouvée par SIRET : %s
+
+DolistoreServiceRuleEnforced=Règle DoliStore service-only appliquée automatiquement pour %s (jamais un produit physique)
