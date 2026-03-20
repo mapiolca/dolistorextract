@@ -597,8 +597,8 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
-	 * Retrieves a Dolibarr service rowid from a Dolistore identifier stored in product extrafields.
-	 * Search is strictly limited to services.
+	 * Retrieves a Dolibarr service rowid from a Dolistore identifier.
+	 * First search is done on extrafield iddolistore, then fallback on native product ref.
 	 *
 	 * @param string $fk_dolistore Dolistore identifier
 	 * @return int                 Service rowid (>0) if found, 0 otherwise
@@ -609,10 +609,51 @@ class ActionsDolistorextract extends CommonHookActions
 			return 0;
 		}
 
+		$serviceId = $this->findServiceIdByField('iddolistore', $fk_dolistore);
+		if ($serviceId > 0) {
+			dol_syslog(__METHOD__ . ' service found by extrafield iddolistore=' . $fk_dolistore . ' => ' . $serviceId, LOG_DEBUG);
+			return $serviceId;
+		}
+
+		dol_syslog(__METHOD__ . ' no service found by extrafield iddolistore=' . $fk_dolistore . ', fallback on ref', LOG_DEBUG);
+
+		$serviceId = $this->findServiceIdByField('ref', $fk_dolistore);
+		if ($serviceId > 0) {
+			dol_syslog(__METHOD__ . ' service found by ref=' . $fk_dolistore . ' => ' . $serviceId, LOG_DEBUG);
+			return $serviceId;
+		}
+
+		dol_syslog(__METHOD__ . ' no service mapping found for identifier=' . $fk_dolistore, LOG_WARNING);
+
+		return 0;
+	}
+
+	/**
+	 * Finds one Dolibarr service by a supported mapping field.
+	 *
+	 * @param string $fieldName  Supported field name (iddolistore|ref)
+	 * @param string $fieldValue Value to search
+	 * @return int               Service rowid (>0) if found, 0 otherwise
+	 */
+	private function findServiceIdByField(string $fieldName, string $fieldValue): int
+	{
+		if (empty($fieldValue)) {
+			return 0;
+		}
+
+		$allowedFields = array(
+			'iddolistore' => 'pe.iddolistore',
+			'ref' => 'p.ref'
+		);
+
+		if (!isset($allowedFields[$fieldName])) {
+			return 0;
+		}
+
 		$sql = 'SELECT p.rowid';
 		$sql .= ' FROM ' . $this->db->prefix() . 'product as p';
 		$sql .= ' INNER JOIN ' . $this->db->prefix() . 'product_extrafields as pe ON pe.fk_object = p.rowid';
-		$sql .= ' WHERE pe.iddolistore = "' . $this->db->escape($fk_dolistore) . '"';
+		$sql .= ' WHERE ' . $allowedFields[$fieldName] . ' = "' . $this->db->escape($fieldValue) . '"';
 		$sql .= ' AND p.fk_product_type = ' . ((int) Product::TYPE_SERVICE);
 		$sql .= ' AND p.entity IN (' . getEntity('product') . ')';
 		$sql .= ' ORDER BY p.rowid ASC';
@@ -843,6 +884,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$successList = [];
 
 		foreach ($items as $product) {
+			$product['fk_service'] = $this->getServiceIdByDolistoreId((string) ($product['item_reference'] ?? ''));
 			$itemCreatedInThisPass = false;
 
 			// WebHost Creation and Sales
