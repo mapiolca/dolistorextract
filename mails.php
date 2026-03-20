@@ -66,6 +66,7 @@ $id			= GETPOST('id', 'int');
 $action		= GETPOST('action','alpha');
 $cancel     = GETPOST('cancel');
 $view       = GETPOST('view');
+$nativeImportLog = '';
 
 
 
@@ -160,11 +161,13 @@ $imap->selectFolder('INBOX');
 /*
  * Import des données du message
  */
-if ($action == 'import') {
+if ($action == 'import' || $action == 'importnative') {
 	$email = $imap->getMessage((int) $id);
 
 	$dolistorextractActions = new \ActionsDolistorextract($db);
 	$res = $dolistorextractActions->launchImportProcess(array($email));
+	$nativeImportLog = $dolistorextractActions->logOutput;
+	setEventMessages($langs->trans("DolistoreNativeImportDone"), null, 'mesgs');
 	$action = 'read';
 }
 
@@ -327,9 +330,15 @@ if ($action == 'read') {
 
 	var_dump($dolistoreMail);
 
+	if (!empty($nativeImportLog)) {
+		print '<div class="info">';
+		print $nativeImportLog;
+		print '</div>';
+	}
+
 	print '<div class="center">';
 	// TODO: check if already imported
-	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=import&id='.$id.'">Import</a>';
+	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=importnative&id='.$id.'">'.$langs->trans("DolistoreManualNativeImport").'</a>';
 
 
 	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'">Fermer</a>';

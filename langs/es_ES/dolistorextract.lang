@@ -37,3 +37,5 @@ DolistoreOrderLineDescSupport=Soporte estándar incluido: 1 año
 DolistoreOrderLineDescRefund=Remboursement DoliStore
 DolistoreOrderManualAlreadyExists=Ya existe un pedido de cliente para la referencia DoliStore %s (pedido %s).
 DolistoreOrderAlreadyImportedSkip=El pedido DoliStore %s ya fue importado (id de pedido cliente existente: %s). Importación omitida.
+DolistoreManualNativeImport=Importar como pedido nativo
+DolistoreNativeImportDone=Se ejecutó el proceso de importación nativo de Dolistore.
