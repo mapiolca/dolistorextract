@@ -99,3 +99,9 @@ DolistoreOrderProcessingFailed=Error: Order %s processing failed.
 DolistoreProcessFail=FAIL
 DolistoreProcessingOrder=Processing order: %s
 DolistoreCompanyFoundBySiret=Company found by SIRET: %s
+
+#
+# Extrafields
+#
+DolistoreServiceExtraFieldLabel = DoliStore service ID
+DolistoreServiceExtraFieldHelp = ID used for DoliStore service mapping. This field is intended for services only.

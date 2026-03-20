@@ -1,0 +1,13 @@
+# DE lang file for module dolistorextract
+
+#
+# Generic
+#
+Module500000Name = Dolistorextract
+Module500000Desc = Dolistorextract module
+
+#
+# Extrafields
+#
+DolistoreServiceExtraFieldLabel = DoliStore-Service-ID
+DolistoreServiceExtraFieldHelp = ID für die Zuordnung von DoliStore-Services. Dieses Feld ist nur für Services vorgesehen.

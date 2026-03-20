@@ -1,0 +1,13 @@
+# IT lang file for module dolistorextract
+
+#
+# Generic
+#
+Module500000Name = Dolistorextract
+Module500000Desc = Modulo Dolistorextract
+
+#
+# Extrafields
+#
+DolistoreServiceExtraFieldLabel = ID servizio DoliStore
+DolistoreServiceExtraFieldHelp = ID usato per la mappatura dei servizi DoliStore. Questo campo è destinato solo ai servizi.
