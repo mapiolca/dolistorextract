@@ -230,6 +230,19 @@ print ajax_constantonoff('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU');
 print '</form></div>';
 print '</td></tr>';
 
+$var=!$var;
+
+print '<tr '.$bc[$var].'>';
+print '<td>'.$langs->trans('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER').'</td>';
+print '<td align="center">&nbsp;</td>';
+print '<td align="right">';
+print '<div class="notopnoleft"><form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="set_DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER">';
+print ajax_constantonoff('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER');
+print '</form></div>';
+print '</td></tr>';
+
 
 // User for actions
 $var=!$var;

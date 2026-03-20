@@ -1045,6 +1045,16 @@ class ActionsDolistorextract extends CommonHookActions
 			return $result;
 		}
 
+		if (getDolGlobalInt('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER')) {
+			$orderValidateResult = $order->validate($user);
+			if ($orderValidateResult <= 0) {
+				$this->db->rollback();
+				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->error)) . '</span>';
+				dol_syslog(__METHOD__ . ' failed to validate order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' error=' . $order->error, LOG_ERR);
+				return $result;
+			}
+		}
+
 		$this->db->commit();
 
 		$result['success'] = true;
