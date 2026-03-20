@@ -150,3 +150,4 @@ DolistoreUnmappedPolicySkippedLine=Line for DoliStore service %s ignored in orde
 DolistoreUnmappedPolicyManualPending=Order %s marked for manual processing: service %s is not mapped.
 DolistoreOrderPendingManualMapping=Order %s is waiting for manual mapping in the interface.
 DolistoreOrderImportedWithSkippedLines=Order %s processed with unmapped lines ignored.
+DolistoreLegacyWebhostImportRemoved=Legacy Webhost sales import has been removed. Use native customer order import instead.

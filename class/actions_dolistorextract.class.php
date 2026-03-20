@@ -54,7 +54,7 @@ if (!class_exists('CommonHookActions')) {
  * Class ActionsDolistorextract
  *
  * Provides hooks and main processing logic for the Dolistore Extract Dolibarr module.
- * Handles automated extraction of sales/orders from Dolistore emails and integration in Dolibarr (thirdparties, contacts, events, webmodule sales).
+ * Handles automated extraction of orders from Dolistore emails and integration in Dolibarr (thirdparties, contacts, events, customer orders).
  */
 class ActionsDolistorextract extends CommonHookActions
 {
@@ -531,108 +531,6 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 		return true;
 	}
-	/**
-	 * Adds a Dolibarr webmodule sale to the database, based on extracted product data and customer.
-	 *
-	 * @param array $TItemDatas Array containing item data (reference, name, price, quantity, etc.)
-	 * @param int   $socid      Customer rowid
-	 * @return int  ID of the created sale, or <=0 if failed
-	 */
-	public function addWebmoduleSales(array $TItemDatas, int $socid): int
-	{
-		global $user, $error;
-
-		// Include the Webmodulesales class
-		dol_include_once('/webhost/class/webmodulesales.class.php');
-
-		// Instantiate a new Webmodulesales object
-		$webSales = new Webmodulesales($this->db);
-
-		// Get the web module ID based on the Dolistore ID
-		$fk_webmodule = $this->getWebmoduleIdByDolistoreId($TItemDatas['item_reference'] ?? '');
-
-		// Check if a corresponding web module was found
-		if ($fk_webmodule > 0) {
-			// Convert the price to float and assign the data to the $webSales object
-			$webSales->amount = $this->convertToFloat($TItemDatas['item_price_total'] ?? 0);
-			$webSales->qty = $TItemDatas['item_quantity'] ?? 1;  // Default value if not specified
-			$webSales->fk_soc = $socid;
-			$webSales->import_key = date('Ymd');  // Generate import key with current date
-			$webSales->fk_webmodule = $fk_webmodule;
-			$webSales->date_sale = $TItemDatas['date_sale'];  // Current date for the sale
-			$webSales->status = !empty($TItemDatas['item_refunded']) ? WebModuleSales::STATUS_REFUNDED : Webmodulesales::STATUS_SOLD;
-
-			// Create the sale and check the result
-			$res = $webSales->create($user);
-
-			if ($res <= 0) {
-				// If creation fails, log the error and add it to the error array
-				$this->logError('Unable to create web sale: ' . $webSales->error . ' ' . implode(' - ', $webSales->errors));
-			}
-
-			// Return the ID of the created sale if successful
-			return $res;
-		}
-		// If no web module is found, log the error and add it to the error array
-		$this->logError('No web module found for fk_dolistore=' . ($TItemDatas['item_reference'] . ' ' .  $TItemDatas['item_name']));
-
-
-		// Return 0 if no web module was found
-		return 0;
-	}
-	/**
-	 * Search a category linked to a Dolistore product reference.
-	 *
-	 * Kept for backward compatibility with mails.php.
-	 *
-	 * @param string $productReference Dolistore product reference
-	 * @return int                     Category id if found, 0 otherwise
-	 */
-	public function searchCategoryDolistore(string $productReference): int
-	{
-		if (empty($productReference)) {
-			return 0;
-		}
-
-		$category = new Categorie($this->db);
-		$res = $category->fetch('', $productReference);
-		if ($res > 0) {
-			return (int) $category->id;
-		}
-
-		return 0;
-	}
-
-	/**
-	 * Retrieves the webmodule rowid from Dolistore ID (using extrafields linkage).
-	 *
-	 * @param string $fk_dolistore Dolistore product reference
-	 * @return int                 Webmodule rowid, or 0 if not found
-	 */
-	public function getWebmoduleIdByDolistoreId(string $fk_dolistore): int
-	{
-		// Build SQL query to get the web module ID
-		$sql = 'SELECT DISTINCT w.rowid';
-		$sql .= ' FROM ' . $this->db->prefix() . 'webmodule as w';
-		$sql .= ' INNER JOIN ' . $this->db->prefix() . 'webmodule_version wv ON w.rowid = wv.fk_webmodule';
-		$sql .= ' INNER JOIN ' . $this->db->prefix() . 'webmodule_version_extrafields wve ON wv.rowid = wve.fk_object';
-		$sql .= ' WHERE wve.iddolistore = "' . $this->db->escape($fk_dolistore) . '"';
-
-		// Execute the query
-		$resql = $this->db->query($sql);
-
-		// Check if the query failed
-		if (! $resql) {
-			return 0;  // Return 0 if no result was found
-		}
-
-		// Extract the result
-		$obj = $this->db->fetch_object($resql);
-
-		// Return the web module ID or 0 if not found
-		return $obj->rowid ?? 0;
-	}
-
 	/**
 	 * Retrieves a Dolibarr service rowid from a Dolistore identifier.
 	 * First search is done on extrafield iddolistore, then fallback on native product ref.
@@ -1402,42 +1300,6 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->errors[] = $message;
 		$this->logCat .= $message;
 		$error++;
-	}
-	/**
-	 * Check if a sale already exists to prevent duplicates.
-	 *
-	 * @param int    $socid        Customer rowid
-	 * @param string $dolistoreRef Module reference (e.g., "module_x")
-	 * @param int    $dateSale     Sale timestamp
-	 * @return bool                True if it already exists, false otherwise
-	 */
-	private function checkIfWebmoduleSaleExists(int $socid, string $dolistoreRef, int $dateSale): bool
-	{
-		// 1. Retrieve the technical ID of the web module (rowid in llx_webmodule)
-		$fk_webmodule = $this->getWebmoduleIdByDolistoreId($dolistoreRef);
-
-		if (!$fk_webmodule) {
-			return false; // Unknown module, therefore no duplicate possible in database
-		}
-
-		// 2. We are looking for a matching sale
-		$sql = "SELECT rowid FROM " . $this->db->prefix() . "webmodule_sales";
-		$sql .= " WHERE fk_soc = " . ((int) $socid);
-		$sql .= " AND fk_webmodule = " . ((int) $fk_webmodule);
-
-		// 3. Date verification (Duplicate prevention)
-		$dayStart = date('Y-m-d 00:00:00', $dateSale);
-		$dayEnd   = date('Y-m-d 23:59:59', $dateSale);
-
-		$sql .= " AND date_sale >= '" . $dayStart . "'";
-		$sql .= " AND date_sale <= '" . $dayEnd . "'";
-
-		$res = $this->db->query($sql);
-
-		if ($res && $this->db->num_rows($res) > 0) {
-			return true;
-		}
-		return false;
 	}
 	/**
 	 * Process order items (Sales & Events)

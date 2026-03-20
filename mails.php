@@ -43,7 +43,6 @@ if (! $res) die("Include of main fails");
 // Change this following line to use the correct relative path from htdocs
 include_once(DOL_DOCUMENT_ROOT.'/core/class/html.formcompany.class.php');
 include_once(DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php');
-include_once(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php');
 include_once(DOL_DOCUMENT_ROOT.'/core/class/html.formmail.class.php');
 include_once(DOL_DOCUMENT_ROOT.'/product/class/product.class.php');
 
@@ -214,33 +213,10 @@ if ($action == 'read') {
 	}
 	$listProduct = array();
 	$canManageServices = !empty($user->rights->produit->creer);
-	// Category management
+	// Service mapping management
 	foreach ($dolistoreMail->items as $product) {
 	    // Save list of products for email message
 	    $listProduct[] = $product['item_name'];
-
-		$foundCatId = 0;
-		$resultCat = $dolistorextractActions->searchCategoryDolistore($product['item_reference']);
-		if(! $resultCat) {
-			//echo 'Pas de catégorie dolistore trouvée pour la ref='.$product['item_reference'].'<br />';
-			dol_syslog('No category found for ref='.$product['item_reference'], LOG_WARNING);
-
-			// Search by label
-			$catStatic = new Categorie($db);
-			$resLabel = $catStatic->fetch('', $product['item_name']);
-			if($resLabel > 0) {
-				$foundCatId = $catStatic->id;
-			}
-		} else {
-			$foundCatId = $resultCat;
-			//echo "Catégorie dolistore trouvée pour ref ".$product['item_reference']." (".$product['item_name'].") : ".$resultCat;
-		}
-
-		if ($foundCatId) {
-			$catStatic = new Categorie($db);
-			$res = $catStatic->fetch($foundCatId);
-			echo "<br />Catégorie trouvée pour ref ".$product['item_reference']." (".$product['item_name'].") : ".$catStatic->getNomUrl(1);
-		}
 
 		$mappedServiceId = $dolistorextractActions->getServiceIdByDolistoreId((string) $product['item_reference']);
 		echo '<div class="div-table-responsive-no-min" style="margin-top:10px;">';

@@ -159,3 +159,4 @@ DolistoreUnmappedPolicySkippedLine=Ligne du service DoliStore %s ignoree dans la
 DolistoreUnmappedPolicyManualPending=Commande %s marquee pour traitement manuel : le service %s n'est pas mappe.
 DolistoreOrderPendingManualMapping=La commande %s attend un mapping manuel dans l'interface.
 DolistoreOrderImportedWithSkippedLines=Commande %s traitee avec des lignes non mappees ignorees.
+DolistoreLegacyWebhostImportRemoved=L'import historique des ventes Webhost a ete supprime. Utilisez l'import en commande client native.

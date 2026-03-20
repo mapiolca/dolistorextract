@@ -48,3 +48,4 @@ DolistoreUnmappedPolicySkippedLine=Zeile für DoliStore-Service %s in Bestellung
 DolistoreUnmappedPolicyManualPending=Bestellung %s für manuelle Bearbeitung markiert: Service %s ist nicht zugeordnet.
 DolistoreOrderPendingManualMapping=Bestellung %s wartet auf manuelles Mapping in der Oberfläche.
 DolistoreOrderImportedWithSkippedLines=Bestellung %s mit ignorierten nicht zugeordneten Zeilen verarbeitet.
+DolistoreLegacyWebhostImportRemoved=Der alte Webhost-Verkaufsimport wurde entfernt. Bitte den nativen Kundenauftragsimport verwenden.
