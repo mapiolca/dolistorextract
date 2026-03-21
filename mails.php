@@ -43,8 +43,8 @@ if (! $res) die("Include of main fails");
 // Change this following line to use the correct relative path from htdocs
 include_once(DOL_DOCUMENT_ROOT.'/core/class/html.formcompany.class.php');
 include_once(DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php');
-include_once(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php');
 include_once(DOL_DOCUMENT_ROOT.'/core/class/html.formmail.class.php');
+include_once(DOL_DOCUMENT_ROOT.'/product/class/product.class.php');
 
 include_once 'class/actions_dolistorextract.class.php';
 include_once 'class/dolistoreMail.class.php';
@@ -65,6 +65,7 @@ $id			= GETPOST('id', 'int');
 $action		= GETPOST('action','alpha');
 $cancel     = GETPOST('cancel');
 $view       = GETPOST('view');
+$nativeImportLog = '';
 
 
 
@@ -102,7 +103,27 @@ if ($reshook < 0) setEventMessages($hookmanager->error, $hookmanager->errors, 'e
 
 if (empty($reshook))
 {
+	if (in_array($action, array('manual_create_service', 'manual_link_service'))) {
+		$dolistorextractActions = new \ActionsDolistorextract($db);
+		$itemReference = GETPOST('item_reference', 'alphanohtml');
+		$itemName = GETPOST('item_name', 'restricthtml');
+		$emailId = GETPOST('id', 'int');
 
+		if ($action === 'manual_create_service') {
+			$proposedRef = GETPOST('proposed_ref', 'alphanohtml');
+			$resCreate = $dolistorextractActions->createServiceFromDolistoreData($user, $itemReference, $itemName, $proposedRef);
+			setEventMessages($langs->trans($resCreate['message_key']), null, $resCreate['success'] ? 'mesgs' : 'errors');
+		}
+
+		if ($action === 'manual_link_service') {
+			$serviceId = GETPOST('target_service_id', 'int');
+			$resLink = $dolistorextractActions->associateDolistoreItemToExistingService($user, $itemReference, $itemName, $serviceId);
+			setEventMessages($langs->trans($resLink['message_key']), null, $resLink['success'] ? 'mesgs' : 'errors');
+		}
+
+		header('Location: ' . $_SERVER['PHP_SELF'] . '?action=read&id=' . ((int) $emailId));
+		exit;
+	}
 }
 
 
@@ -139,11 +160,13 @@ $imap->selectFolder('INBOX');
 /*
  * Import des données du message
  */
-if ($action == 'import') {
+if ($action == 'import' || $action == 'importnative') {
 	$email = $imap->getMessage((int) $id);
 
 	$dolistorextractActions = new \ActionsDolistorextract($db);
 	$res = $dolistorextractActions->launchImportProcess(array($email));
+	$nativeImportLog = $dolistorextractActions->logOutput;
+	setEventMessages($langs->trans("DolistoreNativeImportDone"), null, 'mesgs');
 	$action = 'read';
 }
 
@@ -189,33 +212,70 @@ if ($action == 'read') {
 		print 'Client trouvé : '.$socStatic->getNomUrl(1).'<br />';
 	}
 	$listProduct = array();
-	// Category management
+	$canManageServices = !empty($user->rights->produit->creer);
+	// Service mapping management
 	foreach ($dolistoreMail->items as $product) {
 	    // Save list of products for email message
 	    $listProduct[] = $product['item_name'];
 
-		$foundCatId = 0;
-		$resultCat = $dolistorextractActions->searchCategoryDolistore($product['item_reference']);
-		if(! $resultCat) {
-			//echo 'Pas de catégorie dolistore trouvée pour la ref='.$product['item_reference'].'<br />';
-			dol_syslog('No category found for ref='.$product['item_reference'], LOG_WARNING);
+		$mappedServiceId = $dolistorextractActions->getServiceIdByDolistoreId((string) $product['item_reference']);
+		echo '<div class="div-table-responsive-no-min" style="margin-top:10px;">';
+		echo '<table class="noborder" width="100%">';
+		echo '<tr class="liste_titre"><th colspan="2">' . $langs->trans("DolistoreManualMappingTitle", dol_escape_htmltag($product['item_reference'])) . '</th></tr>';
 
-			// Search by label
-			$catStatic = new Categorie($db);
-			$resLabel = $catStatic->fetch('', $product['item_name']);
-			if($resLabel > 0) {
-				$foundCatId = $catStatic->id;
-			}
+		if ($mappedServiceId > 0) {
+			$mappedService = new Product($db);
+			$mappedService->fetch($mappedServiceId);
+			echo '<tr><td width="30%"><strong>' . $langs->trans("DolistoreServiceMappedLabel") . '</strong></td><td>' . $mappedService->getNomUrl(1) . '</td></tr>';
 		} else {
-			$foundCatId = $resultCat;
-			//echo "Catégorie dolistore trouvée pour ref ".$product['item_reference']." (".$product['item_name'].") : ".$resultCat;
-		}
+			$candidates = $dolistorextractActions->findServiceCandidatesFromDolistoreData((string) $product['item_reference'], (string) $product['item_name']);
+			$proposal = $dolistorextractActions->buildServiceMappingProposal((string) $product['item_reference'], (string) $product['item_name'], $candidates);
 
-		if ($foundCatId) {
-			$catStatic = new Categorie($db);
-			$res = $catStatic->fetch($foundCatId);
-			echo "<br />Catégorie trouvée pour ref ".$product['item_reference']." (".$product['item_name'].") : ".$catStatic->getNomUrl(1);
+			echo '<tr><td colspan="2"><span class="warning">' . $langs->trans("DolistoreNoExactServiceMapping", dol_escape_htmltag($proposal['dolistore_ref']), dol_escape_htmltag($proposal['dolistore_label'])) . '</span></td></tr>';
+
+			if (!empty($proposal['candidates'])) {
+				echo '<tr><td><strong>' . $langs->trans("DolistoreCandidateServices") . '</strong></td><td><ul>';
+				foreach ($proposal['candidates'] as $candidate) {
+					echo '<li>' . dol_escape_htmltag($candidate['ref']) . ' - ' . dol_escape_htmltag($candidate['label']) . '</li>';
+				}
+				echo '</ul></td></tr>';
+			} else {
+				echo '<tr><td><strong>' . $langs->trans("DolistoreCandidateServices") . '</strong></td><td>' . $langs->trans("DolistoreNoServiceCandidate") . '</td></tr>';
+			}
+
+			if ($canManageServices) {
+				echo '<tr><td><strong>' . $langs->trans("DolistoreActionCreateService") . '</strong></td><td>';
+				echo '<form method="POST" action="' . $_SERVER['PHP_SELF'] . '">';
+				echo '<input type="hidden" name="token" value="' . newToken() . '">';
+				echo '<input type="hidden" name="action" value="manual_create_service">';
+				echo '<input type="hidden" name="id" value="' . ((int) $id) . '">';
+				echo '<input type="hidden" name="item_reference" value="' . dol_escape_htmltag((string) $proposal['dolistore_ref']) . '">';
+				echo '<input type="hidden" name="item_name" value="' . dol_escape_htmltag((string) $proposal['dolistore_label']) . '">';
+				echo '<input type="text" name="proposed_ref" value="' . dol_escape_htmltag((string) $proposal['dolistore_ref']) . '" placeholder="' . dol_escape_htmltag($langs->trans("DolistoreServiceRefProposal")) . '"> ';
+				echo '<button class="button" type="submit">' . $langs->trans("DolistoreActionCreateService") . '</button>';
+				echo '</form>';
+				echo '</td></tr>';
+
+				echo '<tr><td><strong>' . $langs->trans("DolistoreActionLinkService") . '</strong></td><td>';
+				echo '<form method="POST" action="' . $_SERVER['PHP_SELF'] . '">';
+				echo '<input type="hidden" name="token" value="' . newToken() . '">';
+				echo '<input type="hidden" name="action" value="manual_link_service">';
+				echo '<input type="hidden" name="id" value="' . ((int) $id) . '">';
+				echo '<input type="hidden" name="item_reference" value="' . dol_escape_htmltag((string) $proposal['dolistore_ref']) . '">';
+				echo '<input type="hidden" name="item_name" value="' . dol_escape_htmltag((string) $proposal['dolistore_label']) . '">';
+				echo '<select name="target_service_id">';
+				echo '<option value="">' . $langs->trans("DolistoreSelectExistingService") . '</option>';
+				foreach ($proposal['candidates'] as $candidate) {
+					echo '<option value="' . ((int) $candidate['id']) . '">' . dol_escape_htmltag($candidate['ref']) . ' - ' . dol_escape_htmltag($candidate['label']) . '</option>';
+				}
+				echo '</select> ';
+				echo '<button class="button" type="submit">' . $langs->trans("DolistoreActionLinkService") . '</button>';
+				echo '</form>';
+				echo '</td></tr>';
+			}
 		}
+		echo '</table>';
+		echo '</div>';
 	}
 
 	print '<br />';
@@ -246,9 +306,15 @@ if ($action == 'read') {
 
 	var_dump($dolistoreMail);
 
+	if (!empty($nativeImportLog)) {
+		print '<div class="info">';
+		print $nativeImportLog;
+		print '</div>';
+	}
+
 	print '<div class="center">';
 	// TODO: check if already imported
-	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=import&id='.$id.'">Import</a>';
+	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=importnative&id='.$id.'">'.$langs->trans("DolistoreManualNativeImport").'</a>';
 
 
 	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'">Fermer</a>';

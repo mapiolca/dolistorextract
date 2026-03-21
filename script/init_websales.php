@@ -117,14 +117,9 @@ if (isset($_FILES['importfile']) && $_FILES['importfile']['error'] == UPLOAD_ERR
 						$socid = $obj->rowid; // Récupération de l'ID de la société
 					} else $socid = $fk_company;
 
-					if(isModEnabled("webhost")) {
-						$result = $actionsDolistore->addWebmoduleSales($TItemDatas, $socid);
-
-						if ($result <= 0) {
-							// Si l'insertion échoue, incrémenter l'erreur et afficher un message d'erreur
-							$error++;
-							echo displayStyledMessage($langs->transnoentitiesnoconv("FailedToInsertDataFor") . ' ' . htmlspecialchars($TItemDatas['item_reference'])  . $actionsDolistore->logCat.', '.$row[5], "error");
-						}
+					if (isModEnabled("webhost")) {
+						$error++;
+						echo displayStyledMessage($langs->transnoentitiesnoconv("DolistoreLegacyWebhostImportRemoved"), "error");
 					}
 				}
 			}

@@ -230,6 +230,40 @@ print ajax_constantonoff('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU');
 print '</form></div>';
 print '</td></tr>';
 
+$var=!$var;
+
+print '<tr '.$bc[$var].'>';
+print '<td>'.$langs->trans('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER').'</td>';
+print '<td align="center">&nbsp;</td>';
+print '<td align="right">';
+print '<div class="notopnoleft"><form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="set_DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER">';
+print ajax_constantonoff('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER');
+print '</form></div>';
+print '</td></tr>';
+
+$var=!$var;
+$arrayUnmappedServiceBehavior = array(
+	'block' => $langs->trans("DolistoreUnmappedBehaviorBlock"),
+	'skip' => $langs->trans("DolistoreUnmappedBehaviorSkip"),
+	'manual' => $langs->trans("DolistoreUnmappedBehaviorManual")
+);
+$selectedUnmappedBehavior = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR');
+if (!in_array($selectedUnmappedBehavior, array('block', 'skip', 'manual'), true)) {
+	$selectedUnmappedBehavior = 'manual';
+}
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreUnmappedBehaviorLabel").'</td><td>';
+print $form->selectarray('constvalue', $arrayUnmappedServiceBehavior, $selectedUnmappedBehavior);
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
 
 // User for actions
 $var=!$var;

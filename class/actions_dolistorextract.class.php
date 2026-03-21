@@ -23,6 +23,8 @@
  */
 //require_once "dolistorextract.class.php";
 require_once DOL_DOCUMENT_ROOT . '/core/lib/files.lib.php';
+require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
+require_once DOL_DOCUMENT_ROOT . '/commande/class/commande.class.php';
 require_once __DIR__ . "/../include/ssilence/php-imap-client/autoload.php";
 use SSilence\ImapClient\ImapClientException;
 use SSilence\ImapClient\ImapConnect;
@@ -52,10 +54,27 @@ if (!class_exists('CommonHookActions')) {
  * Class ActionsDolistorextract
  *
  * Provides hooks and main processing logic for the Dolistore Extract Dolibarr module.
- * Handles automated extraction of sales/orders from Dolistore emails and integration in Dolibarr (thirdparties, contacts, events, webmodule sales).
+ * Handles automated extraction of orders from Dolistore emails and integration in Dolibarr (thirdparties, contacts, events, customer orders).
  */
 class ActionsDolistorextract extends CommonHookActions
 {
+	/**
+	 * Dolistore items are always business services in Dolibarr.
+	 */
+	public const DOLISTORE_PRODUCT_TYPE_SERVICE = 1;
+
+	/**
+	 * Standard support duration for Dolistore services (1 year).
+	 */
+	public const DOLISTORE_SERVICE_SUPPORT_DURATION_MONTHS = 12;
+
+	/**
+	 * Import behavior when a Dolistore service mapping is missing.
+	 */
+	public const DOLISTORE_UNMAPPED_BEHAVIOR_BLOCK = 'block';
+	public const DOLISTORE_UNMAPPED_BEHAVIOR_SKIP = 'skip';
+	public const DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL = 'manual';
+
 	public $db;
 	public $dao;
 	public $mesg;
@@ -69,6 +88,8 @@ class ActionsDolistorextract extends CommonHookActions
 
 	public $logCat = '';
 	public $logOutput = '';
+	public $lastOrderImportStatus = '';
+	public $hasProductIddolistoreColumn = null;
 
 	/**
 	 *    Constructor
@@ -232,6 +253,8 @@ class ActionsDolistorextract extends CommonHookActions
 		// Check if import already done
 		if (! $this->isAlreadyImported($actionStatic->note)) {
 			$res = (int) $actionStatic->create($userStatic);
+		} else {
+			dol_syslog(__METHOD__ . ' event already exists, skip note=' . $actionStatic->note, LOG_INFO);
 		}
 
 		return $res;
@@ -454,8 +477,17 @@ class ActionsDolistorextract extends CommonHookActions
 	{
 		global $langs;
 		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreProcessingOrder", $orderRef) . '</strong>';
+		$this->lastOrderImportStatus = '';
 
 		$this->db->begin();
+
+		$existingOrderId = $this->isOrderAlreadyImported($orderRef);
+		if ($existingOrderId > 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreOrderAlreadyImportedSkip", $orderRef, $existingOrderId) . '</span>';
+			dol_syslog(__METHOD__ . ' skip import for already imported order_ref=' . $orderRef . ' existing_order_id=' . $existingOrderId, LOG_WARNING);
+			return true;
+		}
 
 		// A. Customer Management
 		$companyId = $this->getOrCreateCustomer($user, $orderDetails['buyer_data']);
@@ -466,6 +498,7 @@ class ActionsDolistorextract extends CommonHookActions
 			$this->nbErrors++;
 			return false;
 		}
+		dol_syslog(__METHOD__ . ' customer/contact management kept and compatible with native order flow for order_ref=' . $orderRef . ' socid=' . $companyId, LOG_INFO);
 
 		// B. Product Management (Sales & Events)
 		$processedItems = $this->processOrderItems($user, $companyId, $orderRef, $orderDetails['items']); // Add $orderRef
@@ -485,8 +518,14 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->db->commit();
 		// D. Feedback Log intelligent
 		if (empty($processedItems)) {
-			// Case of complete duplicate: The order has been processed, but nothing has been inserted.
-			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreOrderAlreadyExists", $orderRef).'</span>';
+			if ($this->lastOrderImportStatus === 'manual_pending') {
+				$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreOrderPendingManualMapping", $orderRef) . '</span>';
+			} elseif ($this->lastOrderImportStatus === 'skipped_unmapped') {
+				$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreOrderImportedWithSkippedLines", $orderRef) . '</span>';
+			} else {
+				// Case of complete duplicate: The order has been processed, but nothing has been inserted.
+				$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreOrderAlreadyExists", $orderRef).'</span>';
+			}
 		} else {
 			// Normal case: Sales have been entered.
 			$this->logOutput .= '<br/><span class="ok">'.$langs->trans("DolistoreOrderImported", $orderRef).'</span>';
@@ -494,105 +533,695 @@ class ActionsDolistorextract extends CommonHookActions
 		return true;
 	}
 	/**
-	 * Adds a Dolibarr webmodule sale to the database, based on extracted product data and customer.
+	 * Retrieves a Dolibarr service rowid from a Dolistore identifier.
+	 * First search is done on extrafield iddolistore, then fallback on native product ref.
 	 *
-	 * @param array $TItemDatas Array containing item data (reference, name, price, quantity, etc.)
-	 * @param int   $socid      Customer rowid
-	 * @return int  ID of the created sale, or <=0 if failed
+	 * @param string $fk_dolistore Dolistore identifier
+	 * @return int                 Service rowid (>0) if found, 0 otherwise
 	 */
-	public function addWebmoduleSales(array $TItemDatas, int $socid): int
+	public function getServiceIdByDolistoreId(string $fk_dolistore): int
 	{
-		global $user, $error;
-
-		// Include the Webmodulesales class
-		dol_include_once('/webhost/class/webmodulesales.class.php');
-
-		// Instantiate a new Webmodulesales object
-		$webSales = new Webmodulesales($this->db);
-
-		// Get the web module ID based on the Dolistore ID
-		$fk_webmodule = $this->getWebmoduleIdByDolistoreId($TItemDatas['item_reference'] ?? '');
-
-		// Check if a corresponding web module was found
-		if ($fk_webmodule > 0) {
-			// Convert the price to float and assign the data to the $webSales object
-			$webSales->amount = $this->convertToFloat($TItemDatas['item_price_total'] ?? 0);
-			$webSales->qty = $TItemDatas['item_quantity'] ?? 1;  // Default value if not specified
-			$webSales->fk_soc = $socid;
-			$webSales->import_key = date('Ymd');  // Generate import key with current date
-			$webSales->fk_webmodule = $fk_webmodule;
-			$webSales->date_sale = $TItemDatas['date_sale'];  // Current date for the sale
-			$webSales->status = !empty($TItemDatas['item_refunded']) ? WebModuleSales::STATUS_REFUNDED : Webmodulesales::STATUS_SOLD;
-
-			// Create the sale and check the result
-			$res = $webSales->create($user);
-
-			if ($res <= 0) {
-				// If creation fails, log the error and add it to the error array
-				$this->logError('Unable to create web sale: ' . $webSales->error . ' ' . implode(' - ', $webSales->errors));
-			}
-
-			// Return the ID of the created sale if successful
-			return $res;
-		}
-		// If no web module is found, log the error and add it to the error array
-		$this->logError('No web module found for fk_dolistore=' . ($TItemDatas['item_reference'] . ' ' .  $TItemDatas['item_name']));
-
-
-		// Return 0 if no web module was found
-		return 0;
-	}
-	/**
-	 * Search a category linked to a Dolistore product reference.
-	 *
-	 * Kept for backward compatibility with mails.php.
-	 *
-	 * @param string $productReference Dolistore product reference
-	 * @return int                     Category id if found, 0 otherwise
-	 */
-	public function searchCategoryDolistore(string $productReference): int
-	{
-		if (empty($productReference)) {
+		if (empty($fk_dolistore)) {
 			return 0;
 		}
 
-		$category = new Categorie($this->db);
-		$res = $category->fetch('', $productReference);
-		if ($res > 0) {
-			return (int) $category->id;
+		if ($this->hasProductIddolistoreColumn()) {
+			$serviceId = $this->findServiceIdByField('iddolistore', $fk_dolistore);
+			if ($serviceId > 0) {
+				dol_syslog(__METHOD__ . ' service found by extrafield iddolistore=' . $fk_dolistore . ' => ' . $serviceId, LOG_DEBUG);
+				return $serviceId;
+			}
+
+			dol_syslog(__METHOD__ . ' no service found by extrafield iddolistore=' . $fk_dolistore . ', fallback on ref', LOG_DEBUG);
+		} else {
+			dol_syslog(__METHOD__ . ' product extrafield iddolistore is missing, fallback on ref for ' . $fk_dolistore, LOG_WARNING);
+		}
+
+		$serviceId = $this->findServiceIdByField('ref', $fk_dolistore);
+		if ($serviceId > 0) {
+			dol_syslog(__METHOD__ . ' service found by ref=' . $fk_dolistore . ' => ' . $serviceId, LOG_DEBUG);
+			return $serviceId;
+		}
+
+		dol_syslog(__METHOD__ . ' no service mapping found for identifier=' . $fk_dolistore, LOG_WARNING);
+
+		return 0;
+	}
+
+	/**
+	 * Finds service candidates to assist manual mapping in UI.
+	 * This method never creates or links anything automatically.
+	 *
+	 * @param string $itemReference Dolistore item reference
+	 * @param string $itemName      Dolistore item label
+	 * @param int    $limit         Maximum number of candidates
+	 * @return array<int,array<string,mixed>> Candidate list for manual interface
+	 */
+	public function findServiceCandidatesFromDolistoreData(string $itemReference, string $itemName, int $limit = 10): array
+	{
+		$itemReference = trim($itemReference);
+		$itemName = trim($itemName);
+		$limit = max(1, min(50, $limit));
+
+		if ($itemReference === '' && $itemName === '') {
+			return array();
+		}
+
+		$refEscaped = $this->db->escape($itemReference);
+		$nameEscaped = $this->db->escape($itemName);
+		$searchOnRef = ($itemReference !== '');
+		$searchOnName = ($itemName !== '');
+		$hasIddolistoreColumn = $this->hasProductIddolistoreColumn();
+
+		$sql = 'SELECT p.rowid, p.ref, p.label';
+		if ($hasIddolistoreColumn) {
+			$sql .= ', pe.iddolistore';
+		} else {
+			$sql .= ', "" as iddolistore';
+		}
+		$sql .= ',';
+		$sql .= ' (';
+		if ($searchOnRef) {
+			$sql .= ' (CASE WHEN p.ref = "' . $refEscaped . '" THEN 100 ELSE 0 END)';
+			$sql .= ' + (CASE WHEN p.ref LIKE "' . $refEscaped . '%" THEN 60 ELSE 0 END)';
+			$sql .= ' + (CASE WHEN p.ref LIKE "%' . $refEscaped . '%" THEN 40 ELSE 0 END)';
+			if ($hasIddolistoreColumn) {
+				$sql .= ' + (CASE WHEN pe.iddolistore = "' . $refEscaped . '" THEN 30 ELSE 0 END)';
+			}
+		}
+		if ($searchOnRef && $searchOnName) {
+			$sql .= ' + ';
+		}
+		if ($searchOnName) {
+			$sql .= ' (CASE WHEN p.label LIKE "%' . $nameEscaped . '%" THEN 35 ELSE 0 END)';
+			$sql .= ' + (CASE WHEN p.description LIKE "%' . $nameEscaped . '%" THEN 15 ELSE 0 END)';
+		}
+		$sql .= ' ) as match_score';
+		$sql .= ' FROM ' . $this->db->prefix() . 'product as p';
+		if ($hasIddolistoreColumn) {
+			$sql .= ' LEFT JOIN ' . $this->db->prefix() . 'product_extrafields as pe ON pe.fk_object = p.rowid';
+		}
+		$sql .= ' WHERE p.fk_product_type = ' . ((int) Product::TYPE_SERVICE);
+		$sql .= ' AND p.entity IN (' . getEntity('product') . ')';
+		$sql .= ' AND (';
+		$conditions = array();
+		if ($searchOnRef) {
+			$conditions[] = 'p.ref = "' . $refEscaped . '"';
+			$conditions[] = 'p.ref LIKE "' . $refEscaped . '%"';
+			$conditions[] = 'p.ref LIKE "%' . $refEscaped . '%"';
+			if ($hasIddolistoreColumn) {
+				$conditions[] = 'pe.iddolistore = "' . $refEscaped . '"';
+			}
+		}
+		if ($searchOnName) {
+			$conditions[] = 'p.label LIKE "%' . $nameEscaped . '%"';
+			$conditions[] = 'p.description LIKE "%' . $nameEscaped . '%"';
+		}
+		$sql .= implode(' OR ', $conditions);
+		$sql .= ')';
+		$sql .= ' ORDER BY match_score DESC, p.ref ASC';
+		$sql .= ' LIMIT ' . ((int) $limit);
+
+		$resql = $this->db->query($sql);
+		if (! $resql) {
+			dol_syslog(__METHOD__ . ' SQL error while searching candidates for ref=' . $itemReference . ' name=' . $itemName, LOG_WARNING);
+			return array();
+		}
+
+		$candidates = array();
+		while ($obj = $this->db->fetch_object($resql)) {
+			$candidates[] = array(
+				'id' => (int) $obj->rowid,
+				'ref' => (string) $obj->ref,
+				'label' => (string) $obj->label,
+				'iddolistore' => (string) ($obj->iddolistore ?? ''),
+				'score' => (int) $obj->match_score
+			);
+		}
+		$this->db->free($resql);
+
+		dol_syslog(__METHOD__ . ' candidates proposed=' . count($candidates) . ' for ref=' . $itemReference . ' name=' . $itemName, LOG_DEBUG);
+
+		return $candidates;
+	}
+
+	/**
+	 * Builds a lightweight manual mapping proposal payload for UI usage.
+	 *
+	 * @param string $itemReference Dolistore item reference
+	 * @param string $itemName      Dolistore item label
+	 * @param array  $candidates    Candidate services
+	 * @return array<string,mixed>  Structured proposal
+	 */
+	public function buildServiceMappingProposal(string $itemReference, string $itemName, array $candidates = array()): array
+	{
+		return array(
+			'dolistore_ref' => trim($itemReference),
+			'dolistore_label' => trim($itemName),
+			'candidates' => $candidates,
+			'actions' => array(
+				'can_create_service' => true,
+				'can_link_existing_service' => !empty($candidates)
+			)
+		);
+	}
+
+	/**
+	 * Builds private note block for Dolistore automatic import metadata.
+	 *
+	 * @param array $importData Import metadata (lang, import_hash, order_ref, buyer_email)
+	 * @return string           Formatted private note block
+	 */
+	public function buildDolistoreImportPrivateNote(array $importData = array()): string
+	{
+		global $langs;
+
+		$langDetected = !empty($importData['lang']) ? (string) $importData['lang'] : $langs->defaultlang;
+		$importHash = !empty($importData['import_hash']) ? (string) $importData['import_hash'] : substr(hash('sha256', json_encode($importData)), 0, 16);
+
+		$lines = array();
+		$lines[] = $langs->transnoentitiesnoconv("DolistorePrivateNoteHeader");
+		$lines[] = $langs->transnoentitiesnoconv("DolistorePrivateNoteLangLabel") . ': ' . ($langDetected !== '' ? $langDetected : $langs->transnoentitiesnoconv("DolistorePrivateNoteNotAvailable"));
+		$lines[] = $langs->transnoentitiesnoconv("DolistorePrivateNoteHashLabel") . ': ' . ($importHash !== '' ? $importHash : $langs->transnoentitiesnoconv("DolistorePrivateNoteNotAvailable"));
+
+		if (!empty($importData['order_ref'])) {
+			$lines[] = $langs->transnoentitiesnoconv("DolistorePrivateNoteOrderRefLabel") . ': ' . (string) $importData['order_ref'];
+		}
+		if (!empty($importData['buyer_email'])) {
+			$lines[] = $langs->transnoentitiesnoconv("DolistorePrivateNoteBuyerEmailLabel") . ': ' . (string) $importData['buyer_email'];
+		}
+
+		return implode("\n", $lines);
+	}
+
+	/**
+	 * Manually creates a native Dolibarr service from Dolistore data.
+	 * This method must be called explicitly from a manual action.
+	 *
+	 * @param User   $user        User performing manual action
+	 * @param string $itemReference Dolistore reference
+	 * @param string $itemName    Dolistore label
+	 * @param string $proposedRef Optional proposed service ref
+	 * @return array<string,mixed> Result payload for UI
+	 */
+	public function createServiceFromDolistoreData(User $user, string $itemReference, string $itemName, string $proposedRef = ''): array
+	{
+		global $langs;
+
+		$result = array(
+			'success' => false,
+			'code' => 'error',
+			'service_id' => 0,
+			'service_ref' => '',
+			'message_key' => 'DolistoreServiceManualCreateError'
+		);
+
+		if (!$this->hasServiceManagementPermission($user)) {
+			$result['code'] = 'permission_denied';
+			$result['message_key'] = 'DolistoreServiceManualCreateDenied';
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateDenied") . '</span>';
+			dol_syslog(__METHOD__ . ' permission denied for user=' . ((int) $user->id), LOG_WARNING);
+			return $result;
+		}
+
+		$itemReference = trim($itemReference);
+		$itemName = trim($itemName);
+		$proposedRef = trim($proposedRef);
+
+		$existingId = $this->getServiceIdByDolistoreId($itemReference);
+		if ($existingId > 0) {
+			$existingProduct = new Product($this->db);
+			$existingProduct->fetch($existingId);
+			$result['success'] = true;
+			$result['code'] = 'already_exists';
+			$result['service_id'] = $existingId;
+			$result['service_ref'] = (string) $existingProduct->ref;
+			$result['message_key'] = 'DolistoreServiceManualAlreadyExists';
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceManualAlreadyExists", dol_escape_htmltag($itemReference), dol_escape_htmltag($existingProduct->ref)) . '</span>';
+			dol_syslog(__METHOD__ . ' service already exists for item_reference=' . $itemReference . ' service_id=' . $existingId, LOG_INFO);
+			return $result;
+		}
+
+		$serviceRef = $proposedRef;
+		if ($serviceRef === '') {
+			$serviceRef = $itemReference !== '' ? $itemReference : preg_replace('/[^A-Za-z0-9_-]+/', '-', $itemName);
+		}
+		$serviceRef = trim($serviceRef, '-_');
+		if ($serviceRef === '') {
+			$serviceRef = 'DOLISTORE-SERVICE';
+		}
+
+		$baseRef = $serviceRef;
+		$refIndex = 1;
+		while ($this->findServiceIdByField('ref', $serviceRef) > 0) {
+			$refIndex++;
+			$serviceRef = $baseRef . '-' . $refIndex;
+		}
+
+		$product = new Product($this->db);
+		$product->ref = $serviceRef;
+		$product->label = $itemName !== '' ? $itemName : $itemReference;
+		$product->description = $itemName;
+		$product->type = self::DOLISTORE_PRODUCT_TYPE_SERVICE;
+		$product->status = 1;
+		$product->status_buy = 0;
+		$product->duration = self::DOLISTORE_SERVICE_SUPPORT_DURATION_MONTHS . 'm';
+
+		$this->db->begin();
+		$createResult = $product->create($user);
+		if ($createResult <= 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateError", dol_escape_htmltag($itemReference), dol_escape_htmltag($itemName), dol_escape_htmltag($product->error)) . '</span>';
+			dol_syslog(__METHOD__ . ' failed to create service ref=' . $serviceRef . ' error=' . $product->error, LOG_ERR);
+			return $result;
+		}
+
+		$product->array_options = array('options_iddolistore' => $itemReference);
+		$extraResult = $product->insertExtraFields();
+		if ($extraResult < 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateError", dol_escape_htmltag($itemReference), dol_escape_htmltag($itemName), dol_escape_htmltag($product->error)) . '</span>';
+			dol_syslog(__METHOD__ . ' failed to set iddolistore extrafield for service_id=' . ((int) $product->id), LOG_ERR);
+			return $result;
+		}
+
+		$this->db->commit();
+
+		$result['success'] = true;
+		$result['code'] = 'created';
+		$result['service_id'] = (int) $product->id;
+		$result['service_ref'] = (string) $product->ref;
+		$result['message_key'] = 'DolistoreServiceManualCreated';
+
+		$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreServiceManualCreated", dol_escape_htmltag($itemReference), dol_escape_htmltag($product->ref)) . '</span>';
+		dol_syslog(__METHOD__ . ' service created manually service_id=' . ((int) $product->id) . ' ref=' . $product->ref . ' for item_reference=' . $itemReference, LOG_INFO);
+
+		return $result;
+	}
+
+	/**
+	 * Manually links a Dolistore identifier to an existing Dolibarr service.
+	 * This method must be called explicitly from a manual action.
+	 *
+	 * @param User   $user          User performing manual action
+	 * @param string $itemReference Dolistore reference
+	 * @param string $itemName      Dolistore label
+	 * @param int    $serviceId     Target Dolibarr service id
+	 * @return array<string,mixed>  Result payload for UI
+	 */
+	public function associateDolistoreItemToExistingService(User $user, string $itemReference, string $itemName, int $serviceId): array
+	{
+		global $langs;
+
+		$result = array(
+			'success' => false,
+			'code' => 'error',
+			'service_id' => 0,
+			'service_ref' => '',
+			'message_key' => 'DolistoreServiceManualLinkError'
+		);
+
+		if (!$this->hasServiceManagementPermission($user)) {
+			$result['code'] = 'permission_denied';
+			$result['message_key'] = 'DolistoreServiceManualLinkDenied';
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkDenied") . '</span>';
+			dol_syslog(__METHOD__ . ' permission denied for user=' . ((int) $user->id), LOG_WARNING);
+			return $result;
+		}
+
+		$itemReference = trim($itemReference);
+		$itemName = trim($itemName);
+		$serviceId = (int) $serviceId;
+
+		$targetService = new Product($this->db);
+		if ($serviceId <= 0 || $targetService->fetch($serviceId) <= 0 || (int) $targetService->type !== (int) Product::TYPE_SERVICE) {
+			$result['code'] = 'invalid_target';
+			$result['message_key'] = 'DolistoreServiceManualLinkInvalidTarget';
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkInvalidTarget", $serviceId) . '</span>';
+			dol_syslog(__METHOD__ . ' invalid target service_id=' . $serviceId . ' for item_reference=' . $itemReference, LOG_WARNING);
+			return $result;
+		}
+
+		$targetService->fetch_optionals();
+		$currentMappedRef = (string) ($targetService->array_options['options_iddolistore'] ?? '');
+		if ($currentMappedRef !== '' && $currentMappedRef !== $itemReference) {
+			$result['code'] = 'target_conflict';
+			$result['service_id'] = (int) $targetService->id;
+			$result['service_ref'] = (string) $targetService->ref;
+			$result['message_key'] = 'DolistoreServiceManualLinkConflictTarget';
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkConflictTarget", dol_escape_htmltag($targetService->ref), dol_escape_htmltag($currentMappedRef)) . '</span>';
+			dol_syslog(__METHOD__ . ' target conflict service_id=' . ((int) $targetService->id) . ' existing_iddolistore=' . $currentMappedRef . ' requested=' . $itemReference, LOG_WARNING);
+			return $result;
+		}
+
+		$alreadyMappedServiceId = $this->getServiceIdByDolistoreId($itemReference);
+		if ($alreadyMappedServiceId > 0 && $alreadyMappedServiceId !== (int) $targetService->id) {
+			$alreadyMappedService = new Product($this->db);
+			$alreadyMappedService->fetch($alreadyMappedServiceId);
+			$result['code'] = 'reference_conflict';
+			$result['service_id'] = (int) $alreadyMappedService->id;
+			$result['service_ref'] = (string) $alreadyMappedService->ref;
+			$result['message_key'] = 'DolistoreServiceManualLinkConflictReference';
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkConflictReference", dol_escape_htmltag($itemReference), dol_escape_htmltag($alreadyMappedService->ref)) . '</span>';
+			dol_syslog(__METHOD__ . ' reference conflict item_reference=' . $itemReference . ' already linked to service_id=' . $alreadyMappedServiceId, LOG_WARNING);
+			return $result;
+		}
+
+		$this->db->begin();
+		$targetService->array_options['options_iddolistore'] = $itemReference;
+		$extraResult = $targetService->insertExtraFields();
+		if ($extraResult < 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkError", dol_escape_htmltag($itemReference), dol_escape_htmltag($itemName), dol_escape_htmltag($targetService->error)) . '</span>';
+			dol_syslog(__METHOD__ . ' failed to link service_id=' . ((int) $targetService->id) . ' item_reference=' . $itemReference, LOG_ERR);
+			return $result;
+		}
+		$this->db->commit();
+
+		$result['success'] = true;
+		$result['code'] = 'linked';
+		$result['service_id'] = (int) $targetService->id;
+		$result['service_ref'] = (string) $targetService->ref;
+		$result['message_key'] = 'DolistoreServiceManualLinked';
+
+		$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreServiceManualLinked", dol_escape_htmltag($itemReference), dol_escape_htmltag($targetService->ref)) . '</span>';
+		dol_syslog(__METHOD__ . ' linked item_reference=' . $itemReference . ' to service_id=' . ((int) $targetService->id), LOG_INFO);
+
+		return $result;
+	}
+
+	/**
+	 * Manually creates a native Dolibarr customer order from Dolistore extracted data.
+	 *
+	 * @param User  $user      User performing manual action
+	 * @param int   $socid     Thirdparty id
+	 * @param array $orderData Order metadata (order_ref, date_order, lang, import_hash, buyer_email)
+	 * @param array $items     Extracted Dolistore items
+	 * @return array<string,mixed> Result payload for UI
+	 */
+	public function createCustomerOrderFromDolistoreData(User $user, int $socid, array $orderData = array(), array $items = array()): array
+	{
+		global $langs;
+
+		$result = array(
+			'success' => false,
+			'code' => 'error',
+			'order_id' => 0,
+			'order_ref' => '',
+			'message_key' => 'DolistoreOrderManualCreateError'
+		);
+
+		if (!$this->hasOrderCreatePermission($user)) {
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", '', '') . '</span>';
+			dol_syslog(__METHOD__ . ' permission denied for user=' . ((int) $user->id), LOG_WARNING);
+			return $result;
+		}
+
+		$orderRefClient = !empty($orderData['order_ref']) ? (string) $orderData['order_ref'] : '';
+		$dateOrder = !empty($orderData['date_order']) ? (int) $orderData['date_order'] : dol_now();
+
+		$existingOrderId = $this->isOrderAlreadyImported($orderRefClient);
+		if ($existingOrderId > 0) {
+			$existingOrder = new Commande($this->db);
+			$existingOrder->fetch($existingOrderId);
+			$result['success'] = true;
+			$result['code'] = 'already_exists';
+			$result['order_id'] = (int) $existingOrderId;
+			$result['order_ref'] = (string) $existingOrder->ref;
+			$result['message_key'] = 'DolistoreOrderManualAlreadyExists';
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreOrderManualAlreadyExists", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($existingOrder->ref)) . '</span>';
+			return $result;
+		}
+
+		$order = new Commande($this->db);
+		$order->socid = (int) $socid;
+		$order->date = $dateOrder;
+		$order->ref_client = $orderRefClient;
+		$order->note_private = $this->buildDolistoreImportPrivateNote($orderData);
+
+		$this->db->begin();
+		$orderCreateResult = $order->create($user);
+		if ($orderCreateResult <= 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->error)) . '</span>';
+			dol_syslog(__METHOD__ . ' failed to create order for socid=' . ((int) $socid) . ' ref_client=' . $orderRefClient . ' error=' . $order->error, LOG_ERR);
+			return $result;
+		}
+
+		$lineResult = $this->createCustomerOrderLinesFromDolistoreItems($order, $items);
+		if ($lineResult < 0) {
+			$this->db->rollback();
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->error)) . '</span>';
+			dol_syslog(__METHOD__ . ' failed to create lines on order_id=' . ((int) $order->id) . ' error=' . $order->error, LOG_ERR);
+			return $result;
+		}
+
+		if (getDolGlobalInt('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER')) {
+			$orderValidateResult = $order->validate($user);
+			if ($orderValidateResult <= 0) {
+				$this->db->rollback();
+				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->error)) . '</span>';
+				dol_syslog(__METHOD__ . ' failed to validate order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' error=' . $order->error, LOG_ERR);
+				return $result;
+			}
+		}
+
+		$this->db->commit();
+
+		$result['success'] = true;
+		$result['code'] = 'created';
+		$result['order_id'] = (int) $order->id;
+		$result['order_ref'] = (string) $order->ref;
+		$result['message_key'] = 'DolistoreOrderManualCreated';
+
+		$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreOrderManualCreated", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->ref)) . '</span>';
+		dol_syslog(__METHOD__ . ' order created order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' ref_client=' . $orderRefClient, LOG_INFO);
+
+		return $result;
+	}
+
+	/**
+	 * Checks if a customer order was already imported using Dolistore reference in ref_client.
+	 *
+	 * @param string $dolistoreRef Dolistore order reference
+	 * @return int                 Existing order id, or 0 if none
+	 */
+	public function isOrderAlreadyImported(string $dolistoreRef): int
+	{
+		$dolistoreRef = trim($dolistoreRef);
+		if ($dolistoreRef === '') {
+			return 0;
+		}
+
+		$sql = 'SELECT c.rowid';
+		$sql .= ' FROM ' . $this->db->prefix() . 'commande as c';
+		$sql .= ' WHERE c.ref_client = "' . $this->db->escape($dolistoreRef) . '"';
+		$sql .= ' AND c.entity IN (' . getEntity('commande') . ')';
+		$sql .= ' ORDER BY c.rowid DESC';
+		$sql .= ' LIMIT 1';
+
+		$resql = $this->db->query($sql);
+		if (! $resql) {
+			return 0;
+		}
+
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+		if (!empty($obj->rowid)) {
+			dol_syslog(__METHOD__ . ' duplicate order detected for ref_client=' . $dolistoreRef . ' order_id=' . ((int) $obj->rowid), LOG_WARNING);
+			return (int) $obj->rowid;
 		}
 
 		return 0;
 	}
 
 	/**
-	 * Retrieves the webmodule rowid from Dolistore ID (using extrafields linkage).
+	 * Creates native customer order lines from Dolistore extracted items.
 	 *
-	 * @param string $fk_dolistore Dolistore product reference
-	 * @return int                 Webmodule rowid, or 0 if not found
+	 * @param Commande $order Customer order object
+	 * @param array    $items Extracted items
+	 * @return int            Number of created lines, -1 on error
 	 */
-	public function getWebmoduleIdByDolistoreId(string $fk_dolistore): int
+	private function createCustomerOrderLinesFromDolistoreItems(Commande $order, array $items): int
 	{
-		// Build SQL query to get the web module ID
-		$sql = 'SELECT DISTINCT w.rowid';
-		$sql .= ' FROM ' . $this->db->prefix() . 'webmodule as w';
-		$sql .= ' INNER JOIN ' . $this->db->prefix() . 'webmodule_version wv ON w.rowid = wv.fk_webmodule';
-		$sql .= ' INNER JOIN ' . $this->db->prefix() . 'webmodule_version_extrafields wve ON wv.rowid = wve.fk_object';
-		$sql .= ' WHERE wve.iddolistore = "' . $this->db->escape($fk_dolistore) . '"';
+		global $langs;
 
-		// Execute the query
-		$resql = $this->db->query($sql);
+		$createdLines = 0;
+		foreach ($items as $item) {
+			$itemReference = (string) ($item['item_reference'] ?? '');
+			$itemQty = !empty($item['item_quantity']) ? (float) $item['item_quantity'] : 1;
+			$itemQty = abs($itemQty) > 0 ? abs($itemQty) : 1;
+			$itemTotal = !empty($item['item_price_total']) ? $this->convertToFloat((string) $item['item_price_total']) : $this->convertToFloat((string) ($item['item_price'] ?? '0'));
+			$itemUnitPrice = $itemTotal;
+			if (!empty($item['item_price_total']) && $itemQty > 0) {
+				$itemUnitPrice = $itemTotal / $itemQty;
+			}
+			$isRefunded = !empty($item['item_refunded']);
+			if ($isRefunded) {
+				$itemUnitPrice = -1 * abs($itemUnitPrice);
+				dol_syslog(__METHOD__ . ' refund line normalized for item_reference=' . $itemReference . ' qty=' . $itemQty . ' unit_price=' . $itemUnitPrice, LOG_INFO);
+			}
+			$serviceId = $this->getServiceIdByDolistoreId($itemReference);
+			$itemDesc = $this->buildDolistoreOrderLineDescription($item, $isRefunded);
 
-		// Check if the query failed
-		if (! $resql) {
-			return 0;  // Return 0 if no result was found
+				$lineId = $order->addline($itemDesc, $itemUnitPrice, $itemQty, 0, 0, 0, $serviceId);
+			if ($lineId <= 0) {
+				dol_syslog(__METHOD__ . ' failed addline for order_id=' . ((int) $order->id) . ' item_reference=' . $itemReference . ' error=' . $order->error, LOG_ERR);
+				return -1;
+			}
+
+			if (class_exists('OrderLine')) {
+				$orderLine = new OrderLine($this->db);
+				if ($orderLine->fetch($lineId) > 0) {
+					$orderLine->array_options['options_dolistore_item_ref'] = $itemReference;
+					$lineExtraResult = $orderLine->insertExtraFields();
+					if ($lineExtraResult < 0) {
+						dol_syslog(__METHOD__ . ' failed set line extrafield on line_id=' . ((int) $lineId), LOG_ERR);
+						return -1;
+					}
+				}
+			}
+
+			dol_syslog(__METHOD__ . ' created order line line_id=' . ((int) $lineId) . ' service_id=' . ((int) $serviceId) . ' dolistore_item_ref=' . $itemReference, LOG_INFO);
+			$createdLines++;
 		}
 
-		// Extract the result
-		$obj = $this->db->fetch_object($resql);
+		return $createdLines;
+	}
 
-		// Return the web module ID or 0 if not found
-		return $obj->rowid ?? 0;
+	/**
+	 * Builds customer order line description from Dolistore item data.
+	 *
+	 * @param array $item       Dolistore extracted item
+	 * @param bool  $isRefunded Refund flag
+	 * @return string     Formatted line description
+	 */
+	private function buildDolistoreOrderLineDescription(array $item, bool $isRefunded = false): string
+	{
+		global $langs;
+
+		$itemName = (string) ($item['item_name'] ?? '');
+		$itemReference = (string) ($item['item_reference'] ?? '');
+
+		$lines = array();
+		if ($isRefunded) {
+			$lines[] = $langs->transnoentitiesnoconv("DolistoreOrderLineDescRefund");
+		}
+		$lines[] = $itemName !== '' ? $itemName : $langs->transnoentitiesnoconv("DolistoreOrderLineDescHeader");
+		$lines[] = $langs->transnoentitiesnoconv("DolistoreOrderLineDescItemRef") . ': ' . ($itemReference !== '' ? $itemReference : $langs->transnoentitiesnoconv("DolistorePrivateNoteNotAvailable"));
+		$lines[] = $langs->transnoentitiesnoconv("DolistoreOrderLineDescSupport");
+
+		return implode("\n", $lines);
+	}
+
+	/**
+	 * Finds one Dolibarr service by a supported mapping field.
+	 *
+	 * @param string $fieldName  Supported field name (iddolistore|ref)
+	 * @param string $fieldValue Value to search
+	 * @return int               Service rowid (>0) if found, 0 otherwise
+	 */
+	private function findServiceIdByField(string $fieldName, string $fieldValue): int
+	{
+		if (empty($fieldValue)) {
+			return 0;
+		}
+
+		$hasIddolistoreColumn = $this->hasProductIddolistoreColumn();
+		$allowedFields = array(
+			'iddolistore' => 'pe.iddolistore',
+			'ref' => 'p.ref'
+		);
+
+		if (!isset($allowedFields[$fieldName])) {
+			return 0;
+		}
+		if ($fieldName === 'iddolistore' && !$hasIddolistoreColumn) {
+			return 0;
+		}
+
+		$sql = 'SELECT p.rowid';
+		$sql .= ' FROM ' . $this->db->prefix() . 'product as p';
+		if ($hasIddolistoreColumn) {
+			$sql .= ' INNER JOIN ' . $this->db->prefix() . 'product_extrafields as pe ON pe.fk_object = p.rowid';
+		}
+		$sql .= ' WHERE ' . $allowedFields[$fieldName] . ' = "' . $this->db->escape($fieldValue) . '"';
+		$sql .= ' AND p.fk_product_type = ' . ((int) Product::TYPE_SERVICE);
+		$sql .= ' AND p.entity IN (' . getEntity('product') . ')';
+		$sql .= ' ORDER BY p.rowid ASC';
+		$sql .= ' LIMIT 1';
+
+		$resql = $this->db->query($sql);
+		if (! $resql) {
+			return 0;
+		}
+
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+
+		return !empty($obj->rowid) ? (int) $obj->rowid : 0;
+	}
+
+	/**
+	 * Checks if iddolistore column exists on product extrafields table.
+	 *
+	 * @return bool True when column exists
+	 */
+	private function hasProductIddolistoreColumn(): bool
+	{
+		if ($this->hasProductIddolistoreColumn !== null) {
+			return (bool) $this->hasProductIddolistoreColumn;
+		}
+
+		$sql = 'SHOW COLUMNS FROM ' . $this->db->prefix() . 'product_extrafields LIKE "iddolistore"';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->hasProductIddolistoreColumn = false;
+			return false;
+		}
+
+		$this->hasProductIddolistoreColumn = ($this->db->num_rows($resql) > 0);
+		$this->db->free($resql);
+
+		return (bool) $this->hasProductIddolistoreColumn;
+	}
+
+	/**
+	 * Checks if user can create customer orders.
+	 *
+	 * @param User $user User context
+	 * @return bool      True when permission is granted
+	 */
+	private function hasOrderCreatePermission(User $user): bool
+	{
+		if (!empty($user->admin)) {
+			return true;
+		}
+
+		if (method_exists($user, 'hasRight')) {
+			return (bool) $user->hasRight('commande', 'creer');
+		}
+
+		return !empty($user->rights->commande->creer);
+	}
+
+	/**
+	 * Checks if user can create/manage services.
+	 *
+	 * @param User $user User context
+	 * @return bool      True when permission is granted
+	 */
+	private function hasServiceManagementPermission(User $user): bool
+	{
+		if (!empty($user->admin)) {
+			return true;
+		}
+
+		if (method_exists($user, 'hasRight')) {
+			return (bool) $user->hasRight('produit', 'creer');
+		}
+
+		return !empty($user->rights->produit->creer);
 	}
 	/**
 	 * Converts a formatted string representing a monetary amount to a float.
@@ -759,42 +1388,6 @@ class ActionsDolistorextract extends CommonHookActions
 		$error++;
 	}
 	/**
-	 * Check if a sale already exists to prevent duplicates.
-	 *
-	 * @param int    $socid        Customer rowid
-	 * @param string $dolistoreRef Module reference (e.g., "module_x")
-	 * @param int    $dateSale     Sale timestamp
-	 * @return bool                True if it already exists, false otherwise
-	 */
-	private function checkIfWebmoduleSaleExists(int $socid, string $dolistoreRef, int $dateSale): bool
-	{
-		// 1. Retrieve the technical ID of the web module (rowid in llx_webmodule)
-		$fk_webmodule = $this->getWebmoduleIdByDolistoreId($dolistoreRef);
-
-		if (!$fk_webmodule) {
-			return false; // Unknown module, therefore no duplicate possible in database
-		}
-
-		// 2. We are looking for a matching sale
-		$sql = "SELECT rowid FROM " . $this->db->prefix() . "webmodule_sales";
-		$sql .= " WHERE fk_soc = " . ((int) $socid);
-		$sql .= " AND fk_webmodule = " . ((int) $fk_webmodule);
-
-		// 3. Date verification (Duplicate prevention)
-		$dayStart = date('Y-m-d 00:00:00', $dateSale);
-		$dayEnd   = date('Y-m-d 23:59:59', $dateSale);
-
-		$sql .= " AND date_sale >= '" . $dayStart . "'";
-		$sql .= " AND date_sale <= '" . $dayEnd . "'";
-
-		$res = $this->db->query($sql);
-
-		if ($res && $this->db->num_rows($res) > 0) {
-			return true;
-		}
-		return false;
-	}
-	/**
 	 * Process order items (Sales & Events)
 	 *
 	 * @param User  $user      User object
@@ -807,38 +1400,115 @@ class ActionsDolistorextract extends CommonHookActions
 	{
 		global $langs;
 		$successList = [];
+		$mappedItems = array();
+		$hasUnmappedItems = false;
+		$unmappedBehavior = $this->getUnmappedServiceBehavior();
 
 		foreach ($items as $product) {
-			$itemCreatedInThisPass = false;
-
-			// WebHost Creation and Sales
-			if (isModEnabled("webhost")) {
-				// CHECK DUPLICATE
-				if ($this->checkIfWebmoduleSaleExists($companyId, $product['item_reference'], $product['date_sale'])) {
-					$this->logOutput .= '<br/>-> <span class="warning">'.$langs->trans("DolistoreDuplicateSale").' '.$product['item_name'] . '</span>';
-					// This is not an error, we continue
+			$product = $this->enforceDolistoreServiceBusinessRule($product);
+			$product['fk_service'] = $this->getServiceIdByDolistoreId((string) ($product['item_reference'] ?? ''));
+			$product['service_candidates'] = array();
+			$product['service_mapping_proposal'] = array();
+			if (empty($product['fk_service'])) {
+				$product['service_candidates'] = $this->findServiceCandidatesFromDolistoreData((string) ($product['item_reference'] ?? ''), (string) ($product['item_name'] ?? ''));
+				$product['service_mapping_proposal'] = $this->buildServiceMappingProposal((string) ($product['item_reference'] ?? ''), (string) ($product['item_name'] ?? ''), $product['service_candidates']);
+				if (!empty($product['service_candidates'])) {
+					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceMappingCandidatesFound", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag((string) ($product['item_name'] ?? '')), count($product['service_candidates'])) . '</span>';
+					dol_syslog(__METHOD__ . ' no exact service mapping for ref=' . ((string) ($product['item_reference'] ?? '')) . ' label=' . ((string) ($product['item_name'] ?? '')) . ', candidates=' . count($product['service_candidates']), LOG_INFO);
 				} else {
-					$resVente = $this->addWebmoduleSales($product, $companyId);
-					if ($resVente <= 0) {
-						$this->logOutput .= '<br/>-> <span class="error">'.$langs->trans("DolistoreSaleCreationError").' '.$product['item_name'] . '</span>';
-						return null;
-					} else {
-						$itemCreatedInThisPass = true;
-					}
+					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceMappingNotFound", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag((string) ($product['item_name'] ?? ''))) . '</span>';
+					dol_syslog(__METHOD__ . ' no service mapping and no candidates for ref=' . ((string) ($product['item_reference'] ?? '')) . ' label=' . ((string) ($product['item_name'] ?? '')), LOG_WARNING);
 				}
-			}
-			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passed empty or to be adapted
-			if ($itemCreatedInThisPass) {
-				$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreSaleCreated", dol_escape_htmltag($product['item_name'])) . '</span>';
-			}
 
-			if ($itemCreatedInThisPass) {
+				$hasUnmappedItems = true;
+				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_BLOCK) {
+					$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreUnmappedPolicyBlockedOrder", dol_escape_htmltag($orderRef), dol_escape_htmltag((string) ($product['item_reference'] ?? ''))) . '</span>';
+					dol_syslog(__METHOD__ . ' blocking import for order_ref=' . $orderRef . ' because service mapping is missing for ref=' . ((string) ($product['item_reference'] ?? '')), LOG_ERR);
+					return null;
+				}
+				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP) {
+					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreUnmappedPolicySkippedLine", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag($orderRef)) . '</span>';
+					dol_syslog(__METHOD__ . ' skipping line for order_ref=' . $orderRef . ' item_reference=' . ((string) ($product['item_reference'] ?? '')) . ' because mapping is missing', LOG_WARNING);
+				}
+				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL) {
+					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreUnmappedPolicyManualPending", dol_escape_htmltag($orderRef), dol_escape_htmltag((string) ($product['item_reference'] ?? ''))) . '</span>';
+					dol_syslog(__METHOD__ . ' manual mapping required for order_ref=' . $orderRef . ' item_reference=' . ((string) ($product['item_reference'] ?? '')), LOG_INFO);
+				}
+			} else {
+				$mappedItems[] = $product;
 				$successList[] = $product['item_name'];
 			}
+
+			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passed empty or to be adapted
 		}
 
+		if ($hasUnmappedItems && $unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL) {
+			$this->lastOrderImportStatus = 'manual_pending';
+			return array();
+		}
+
+		if (empty($mappedItems)) {
+			$this->lastOrderImportStatus = ($hasUnmappedItems && $unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP) ? 'skipped_unmapped' : '';
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreNoServiceCandidate") . '</span>';
+			return array();
+		}
+
+		$orderMetadata = array(
+			'order_ref' => $orderRef,
+			'date_order' => !empty($mappedItems[0]['date_sale']) ? (int) $mappedItems[0]['date_sale'] : dol_now()
+		);
+		$resOrder = $this->createCustomerOrderFromDolistoreData($user, $companyId, $orderMetadata, $mappedItems);
+		if (empty($resOrder['success'])) {
+			return null;
+		}
+
+		if (!empty($resOrder['code']) && $resOrder['code'] === 'already_exists') {
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreOrderAlreadyExists", $orderRef) . '</span>';
+		}
 
 		return $successList;
+	}
+
+	/**
+	 * Returns configured behavior when a Dolistore service mapping is missing.
+	 *
+	 * @return string One of self::DOLISTORE_UNMAPPED_BEHAVIOR_*
+	 */
+	private function getUnmappedServiceBehavior(): string
+	{
+		$behavior = trim((string) getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR'));
+		$allowed = array(
+			self::DOLISTORE_UNMAPPED_BEHAVIOR_BLOCK,
+			self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP,
+			self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL
+		);
+		if (!in_array($behavior, $allowed, true)) {
+			return self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL;
+		}
+
+		return $behavior;
+	}
+
+	/**
+	 * Enforces the Dolistore business rule for service-only items.
+	 * This central guard must be reused by any future service creation flow.
+	 *
+	 * @param array $itemData Raw extracted item data
+	 * @return array          Normalized item data for service workflows
+	 */
+	private function enforceDolistoreServiceBusinessRule(array $itemData): array
+	{
+		global $langs;
+
+		if (isset($itemData['product_type']) && (int) $itemData['product_type'] !== self::DOLISTORE_PRODUCT_TYPE_SERVICE) {
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceRuleEnforced", dol_escape_htmltag($itemData['item_reference'] ?? '')) . '</span>';
+		}
+
+		$itemData['product_type'] = self::DOLISTORE_PRODUCT_TYPE_SERVICE;
+		$itemData['support_duration'] = self::DOLISTORE_SERVICE_SUPPORT_DURATION_MONTHS;
+		$itemData['support_duration_unit'] = 'm';
+
+		return $itemData;
 	}
 	/**
 	 * Sends a thank you email to the customer using a template based on their language.
@@ -964,8 +1634,7 @@ class ActionsDolistorextract extends CommonHookActions
 								$dateRaw = $email->header->date;
 								$dateSale = strtotime($dateRaw); // IMPORTANT: Date conversion for database and duplicate check
 
-								// Add the product to the order structure
-								$orderData[$orderRef]['items'][] = [
+								$itemData = [
 									'item_reference'   => $item['item_reference'],
 									'item_name'        => $item['item_name'],
 									'item_price'       => $item['item_price'],
@@ -974,6 +1643,9 @@ class ActionsDolistorextract extends CommonHookActions
 									'item_refunded'    => $item['item_refunded'] ?? null,
 									'date_sale'        => $dateSale
 								];
+
+								// Keep service typing logic centralized for all current and future service creations.
+								$orderData[$orderRef]['items'][] = $this->enforceDolistoreServiceBusinessRule($itemData);
 
 								$this->logOutput .= '<br/>-- <span class="ok">' . $langs->trans("DolistoreProductExtracted", dol_escape_htmltag($item['item_name'])) . '</span>';
 							} else {

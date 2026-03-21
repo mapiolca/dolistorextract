@@ -290,7 +290,92 @@ class modDolistorextract extends DolibarrModules
 
 		$this->_load_tables('/dolistorextract/sql/');
 
-		return $this->_init($sql, $options);
+		$result = $this->_init($sql, $options);
+		if ($result <= 0) {
+			return $result;
+		}
+
+		$result = $this->createDolistoreOrderLineExtraField();
+		if ($result < 0) {
+			return 0;
+		}
+
+		$result = $this->createDolistoreServiceExtraField();
+		if ($result < 0) {
+			return 0;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Create customer order line extrafield for Dolistore item reference traceability.
+	 *
+	 * @return int 1 if OK, -1 if KO
+	 */
+	private function createDolistoreOrderLineExtraField()
+	{
+		global $langs;
+
+		dol_include_once('/core/class/extrafields.class.php');
+
+		$extrafields = new ExtraFields($this->db);
+		$langs->load('dolistorextract@dolistorextract');
+
+		$res = $extrafields->fetch_name_optionals_label('commandedet', true);
+		if ($res < 0) {
+			$this->error = $extrafields->error;
+			return -1;
+		}
+
+		if (!empty($extrafields->attributes['commandedet']['label']['dolistore_item_ref'])) {
+			return 1;
+		}
+
+		$label = $langs->transnoentitiesnoconv('DolistoreOrderLineItemRefLabel');
+		$help = $langs->transnoentitiesnoconv('DolistoreOrderLineItemRefHelp');
+		$res = $extrafields->addExtraField('dolistore_item_ref', $label, 'varchar', 100, 255, 'commandedet', 0, 0, '', '', 0, '', -1, $help);
+		if ($res < 0) {
+			$this->error = $extrafields->error;
+			return -1;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Create product/service extrafield for Dolistore identifier mapping.
+	 *
+	 * @return int 1 if OK, -1 if KO
+	 */
+	private function createDolistoreServiceExtraField()
+	{
+		global $langs;
+
+		dol_include_once('/core/class/extrafields.class.php');
+
+		$extrafields = new ExtraFields($this->db);
+		$langs->load('dolistorextract@dolistorextract');
+
+		$res = $extrafields->fetch_name_optionals_label('product', true);
+		if ($res < 0) {
+			$this->error = $extrafields->error;
+			return -1;
+		}
+
+		if (!empty($extrafields->attributes['product']['label']['iddolistore'])) {
+			return 1;
+		}
+
+		$label = $langs->transnoentitiesnoconv('DolistoreServiceIddolistoreLabel');
+		$help = $langs->transnoentitiesnoconv('DolistoreServiceIddolistoreHelp');
+		$res = $extrafields->addExtraField('iddolistore', $label, 'varchar', 100, 255, 'product', 0, 0, '', '', 0, '', -1, $help);
+		if ($res < 0) {
+			$this->error = $extrafields->error;
+			return -1;
+		}
+
+		return 1;
 	}
 
 	/**
@@ -309,4 +394,3 @@ class modDolistorextract extends DolibarrModules
 	}
 
 }
-
