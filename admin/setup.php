@@ -264,6 +264,38 @@ print '<input type="submit" class="button" value="'.$langs->trans("Update").'" n
 print "</td></tr>\n";
 print '</form>';
 
+$var=!$var;
+print '<tr '.$bc[$var].'>';
+print '<td>'.$langs->trans('DOLISTOREXTRACT_CRON_ALLOW_CREATE_UNMAPPED_SERVICE').'</td>';
+print '<td align="center">&nbsp;</td>';
+print '<td align="right">';
+print '<div class="notopnoleft"><form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="set_DOLISTOREXTRACT_CRON_ALLOW_CREATE_UNMAPPED_SERVICE">';
+print ajax_constantonoff('DOLISTOREXTRACT_CRON_ALLOW_CREATE_UNMAPPED_SERVICE');
+print '</form></div>';
+print '</td></tr>';
+
+$var=!$var;
+$arrayNativeOrderStatus = array(
+	'draft' => $langs->trans("DolistoreNativeOrderStatusDraft"),
+	'validated' => $langs->trans("DolistoreNativeOrderStatusValidated")
+);
+$selectedNativeOrderStatus = getDolGlobalString('DOLISTOREXTRACT_NATIVE_ORDER_STATUS');
+if (!in_array($selectedNativeOrderStatus, array('draft', 'validated'), true)) {
+	$selectedNativeOrderStatus = getDolGlobalInt('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER') ? 'validated' : 'draft';
+}
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_NATIVE_ORDER_STATUS">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreNativeOrderStatusLabel").'</td><td>';
+print $form->selectarray('constvalue', $arrayNativeOrderStatus, $selectedNativeOrderStatus);
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
 
 // User for actions
 $var=!$var;

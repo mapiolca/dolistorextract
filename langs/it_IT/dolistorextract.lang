@@ -48,6 +48,12 @@ DolistoreUnmappedBehaviorManual=Segna per trattamento manuale (consigliato)
 DolistoreUnmappedPolicyBlockedOrder=Import bloccato per l'ordine DoliStore %s perché il servizio %s non è mappato.
 DolistoreUnmappedPolicySkippedLine=Riga del servizio DoliStore %s ignorata nell'ordine %s (servizio non mappato).
 DolistoreUnmappedPolicyManualPending=Ordine %s segnato per trattamento manuale: il servizio %s non è mappato.
+
+DolistoreCronUnmappedStoppedOrder=Import dell'ordine %s interrotto: il servizio DoliStore %s non è mappato.
 DolistoreOrderPendingManualMapping=L'ordine %s è in attesa di mapping manuale nell'interfaccia.
 DolistoreOrderImportedWithSkippedLines=Ordine %s elaborato con righe non mappate ignorate.
 DolistoreLegacyWebhostImportRemoved=L'import storico delle vendite Webhost è stato rimosso. Usare l'import nativo come ordine cliente.
+DOLISTOREXTRACT_CRON_ALLOW_CREATE_UNMAPPED_SERVICE = Consentire al cron di creare un servizio quando manca il mapping
+DolistoreNativeOrderStatusLabel=Stato per gli ordini cliente importati
+DolistoreNativeOrderStatusDraft=Bozza
+DolistoreNativeOrderStatusValidated=Validato

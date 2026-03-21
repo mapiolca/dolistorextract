@@ -74,6 +74,8 @@ class ActionsDolistorextract extends CommonHookActions
 	public const DOLISTORE_UNMAPPED_BEHAVIOR_BLOCK = 'block';
 	public const DOLISTORE_UNMAPPED_BEHAVIOR_SKIP = 'skip';
 	public const DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL = 'manual';
+	public const DOLISTORE_NATIVE_ORDER_STATUS_DRAFT = 'draft';
+	public const DOLISTORE_NATIVE_ORDER_STATUS_VALIDATED = 'validated';
 
 	public $db;
 	public $dao;
@@ -976,7 +978,8 @@ class ActionsDolistorextract extends CommonHookActions
 			return $result;
 		}
 
-		if (getDolGlobalInt('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER')) {
+		$orderTargetStatus = $this->getNativeOrderTargetStatus();
+		if ($orderTargetStatus === self::DOLISTORE_NATIVE_ORDER_STATUS_VALIDATED) {
 			$orderValidateResult = $order->validate($user);
 			if ($orderValidateResult <= 0) {
 				$this->db->rollback();
@@ -1401,8 +1404,7 @@ class ActionsDolistorextract extends CommonHookActions
 		global $langs;
 		$successList = [];
 		$mappedItems = array();
-		$hasUnmappedItems = false;
-		$unmappedBehavior = $this->getUnmappedServiceBehavior();
+		$allowAutoCreateService = $this->isCronAllowedToCreateMissingService();
 
 		foreach ($items as $product) {
 			$product = $this->enforceDolistoreServiceBusinessRule($product);
@@ -1412,27 +1414,26 @@ class ActionsDolistorextract extends CommonHookActions
 			if (empty($product['fk_service'])) {
 				$product['service_candidates'] = $this->findServiceCandidatesFromDolistoreData((string) ($product['item_reference'] ?? ''), (string) ($product['item_name'] ?? ''));
 				$product['service_mapping_proposal'] = $this->buildServiceMappingProposal((string) ($product['item_reference'] ?? ''), (string) ($product['item_name'] ?? ''), $product['service_candidates']);
-				if (!empty($product['service_candidates'])) {
-					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceMappingCandidatesFound", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag((string) ($product['item_name'] ?? '')), count($product['service_candidates'])) . '</span>';
-					dol_syslog(__METHOD__ . ' no exact service mapping for ref=' . ((string) ($product['item_reference'] ?? '')) . ' label=' . ((string) ($product['item_name'] ?? '')) . ', candidates=' . count($product['service_candidates']), LOG_INFO);
+				$createdServiceId = 0;
+				if ($allowAutoCreateService) {
+					$createdServiceId = $this->createMissingServiceForCron($user, $product);
+				}
+				if ($createdServiceId > 0) {
+					$product['fk_service'] = $createdServiceId;
+					$mappedItems[] = $product;
+					$successList[] = $product['item_name'];
 				} else {
-					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceMappingNotFound", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag((string) ($product['item_name'] ?? ''))) . '</span>';
-					dol_syslog(__METHOD__ . ' no service mapping and no candidates for ref=' . ((string) ($product['item_reference'] ?? '')) . ' label=' . ((string) ($product['item_name'] ?? '')), LOG_WARNING);
-				}
+					if (!empty($product['service_candidates'])) {
+						$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceMappingCandidatesFound", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag((string) ($product['item_name'] ?? '')), count($product['service_candidates'])) . '</span>';
+						dol_syslog(__METHOD__ . ' no exact service mapping for ref=' . ((string) ($product['item_reference'] ?? '')) . ' label=' . ((string) ($product['item_name'] ?? '')) . ', candidates=' . count($product['service_candidates']), LOG_INFO);
+					} else {
+						$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceMappingNotFound", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag((string) ($product['item_name'] ?? ''))) . '</span>';
+						dol_syslog(__METHOD__ . ' no service mapping and no candidates for ref=' . ((string) ($product['item_reference'] ?? '')) . ' label=' . ((string) ($product['item_name'] ?? '')), LOG_WARNING);
+					}
 
-				$hasUnmappedItems = true;
-				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_BLOCK) {
-					$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreUnmappedPolicyBlockedOrder", dol_escape_htmltag($orderRef), dol_escape_htmltag((string) ($product['item_reference'] ?? ''))) . '</span>';
-					dol_syslog(__METHOD__ . ' blocking import for order_ref=' . $orderRef . ' because service mapping is missing for ref=' . ((string) ($product['item_reference'] ?? '')), LOG_ERR);
+					$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreCronUnmappedStoppedOrder", dol_escape_htmltag($orderRef), dol_escape_htmltag((string) ($product['item_reference'] ?? ''))) . '</span>';
+					dol_syslog(__METHOD__ . ' blocking import for order_ref=' . $orderRef . ' because service mapping is missing and auto-create is disabled for ref=' . ((string) ($product['item_reference'] ?? '')), LOG_ERR);
 					return null;
-				}
-				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP) {
-					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreUnmappedPolicySkippedLine", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag($orderRef)) . '</span>';
-					dol_syslog(__METHOD__ . ' skipping line for order_ref=' . $orderRef . ' item_reference=' . ((string) ($product['item_reference'] ?? '')) . ' because mapping is missing', LOG_WARNING);
-				}
-				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL) {
-					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreUnmappedPolicyManualPending", dol_escape_htmltag($orderRef), dol_escape_htmltag((string) ($product['item_reference'] ?? ''))) . '</span>';
-					dol_syslog(__METHOD__ . ' manual mapping required for order_ref=' . $orderRef . ' item_reference=' . ((string) ($product['item_reference'] ?? '')), LOG_INFO);
 				}
 			} else {
 				$mappedItems[] = $product;
@@ -1442,13 +1443,8 @@ class ActionsDolistorextract extends CommonHookActions
 			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passed empty or to be adapted
 		}
 
-		if ($hasUnmappedItems && $unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL) {
-			$this->lastOrderImportStatus = 'manual_pending';
-			return array();
-		}
-
 		if (empty($mappedItems)) {
-			$this->lastOrderImportStatus = ($hasUnmappedItems && $unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP) ? 'skipped_unmapped' : '';
+			$this->lastOrderImportStatus = '';
 			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreNoServiceCandidate") . '</span>';
 			return array();
 		}
@@ -1467,6 +1463,58 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		return $successList;
+	}
+
+	/**
+	 * Creates a missing Dolistore service during cron import when option is enabled.
+	 *
+	 * @param User  $user    Cron user context
+	 * @param array $product Extracted product data
+	 * @return int           Created or existing service id
+	 */
+	private function createMissingServiceForCron(User $user, array $product): int
+	{
+		global $langs;
+
+		if (!$this->hasServiceManagementPermission($user)) {
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateDenied") . '</span>';
+			dol_syslog(__METHOD__ . ' user has no permission to create missing service for ref=' . ((string) ($product['item_reference'] ?? '')), LOG_WARNING);
+			return 0;
+		}
+
+		$itemReference = (string) ($product['item_reference'] ?? '');
+		$itemName = (string) ($product['item_name'] ?? '');
+		$createResult = $this->createServiceFromDolistoreData($user, $itemReference, $itemName, $itemReference);
+		if (!empty($createResult['success']) && !empty($createResult['service_id'])) {
+			return (int) $createResult['service_id'];
+		}
+
+		return 0;
+	}
+
+	/**
+	 * Returns true if cron import can create missing mapped services.
+	 *
+	 * @return bool
+	 */
+	private function isCronAllowedToCreateMissingService(): bool
+	{
+		return (bool) getDolGlobalInt('DOLISTOREXTRACT_CRON_ALLOW_CREATE_UNMAPPED_SERVICE');
+	}
+
+	/**
+	 * Returns target status for native customer order generated by import.
+	 *
+	 * @return string
+	 */
+	private function getNativeOrderTargetStatus(): string
+	{
+		$status = trim((string) getDolGlobalString('DOLISTOREXTRACT_NATIVE_ORDER_STATUS'));
+		if ($status === self::DOLISTORE_NATIVE_ORDER_STATUS_VALIDATED || $status === self::DOLISTORE_NATIVE_ORDER_STATUS_DRAFT) {
+			return $status;
+		}
+
+		return getDolGlobalInt('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER') ? self::DOLISTORE_NATIVE_ORDER_STATUS_VALIDATED : self::DOLISTORE_NATIVE_ORDER_STATUS_DRAFT;
 	}
 
 	/**

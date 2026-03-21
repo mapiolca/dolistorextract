@@ -48,6 +48,12 @@ DolistoreUnmappedBehaviorManual=Marcar para tratamiento manual (recomendado)
 DolistoreUnmappedPolicyBlockedOrder=Importación bloqueada para el pedido DoliStore %s porque el servicio %s no está mapeado.
 DolistoreUnmappedPolicySkippedLine=Línea del servicio DoliStore %s ignorada en el pedido %s (servicio no mapeado).
 DolistoreUnmappedPolicyManualPending=Pedido %s marcado para tratamiento manual: el servicio %s no está mapeado.
+
+DolistoreCronUnmappedStoppedOrder=Importación del pedido %s detenida: el servicio DoliStore %s no está mapeado.
 DolistoreOrderPendingManualMapping=El pedido %s está pendiente de mapeo manual en la interfaz.
 DolistoreOrderImportedWithSkippedLines=Pedido %s procesado con líneas no mapeadas ignoradas.
 DolistoreLegacyWebhostImportRemoved=La importación histórica de ventas Webhost fue eliminada. Utilice la importación nativa como pedido de cliente.
+DOLISTOREXTRACT_CRON_ALLOW_CREATE_UNMAPPED_SERVICE = Permitir que el cron cree un servicio cuando falta el mapeo
+DolistoreNativeOrderStatusLabel=Estado para pedidos de cliente importados
+DolistoreNativeOrderStatusDraft=Borrador
+DolistoreNativeOrderStatusValidated=Validado
