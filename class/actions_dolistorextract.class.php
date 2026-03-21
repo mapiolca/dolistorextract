@@ -1064,7 +1064,7 @@ class ActionsDolistorextract extends CommonHookActions
 			$serviceId = $this->getServiceIdByDolistoreId($itemReference);
 			$itemDesc = $this->buildDolistoreOrderLineDescription($item, $isRefunded);
 
-			$lineId = $order->addline($itemDesc, $itemUnitPrice, $itemQty, 0, 0, 0, $serviceId, 0, 'HT', 0, '', '', self::DOLISTORE_PRODUCT_TYPE_SERVICE);
+				$lineId = $order->addline($itemDesc, $itemUnitPrice, $itemQty, 0, 0, 0, $serviceId);
 			if ($lineId <= 0) {
 				dol_syslog(__METHOD__ . ' failed addline for order_id=' . ((int) $order->id) . ' item_reference=' . $itemReference . ' error=' . $order->error, LOG_ERR);
 				return -1;
