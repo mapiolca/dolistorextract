@@ -156,6 +156,7 @@ DolistoreUnmappedPolicyBlockedOrder=Import blocked for DoliStore order %s becaus
 DolistoreUnmappedPolicySkippedLine=Line for DoliStore service %s ignored in order %s (unmapped service).
 DolistoreUnmappedPolicyManualPending=Order %s marked for manual processing: service %s is not mapped.
 DolistoreCronUnmappedStoppedOrder=Order %s import stopped: DoliStore service %s is not mapped.
+DolistoreCronUnexpectedErrorForOrder=Unexpected error during cron import for %s: %s
 DolistoreOrderPendingManualMapping=Order %s is waiting for manual mapping in the interface.
 DolistoreOrderImportedWithSkippedLines=Order %s processed with unmapped lines ignored.
 DolistoreLegacyWebhostImportRemoved=Legacy Webhost sales import has been removed. Use native customer order import instead.

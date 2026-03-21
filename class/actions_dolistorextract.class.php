@@ -462,7 +462,20 @@ class ActionsDolistorextract extends CommonHookActions
 		// 3. Order-by-order processing
 		foreach ($ordersData as $orderRef => $orderDetails) {
 			// The entire processing of an order is delegated to a dedicated method.
-			$success = $this->processSingleOrder($user, $orderRef, $orderDetails);
+			try {
+				$success = $this->processSingleOrder($user, $orderRef, $orderDetails);
+			} catch (Throwable $exception) {
+				$this->db->rollback();
+				$this->nbErrors++;
+				$message = $langs->trans(
+					"DolistoreCronUnexpectedErrorForOrder",
+					dol_escape_htmltag($orderRef),
+					dol_escape_htmltag($exception->getMessage())
+				);
+				$this->logOutput .= '<br/>-> <span class="error">' . $message . '</span>';
+				dol_syslog(__METHOD__ . ' unexpected exception for order_ref=' . $orderRef . ' message=' . $exception->getMessage(), LOG_ERR);
+				$success = false;
+			}
 			$orderResults[$orderRef] = $success;
 		}
 		return $orderResults;
@@ -1475,63 +1488,68 @@ class ActionsDolistorextract extends CommonHookActions
 	private function createMissingServiceForCron(User $user, array $product): int
 	{
 		global $langs;
+		try {
+			if (!$this->hasServiceManagementPermission($user)) {
+				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateDenied") . '</span>';
+				dol_syslog(__METHOD__ . ' user has no permission to create missing service for ref=' . ((string) ($product['item_reference'] ?? '')), LOG_WARNING);
+				return 0;
+			}
 
-		if (!$this->hasServiceManagementPermission($user)) {
-			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateDenied") . '</span>';
-			dol_syslog(__METHOD__ . ' user has no permission to create missing service for ref=' . ((string) ($product['item_reference'] ?? '')), LOG_WARNING);
+			$itemReference = (string) ($product['item_reference'] ?? '');
+			$itemName = (string) ($product['item_name'] ?? '');
+			$existingId = $this->getServiceIdByDolistoreId($itemReference);
+			if ($existingId > 0) {
+				return $existingId;
+			}
+
+			$serviceRef = trim($itemReference);
+			if ($serviceRef === '') {
+				$serviceRef = trim(preg_replace('/[^A-Za-z0-9_-]+/', '-', $itemName), '-_');
+			}
+			if ($serviceRef === '') {
+				$serviceRef = 'DOLISTORE-SERVICE';
+			}
+
+			$baseRef = $serviceRef;
+			$refIndex = 1;
+			while ($this->findServiceIdByField('ref', $serviceRef) > 0) {
+				$refIndex++;
+				$serviceRef = $baseRef . '-' . $refIndex;
+			}
+
+			$productService = new Product($this->db);
+			$productService->ref = $serviceRef;
+			$productService->label = $itemName !== '' ? $itemName : $itemReference;
+			$productService->description = $itemName;
+			$productService->type = self::DOLISTORE_PRODUCT_TYPE_SERVICE;
+			$productService->status = 1;
+			$productService->status_buy = 0;
+			$productService->duration = self::DOLISTORE_SERVICE_SUPPORT_DURATION_MONTHS . 'm';
+
+			$createResult = $productService->create($user);
+			if ($createResult <= 0) {
+				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateError", dol_escape_htmltag($itemReference), dol_escape_htmltag($itemName), dol_escape_htmltag($productService->error)) . '</span>';
+				dol_syslog(__METHOD__ . ' failed to create cron missing service for ref=' . $itemReference . ' error=' . $productService->error, LOG_ERR);
+				return 0;
+			}
+
+			$productService->array_options = array('options_iddolistore' => $itemReference);
+			$extraResult = $productService->insertExtraFields();
+			if ($extraResult < 0) {
+				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateError", dol_escape_htmltag($itemReference), dol_escape_htmltag($itemName), dol_escape_htmltag($productService->error)) . '</span>';
+				dol_syslog(__METHOD__ . ' failed to insert extrafields for cron missing service id=' . ((int) $productService->id), LOG_ERR);
+				return 0;
+			}
+
+			$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreServiceManualCreated", dol_escape_htmltag($itemReference), dol_escape_htmltag($productService->ref)) . '</span>';
+			dol_syslog(__METHOD__ . ' created cron missing service id=' . ((int) $productService->id) . ' ref=' . $productService->ref, LOG_INFO);
+
+			return (int) $productService->id;
+		} catch (Throwable $exception) {
+			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreCronUnexpectedErrorForOrder", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag($exception->getMessage())) . '</span>';
+			dol_syslog(__METHOD__ . ' unexpected exception while creating cron service ref=' . ((string) ($product['item_reference'] ?? '')) . ' message=' . $exception->getMessage(), LOG_ERR);
 			return 0;
 		}
-
-		$itemReference = (string) ($product['item_reference'] ?? '');
-		$itemName = (string) ($product['item_name'] ?? '');
-		$existingId = $this->getServiceIdByDolistoreId($itemReference);
-		if ($existingId > 0) {
-			return $existingId;
-		}
-
-		$serviceRef = trim($itemReference);
-		if ($serviceRef === '') {
-			$serviceRef = trim(preg_replace('/[^A-Za-z0-9_-]+/', '-', $itemName), '-_');
-		}
-		if ($serviceRef === '') {
-			$serviceRef = 'DOLISTORE-SERVICE';
-		}
-
-		$baseRef = $serviceRef;
-		$refIndex = 1;
-		while ($this->findServiceIdByField('ref', $serviceRef) > 0) {
-			$refIndex++;
-			$serviceRef = $baseRef . '-' . $refIndex;
-		}
-
-		$productService = new Product($this->db);
-		$productService->ref = $serviceRef;
-		$productService->label = $itemName !== '' ? $itemName : $itemReference;
-		$productService->description = $itemName;
-		$productService->type = self::DOLISTORE_PRODUCT_TYPE_SERVICE;
-		$productService->status = 1;
-		$productService->status_buy = 0;
-		$productService->duration = self::DOLISTORE_SERVICE_SUPPORT_DURATION_MONTHS . 'm';
-
-		$createResult = $productService->create($user);
-		if ($createResult <= 0) {
-			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateError", dol_escape_htmltag($itemReference), dol_escape_htmltag($itemName), dol_escape_htmltag($productService->error)) . '</span>';
-			dol_syslog(__METHOD__ . ' failed to create cron missing service for ref=' . $itemReference . ' error=' . $productService->error, LOG_ERR);
-			return 0;
-		}
-
-		$productService->array_options = array('options_iddolistore' => $itemReference);
-		$extraResult = $productService->insertExtraFields();
-		if ($extraResult < 0) {
-			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateError", dol_escape_htmltag($itemReference), dol_escape_htmltag($itemName), dol_escape_htmltag($productService->error)) . '</span>';
-			dol_syslog(__METHOD__ . ' failed to insert extrafields for cron missing service id=' . ((int) $productService->id), LOG_ERR);
-			return 0;
-		}
-
-		$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreServiceManualCreated", dol_escape_htmltag($itemReference), dol_escape_htmltag($productService->ref)) . '</span>';
-		dol_syslog(__METHOD__ . ' created cron missing service id=' . ((int) $productService->id) . ' ref=' . $productService->ref, LOG_INFO);
-
-		return (int) $productService->id;
 	}
 
 	/**

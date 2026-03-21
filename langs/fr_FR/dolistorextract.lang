@@ -164,6 +164,7 @@ DolistoreUnmappedPolicyBlockedOrder=Import bloque pour la commande DoliStore %s 
 DolistoreUnmappedPolicySkippedLine=Ligne du service DoliStore %s ignoree dans la commande %s (service non mappe).
 DolistoreUnmappedPolicyManualPending=Commande %s marquee pour traitement manuel : le service %s n'est pas mappe.
 DolistoreCronUnmappedStoppedOrder=Import de la commande %s arrete : le service DoliStore %s n'est pas mappe.
+DolistoreCronUnexpectedErrorForOrder=Erreur inattendue pendant l'import cron pour %s : %s
 DolistoreOrderPendingManualMapping=La commande %s attend un mapping manuel dans l'interface.
 DolistoreOrderImportedWithSkippedLines=Commande %s traitee avec des lignes non mappees ignorees.
 DolistoreLegacyWebhostImportRemoved=L'import historique des ventes Webhost a ete supprime. Utilisez l'import en commande client native.

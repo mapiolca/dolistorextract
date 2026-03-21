@@ -57,3 +57,4 @@ DOLISTOREXTRACT_CRON_ALLOW_CREATE_UNMAPPED_SERVICE = Cron erlauben, einen Servic
 DolistoreNativeOrderStatusLabel=Status für importierte Kundenaufträge
 DolistoreNativeOrderStatusDraft=Entwurf
 DolistoreNativeOrderStatusValidated=Validiert
+DolistoreCronUnexpectedErrorForOrder=Unerwarteter Fehler beim Cron-Import für %s: %s
