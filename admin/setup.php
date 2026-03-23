@@ -67,16 +67,27 @@ $action = GETPOST('action', 'alpha');
  */
 function dolistorextractGetDictionaryOptions($db, $tableName, $labelExpression, $whereClause = '')
 {
+	global $langs;
+
 	$options = array(0 => '');
 	$table = $db->prefix() . $tableName;
 	$hasActiveColumn = false;
+	$hasCodeColumn = false;
 	$resqlColumns = $db->query('SHOW COLUMNS FROM ' . $table . ' LIKE "active"');
 	if ($resqlColumns) {
 		$hasActiveColumn = ($db->num_rows($resqlColumns) > 0);
 		$db->free($resqlColumns);
 	}
+	$resqlCodeColumn = $db->query('SHOW COLUMNS FROM ' . $table . ' LIKE "code"');
+	if ($resqlCodeColumn) {
+		$hasCodeColumn = ($db->num_rows($resqlCodeColumn) > 0);
+		$db->free($resqlCodeColumn);
+	}
 
 	$sql = 'SELECT rowid, ' . $labelExpression . ' as label';
+	if ($hasCodeColumn) {
+		$sql .= ', code';
+	}
 	$sql .= ' FROM ' . $table;
 	$sql .= ' WHERE 1 = 1';
 	if ($hasActiveColumn) {
@@ -89,7 +100,14 @@ function dolistorextractGetDictionaryOptions($db, $tableName, $labelExpression, 
 	$resql = $db->query($sql);
 	if ($resql) {
 		while ($obj = $db->fetch_object($resql)) {
-			$options[(int) $obj->rowid] = (string) $obj->label;
+			$optionLabel = (string) $obj->label;
+			if ($hasCodeColumn && !empty($obj->code)) {
+				$translatedLabel = $langs->trans((string) $obj->code);
+				if (!empty($translatedLabel) && $translatedLabel !== (string) $obj->code) {
+					$optionLabel = $translatedLabel;
+				}
+			}
+			$options[(int) $obj->rowid] = $optionLabel;
 		}
 		$db->free($resql);
 	}
