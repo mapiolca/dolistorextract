@@ -38,6 +38,9 @@ if (file_exists("../../main.inc.php")) {
 // Libraries
 require_once DOL_DOCUMENT_ROOT . "/core/lib/admin.lib.php";
 require_once DOL_DOCUMENT_ROOT."/core/class/html.formmail.class.php";
+require_once DOL_DOCUMENT_ROOT."/core/class/html.formcompany.class.php";
+require_once DOL_DOCUMENT_ROOT."/categories/class/categorie.class.php";
+require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 dol_include_once("/dolistorextract/include/ssilence/php-imap-client/autoload.php");
 
 use SSilence\ImapClient\ImapClientException;
@@ -56,6 +59,78 @@ if (! $user->admin) {
 // Parameters
 $action = GETPOST('action', 'alpha');
 
+/**
+ * Returns options list from a dictionary table.
+ *
+ * @param DoliDB $db Database handler
+ * @param string $tableName Dictionary table name without prefix
+ * @param string $labelExpression SQL label expression
+ * @param string $whereClause Extra where clause
+ * @return array<int,string>
+ */
+function dolistorextractGetDictionaryOptions($db, $tableName, $labelExpression, $whereClause = '')
+{
+	global $langs;
+
+	$options = array(0 => '');
+	$table = $db->prefix() . $tableName;
+	$columns = array();
+	$resqlAllColumns = $db->query('SHOW COLUMNS FROM ' . $table);
+	if ($resqlAllColumns) {
+		while ($objcol = $db->fetch_object($resqlAllColumns)) {
+			$columns[] = (string) $objcol->Field;
+		}
+		$db->free($resqlAllColumns);
+	}
+	if (empty($columns)) {
+		return $options;
+	}
+
+	$idColumn = in_array('rowid', $columns, true) ? 'rowid' : (in_array('id', $columns, true) ? 'id' : '');
+	if ($idColumn === '') {
+		return $options;
+	}
+	$labelColumn = in_array('label', $columns, true) ? 'label' : (in_array('libelle', $columns, true) ? 'libelle' : (in_array('code', $columns, true) ? 'code' : ''));
+	if ($labelColumn === '') {
+		return $options;
+	}
+
+	$hasActiveColumn = false;
+	$hasCodeColumn = false;
+	$hasActiveColumn = in_array('active', $columns, true);
+	$hasCodeColumn = in_array('code', $columns, true);
+
+	$sql = 'SELECT ' . $idColumn . ' as rowid, ' . $labelColumn . ' as label';
+	if ($hasCodeColumn) {
+		$sql .= ', code';
+	}
+	$sql .= ' FROM ' . $table;
+	$sql .= ' WHERE 1 = 1';
+	if ($hasActiveColumn) {
+		$sql .= ' AND active = 1';
+	}
+	if (!empty($whereClause)) {
+		$sql .= ' AND ' . $whereClause;
+	}
+	$sql .= ' ORDER BY label ASC';
+	$resql = $db->query($sql);
+	if ($resql) {
+		while ($obj = $db->fetch_object($resql)) {
+			$optionLabel = (string) $obj->label;
+			if ($hasCodeColumn && !empty($obj->code)) {
+				$translatedLabel = $langs->trans((string) $obj->code);
+				if (!empty($translatedLabel) && $translatedLabel !== (string) $obj->code) {
+					$optionLabel = $translatedLabel;
+				}
+			}
+			$options[(int) $obj->rowid] = $optionLabel;
+		}
+		$db->free($resql);
+	}
+
+	return $options;
+}
+
 
 
 /*
@@ -66,10 +141,16 @@ if ($action == 'update' || $action == 'add')
 {
 	$constname=GETPOST('constname','alpha');
 	$constvalue=(GETPOST('constvalue_'.$constname) ? GETPOST('constvalue_'.$constname) : GETPOST('constvalue'));
+	if ($constname === 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES' && GETPOSTISARRAY('categories')) {
+		$constvalue = GETPOST('categories', 'array');
+	}
+	if ($constname === 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES' && is_array($constvalue)) {
+		$constvalue = implode(',', array_map('intval', $constvalue));
+	}
 
 	$consttype=GETPOST('consttype','alpha');
 	$constnote=GETPOST('constnote');
-	$res=dolibarr_set_const($db,$constname,$constvalue,$type[$consttype],0,$constnote,$conf->entity);
+	$res=dolibarr_set_const($db,$constname,$constvalue,'chaine',0,$constnote,$conf->entity);
 
 	if (! $res > 0) $error++;
 
@@ -80,6 +161,64 @@ if ($action == 'update' || $action == 'add')
 	else
 	{
 		setEventMessages($langs->trans("Error"), null, 'errors');
+	}
+}
+
+if ($action == 'create_dolistore_order_category') {
+	$categorie = new Categorie($db);
+	$categorie->type = 16;
+	$categorie->label = 'Dolistore';
+	$categorie->description = '';
+	$db->begin();
+	$categoryId = $categorie->create($user);
+	if ($categoryId > 0) {
+		$currentCategoryIds = array_filter(array_map('intval', preg_split('/[,; ]+/', (string) getDolGlobalString('DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES'))));
+		$currentCategoryIds[] = (int) $categoryId;
+		$currentCategoryIds = array_values(array_unique($currentCategoryIds));
+		$resconst = dolibarr_set_const($db, 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES', implode(',', $currentCategoryIds), 'chaine', 0, '', $conf->entity);
+		if ($resconst > 0) {
+			$db->commit();
+			setEventMessages($langs->trans("DolistoreOrderCategoryCreated", $categoryId), null, 'mesgs');
+		} else {
+			$db->rollback();
+			setEventMessages($langs->trans("Error"), null, 'errors');
+		}
+	} else {
+		$db->rollback();
+		setEventMessages($langs->trans("DolistoreOrderCategoryCreateError"), null, 'errors');
+	}
+}
+
+if ($action == 'create_dolistore_association_thirdparty') {
+	$sql = 'SELECT rowid FROM ' . $db->prefix() . 'societe';
+	$sql .= ' WHERE siret = "52033993800018"';
+	$sql .= ' AND entity IN (' . getEntity('societe') . ')';
+	$sql .= ' ORDER BY rowid ASC';
+	$sql .= ' LIMIT 1';
+	$resql = $db->query($sql);
+	if ($resql && ($obj = $db->fetch_object($resql))) {
+		$db->free($resql);
+		dolibarr_set_const($db, 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', (int) $obj->rowid, 'entier', 0, '', $conf->entity);
+		setEventMessages($langs->trans("DolistoreAssociationThirdpartyExists", (int) $obj->rowid), null, 'warnings');
+	} else {
+		$societe = new Societe($db);
+		$societe->name = 'Association Dolibarr';
+		$societe->address = '265 RUE DE LA VALLEE';
+		$societe->zip = '45160';
+		$societe->town = 'OLIVET';
+		$societe->country_code = 'FR';
+		$societe->idprof1 = '520339938';
+		$societe->idprof2 = '52033993800018';
+		$societe->tva_intra = 'FR87520339938';
+		$societe->client = 2;
+		$socid = $societe->create($user);
+		if ($socid > 0) {
+			dolibarr_set_const($db, 'DOLISTOREXTRACT_ASSOCIATION_DOLIBARR_THIRDPARTY_ID', $socid, 'entier', 0, '', $conf->entity);
+			dolibarr_set_const($db, 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', $socid, 'entier', 0, '', $conf->entity);
+			setEventMessages($langs->trans("DolistoreAssociationThirdpartyCreated", (int) $socid), null, 'mesgs');
+		} else {
+			setEventMessages($langs->trans("DolistoreAssociationThirdpartyCreateError"), null, 'errors');
+		}
 	}
 }
 
@@ -114,6 +253,7 @@ echo $langs->trans("DolistorextractSetupPage");
 
 $form=new Form($db);
 $formmail=new FormMail($db);
+$formcompany = new FormCompany($db);
 
 print '<table class="noborder" width="100%">';
 print '<tr class="liste_titre">';
@@ -123,7 +263,174 @@ print '<td align="center">'.$langs->trans("Action").'</td>';
 print "</tr>\n";
 $var=true;
 
+$availabilityOptions = dolistorextractGetDictionaryOptions($db, 'c_availability', 'label');
+$shippingMethodOptions = dolistorextractGetDictionaryOptions($db, 'c_shipment_mode', 'label');
+$originOptions = dolistorextractGetDictionaryOptions($db, 'c_input_reason', 'label');
+$condReglementOptions = dolistorextractGetDictionaryOptions($db, 'c_payment_term', 'libelle');
+$modeReglementOptions = dolistorextractGetDictionaryOptions($db, 'c_paiement', 'libelle');
+
+$bankAccountOptions = array(0 => '');
+$sqlBankAccount = 'SELECT rowid, CONCAT(ref, " - ", label) as label';
+$sqlBankAccount .= ' FROM ' . $db->prefix() . 'bank_account';
+$sqlBankAccount .= ' WHERE entity IN (' . getEntity('bank_account') . ')';
+$sqlBankAccount .= ' ORDER BY ref ASC';
+$resqlBankAccount = $db->query($sqlBankAccount);
+if ($resqlBankAccount) {
+	while ($objBankAccount = $db->fetch_object($resqlBankAccount)) {
+		$bankAccountOptions[(int) $objBankAccount->rowid] = (string) $objBankAccount->label;
+	}
+	$db->free($resqlBankAccount);
+}
+
+$orderCategoryOptions = array();
+$sqlOrderCategories = 'SELECT rowid, label';
+$sqlOrderCategories .= ' FROM ' . $db->prefix() . 'categorie';
+$sqlOrderCategories .= ' WHERE type = 16';
+$sqlOrderCategories .= ' AND entity IN (' . getEntity('category') . ')';
+$sqlOrderCategories .= ' ORDER BY label ASC';
+$resqlOrderCategories = $db->query($sqlOrderCategories);
+if ($resqlOrderCategories) {
+	while ($objOrderCategory = $db->fetch_object($resqlOrderCategories)) {
+		$orderCategoryOptions[(int) $objOrderCategory->rowid] = (string) $objOrderCategory->label;
+	}
+	$db->free($resqlOrderCategories);
+}
+$selectedOrderCategories = array_filter(array_map('intval', preg_split('/[,; ]+/', (string) getDolGlobalString('DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES'))));
+
 // IMAP server
+$var=!$var;
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultAvailabilityIdLabel").'</td><td>';
+if (method_exists($formcompany, 'selectAvailabilityDelay')) {
+	print $formcompany->selectAvailabilityDelay(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'), 'constvalue', '', 1);
+} else {
+	print $form->selectarray('constvalue', $availabilityOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'));
+}
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
+$var=!$var;
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultShippingMethodIdLabel").'</td><td>';
+if (method_exists($form, 'selectShippingMethod')) {
+	print $form->selectShippingMethod(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'), 'constvalue', 1, '', 0, 1);
+} else {
+	print $form->selectarray('constvalue', $shippingMethodOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'));
+}
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
+$var=!$var;
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultInputReasonIdLabel").'</td><td>';
+if (method_exists($formcompany, 'selectInputReason')) {
+	print $formcompany->selectInputReason(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'), 'constvalue', '', 1);
+} else {
+	print $form->selectarray('constvalue', $originOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'));
+}
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
+$var=!$var;
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultCondReglementIdLabel").'</td><td>';
+if (method_exists($form, 'select_conditions_paiements')) {
+	print $form->select_conditions_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'), 'constvalue');
+} else {
+	print $form->selectarray('constvalue', $condReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'));
+}
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
+$var=!$var;
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultModeReglementIdLabel").'</td><td>';
+if (method_exists($form, 'select_types_paiements')) {
+	print $form->select_types_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'), 'constvalue');
+} else {
+	print $form->selectarray('constvalue', $modeReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'));
+}
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
+$var=!$var;
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultBankAccountIdLabel").'</td><td>';
+if (method_exists($form, 'select_comptes')) {
+	print $form->select_comptes(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'), 'constvalue', 0, '', 1);
+} else {
+	print $form->selectarray('constvalue', $bankAccountOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'));
+}
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
+$var=!$var;
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultOrderCategoriesLabel").'</td><td>';
+print '<span class="fas fa-tag pictofixedwidth"></span>';
+print '<span class="multiselectarraycategories">';
+print '<input type="hidden" name="categories_multiselect" value="1">';
+print $form->multiselectarray('categories', $orderCategoryOptions, $selectedOrderCategories, '', 0, 'minwidth100 widthcentpercentminusxx');
+print '</span>';
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print '<br>';
+print '<a class="button button-edit" href="'.$_SERVER['PHP_SELF'].'?action=create_dolistore_order_category&token='.$_SESSION['newtoken'].'">'.$langs->trans("DolistoreCreateOrderCategoryButton").'</a>';
+print "</td></tr>\n";
+print '</form>';
+
+$var=!$var;
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreAssociationThirdpartyLabel").'</td><td>';
+print $langs->trans("DolistoreAssociationThirdpartyDataHint");
+print '</td><td align="center" width="80">';
+print '<a class="button button-edit" href="'.$_SERVER['PHP_SELF'].'?action=create_dolistore_association_thirdparty&token='.$_SESSION['newtoken'].'">'.$langs->trans("DolistoreAssociationThirdpartyCreateButton").'</a>';
+print '</td></tr>';
+
+$var=!$var;
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_BILLING_THIRDPARTY_ID">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreBillingThirdpartyLabel").'</td><td>';
+print $form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)');
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
 $var=!$var;
 print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
 print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
@@ -242,6 +549,39 @@ print '<input type="hidden" name="action" value="set_DOLISTOREXTRACT_AUTO_VALIDA
 print ajax_constantonoff('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER');
 print '</form></div>';
 print '</td></tr>';
+
+$var=!$var;
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_COMMISSION_PERCENT">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreCommissionPercentLabel").'</td><td>';
+print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_COMMISSION_PERCENT') .'" placeholder="0">';
+print '<span class="opacitymedium"> %</span>';
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
+$var=!$var;
+$arrayUnmappedServicePolicy = array(
+	'abandon' => $langs->trans("DolistoreUnmappedPolicyAbandon"),
+	'create' => $langs->trans("DolistoreUnmappedPolicyCreate")
+);
+$selectedUnmappedPolicy = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY');
+if (!in_array($selectedUnmappedPolicy, array('abandon', 'create'), true)) {
+	$selectedUnmappedPolicy = 'abandon';
+}
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreUnmappedPolicyLabel").'</td><td>';
+print $form->selectarray('constvalue', $arrayUnmappedServicePolicy, $selectedUnmappedPolicy);
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
 
 $var=!$var;
 $arrayUnmappedServiceBehavior = array(
