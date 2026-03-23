@@ -68,3 +68,6 @@ DolistoreDefaultCondReglementIdLabel=Standardwert - Zahlungsbedingung (ID)
 DolistoreDefaultModeReglementIdLabel=Standardwert - Zahlungsart (ID)
 DolistoreDefaultBankAccountIdLabel=Standardwert - Bankkonto (ID)
 DolistoreDefaultOrderCategoriesLabel=Standardwert - Tags/Kategorien (durch Komma getrennte IDs)
+DolistoreCreateOrderCategoryButton=Kategorie "Dolistore" für Aufträge erstellen
+DolistoreOrderCategoryCreated=Dolistore-Kategorie erstellt (ID: %s) und zu den Standardwerten hinzugefügt.
+DolistoreOrderCategoryCreateError=Dolistore-Kategorie für Aufträge konnte nicht erstellt werden.

@@ -38,6 +38,8 @@ if (file_exists("../../main.inc.php")) {
 // Libraries
 require_once DOL_DOCUMENT_ROOT . "/core/lib/admin.lib.php";
 require_once DOL_DOCUMENT_ROOT."/core/class/html.formmail.class.php";
+require_once DOL_DOCUMENT_ROOT."/core/class/html.formcategory.class.php";
+require_once DOL_DOCUMENT_ROOT."/categories/class/categorie.class.php";
 dol_include_once("/dolistorextract/include/ssilence/php-imap-client/autoload.php");
 
 use SSilence\ImapClient\ImapClientException;
@@ -145,6 +147,30 @@ if ($action == 'update' || $action == 'add')
 	}
 }
 
+if ($action == 'create_dolistore_order_category') {
+	$categorie = new Categorie($db);
+	$categorie->type = 16;
+	$categorie->label = 'Dolistore';
+	$db->begin();
+	$categoryId = $categorie->create($user);
+	if ($categoryId > 0) {
+		$currentCategoryIds = array_filter(array_map('intval', preg_split('/[,; ]+/', (string) getDolGlobalString('DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES'))));
+		$currentCategoryIds[] = (int) $categoryId;
+		$currentCategoryIds = array_values(array_unique($currentCategoryIds));
+		$resconst = dolibarr_set_const($db, 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES', implode(',', $currentCategoryIds), 'chaine', 0, '', $conf->entity);
+		if ($resconst > 0) {
+			$db->commit();
+			setEventMessages($langs->trans("DolistoreOrderCategoryCreated", $categoryId), null, 'mesgs');
+		} else {
+			$db->rollback();
+			setEventMessages($langs->trans("Error"), null, 'errors');
+		}
+	} else {
+		$db->rollback();
+		setEventMessages($langs->trans("DolistoreOrderCategoryCreateError"), null, 'errors');
+	}
+}
+
 /*
  * View
  */
@@ -176,6 +202,7 @@ echo $langs->trans("DolistorextractSetupPage");
 
 $form=new Form($db);
 $formmail=new FormMail($db);
+$formCategory = new FormCategory($db);
 
 print '<table class="noborder" width="100%">';
 print '<tr class="liste_titre">';
@@ -310,9 +337,15 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultOrderCategoriesLabel").'</td><td>';
-print $form->multiselectarray('constvalue', $orderCategoryOptions, $selectedOrderCategories);
+if (method_exists($formCategory, 'select_all_categories')) {
+	print $formCategory->select_all_categories(16, $selectedOrderCategories, 'constvalue', 64, 0, 1, false, 0, '', '', 1);
+} else {
+	print $form->multiselectarray('constvalue', $orderCategoryOptions, $selectedOrderCategories);
+}
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print '<br>';
+print '<a class="button button-edit" href="'.$_SERVER['PHP_SELF'].'?action=create_dolistore_order_category&token='.$_SESSION['newtoken'].'">'.$langs->trans("DolistoreCreateOrderCategoryButton").'</a>';
 print "</td></tr>\n";
 print '</form>';
 

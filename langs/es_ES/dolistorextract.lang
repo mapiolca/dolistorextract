@@ -68,3 +68,6 @@ DolistoreDefaultCondReglementIdLabel=Valor por defecto - Cond. de pago (ID)
 DolistoreDefaultModeReglementIdLabel=Valor por defecto - Modo de pago (ID)
 DolistoreDefaultBankAccountIdLabel=Valor por defecto - Cuenta bancaria (ID)
 DolistoreDefaultOrderCategoriesLabel=Valor por defecto - Tags/Categorías (IDs separados por coma)
+DolistoreCreateOrderCategoryButton=Crear categoría de pedidos "Dolistore"
+DolistoreOrderCategoryCreated=Categoría Dolistore creada (ID: %s) y añadida a los valores por defecto.
+DolistoreOrderCategoryCreateError=No se pudo crear la categoría Dolistore para pedidos.
