@@ -60,3 +60,4 @@ DolistoreUnmappedNotifyBody=Auftrag: %s\nDoliStore-Service: %s\nBezeichnung: %s\
 DolistoreUnmappedNotifySent=Benachrichtigung an %s gesendet
 DolistoreUnmappedNotifyFailed=Benachrichtigung an %s konnte nicht gesendet werden
 DolistoreImapFolderSelectFailed=IMAP-Ordner %s konnte nicht ausgewählt werden
+DolistoreCommissionPercentLabel=Dolistore-Provision (Prozent)

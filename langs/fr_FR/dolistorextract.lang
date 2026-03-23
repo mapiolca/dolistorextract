@@ -171,3 +171,4 @@ DolistoreUnmappedNotifyBody=Commande : %s\nService DoliStore : %s\nLibelle : %s\
 DolistoreUnmappedNotifySent=Notification envoyee a %s
 DolistoreUnmappedNotifyFailed=Echec de l'envoi de la notification a %s
 DolistoreImapFolderSelectFailed=Impossible de selectionner le dossier IMAP %s
+DolistoreCommissionPercentLabel=Commission Dolistore (pourcentage)

@@ -244,6 +244,19 @@ print '</form></div>';
 print '</td></tr>';
 
 $var=!$var;
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_COMMISSION_PERCENT">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreCommissionPercentLabel").'</td><td>';
+print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_COMMISSION_PERCENT') .'" placeholder="0">';
+print '<span class="opacitymedium"> %</span>';
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
+$var=!$var;
 $arrayUnmappedServicePolicy = array(
 	'abandon' => $langs->trans("DolistoreUnmappedPolicyAbandon"),
 	'create' => $langs->trans("DolistoreUnmappedPolicyCreate")

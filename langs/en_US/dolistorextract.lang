@@ -162,3 +162,4 @@ DolistoreUnmappedNotifyBody=Order: %s\nDoliStore service: %s\nLabel: %s\nApplied
 DolistoreUnmappedNotifySent=Notification sent to %s
 DolistoreUnmappedNotifyFailed=Failed to send notification to %s
 DolistoreImapFolderSelectFailed=Unable to select IMAP folder %s
+DolistoreCommissionPercentLabel=Dolistore commission (percent)

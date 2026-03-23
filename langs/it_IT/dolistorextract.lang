@@ -60,3 +60,4 @@ DolistoreUnmappedNotifyBody=Ordine: %s\nServizio DoliStore: %s\nEtichetta: %s\nA
 DolistoreUnmappedNotifySent=Notifica inviata a %s
 DolistoreUnmappedNotifyFailed=Invio notifica a %s non riuscito
 DolistoreImapFolderSelectFailed=Impossibile selezionare la cartella IMAP %s
+DolistoreCommissionPercentLabel=Commissione Dolistore (percentuale)

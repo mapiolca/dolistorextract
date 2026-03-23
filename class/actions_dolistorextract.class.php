@@ -1177,6 +1177,9 @@ class ActionsDolistorextract extends CommonHookActions
 		global $langs;
 
 		$createdLines = 0;
+		$commissionRate = $this->getDolistoreCommissionRate();
+		$commissionFactor = 1 - ($commissionRate / 100);
+		dol_syslog(__METHOD__ . ' applying commission rate=' . $commissionRate . '%', LOG_DEBUG);
 		foreach ($items as $item) {
 			$itemReference = (string) ($item['item_reference'] ?? '');
 			$itemQty = !empty($item['item_quantity']) ? (float) $item['item_quantity'] : 1;
@@ -1186,6 +1189,7 @@ class ActionsDolistorextract extends CommonHookActions
 			if (!empty($item['item_price_total']) && $itemQty > 0) {
 				$itemUnitPrice = $itemTotal / $itemQty;
 			}
+			$itemUnitPrice = $itemUnitPrice * $commissionFactor;
 			$isRefunded = !empty($item['item_refunded']);
 			if ($isRefunded) {
 				$itemUnitPrice = -1 * abs($itemUnitPrice);
@@ -1210,6 +1214,30 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		return $createdLines;
+	}
+
+	/**
+	 * Returns configured Dolistore commission rate in percent.
+	 *
+	 * @return float
+	 */
+	private function getDolistoreCommissionRate(): float
+	{
+		$commissionRateRaw = trim((string) getDolGlobalString('DOLISTOREXTRACT_COMMISSION_PERCENT'));
+		if ($commissionRateRaw === '') {
+			return 0.0;
+		}
+
+		$commissionRateRaw = str_replace(',', '.', $commissionRateRaw);
+		$commissionRate = (float) $commissionRateRaw;
+		if ($commissionRate < 0) {
+			$commissionRate = 0;
+		}
+		if ($commissionRate > 100) {
+			$commissionRate = 100;
+		}
+
+		return $commissionRate;
 	}
 
 	/**
