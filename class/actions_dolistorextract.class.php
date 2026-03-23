@@ -976,31 +976,27 @@ class ActionsDolistorextract extends CommonHookActions
 			return $result;
 		}
 
-			$validationFailed = false;
-			if (getDolGlobalInt('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER')) {
-				$orderValidateResult = $order->validate($user);
-				if ($orderValidateResult <= 0) {
-					$validationFailed = true;
-					$validationError = $this->getOrderValidationErrorDetails($order);
-					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreOrderManualCreatedNotValidated", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->ref), dol_escape_htmltag($validationError)) . '</span>';
-					dol_syslog(__METHOD__ . ' failed to validate order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' error=' . $validationError, LOG_WARNING);
-				}
+		if (getDolGlobalInt('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER')) {
+			$orderValidateResult = $order->validate($user);
+			if ($orderValidateResult <= 0) {
+				$validationError = $this->getOrderValidationErrorDetails($order);
+				$this->db->rollback();
+				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($validationError)) . '</span>';
+				dol_syslog(__METHOD__ . ' failed to validate order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' error=' . $validationError, LOG_ERR);
+				return $result;
 			}
+		}
 
-			$this->db->commit();
+		$this->db->commit();
 
-			$result['success'] = true;
-			$result['code'] = $validationFailed ? 'created_not_validated' : 'created';
-			$result['order_id'] = (int) $order->id;
-			$result['order_ref'] = (string) $order->ref;
-			$result['message_key'] = $validationFailed ? 'DolistoreOrderManualCreatedNotValidated' : 'DolistoreOrderManualCreated';
+		$result['success'] = true;
+		$result['code'] = 'created';
+		$result['order_id'] = (int) $order->id;
+		$result['order_ref'] = (string) $order->ref;
+		$result['message_key'] = 'DolistoreOrderManualCreated';
 
-			if ($validationFailed) {
-				$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreOrderManualCreatedDraft", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->ref)) . '</span>';
-			} else {
-				$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreOrderManualCreated", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->ref)) . '</span>';
-			}
-			dol_syslog(__METHOD__ . ' order created order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' ref_client=' . $orderRefClient, LOG_INFO);
+		$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreOrderManualCreated", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->ref)) . '</span>';
+		dol_syslog(__METHOD__ . ' order created order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' ref_client=' . $orderRefClient, LOG_INFO);
 
 		return $result;
 	}
