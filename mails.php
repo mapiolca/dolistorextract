@@ -52,6 +52,32 @@ include_once 'class/dolistoreMailExtract.class.php';
 
 dol_include_once("/dolistorextract/include/ssilence/php-imap-client/autoload.php");
 
+/**
+ * Resolve message sequence id from request data.
+ *
+ * @param object $imap Imap client
+ * @param int    $id   Message sequence number
+ * @param int    $uid  Message UID
+ * @return int
+ */
+function dolistorextractResolveMessageId($imap, $id, $uid)
+{
+	$id = (int) $id;
+	$uid = (int) $uid;
+	if ($id > 0) {
+		return $id;
+	}
+	if ($uid <= 0) {
+		return 0;
+	}
+	$overview = $imap->getMessagesOverview((string) $uid, FT_UID);
+	if (is_array($overview) && !empty($overview[0]->msgno)) {
+		return (int) $overview[0]->msgno;
+	}
+
+	return 0;
+}
+
 // Load traductions files requiredby by page
 $langs->load("dolistorextract@dolistorextract");
 $langs->load("other");
@@ -157,11 +183,18 @@ if (!$imap) {
  */
 if ($action == 'import' || $action == 'importnative') {
 	$imap->selectFolder($mailFolder);
-	$email = ((int) $uid > 0) ? $imap->getMessage(array('uid' => (int) $uid)) : $imap->getMessage((int) $id);
-	$res = $dolistorextractActions->launchImportProcess(array($email));
-	$nativeImportLog = $dolistorextractActions->logOutput;
-	setEventMessages($langs->trans("DolistoreNativeImportDone"), null, 'mesgs');
-	$action = 'read';
+	$messageId = dolistorextractResolveMessageId($imap, $id, $uid);
+	if ($messageId <= 0) {
+		setEventMessages($langs->trans("Error"), null, 'errors');
+		$action = 'view';
+	} else {
+		$email = $imap->getMessage($messageId);
+		$res = $dolistorextractActions->launchImportProcess(array($email));
+		$nativeImportLog = $dolistorextractActions->logOutput;
+		setEventMessages($langs->trans("DolistoreNativeImportDone"), null, 'mesgs');
+		$action = 'read';
+		$id = $messageId;
+	}
 }
 
 /*
@@ -171,7 +204,17 @@ if ($action == 'read') {
 	print load_fiche_titre($langs->trans('DolistoreMailShow'));
 
 	$imap->selectFolder($mailFolder);
-	$email = ((int) $uid > 0) ? $imap->getMessage(array('uid' => (int) $uid)) : $imap->getMessage((int) $id);
+	$messageId = dolistorextractResolveMessageId($imap, $id, $uid);
+	if ($messageId <= 0) {
+		setEventMessages($langs->trans("Error"), null, 'errors');
+		$action = 'view';
+	} else {
+		$email = $imap->getMessage($messageId);
+		$id = $messageId;
+	}
+	if ($action != 'read') {
+		print '<div class="warning">'.$langs->trans("Error").'</div>';
+	} else {
 
 	if ($view == 'plain') {
 		print '<pre>';
@@ -307,12 +350,13 @@ if ($action == 'read') {
 
 	print '<div class="center">';
 	// TODO: check if already imported
-		print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=importnative&uid=' . ((int) $uid) . '&folder=' . urlencode($mailFolder) . '">'.$langs->trans("DolistoreManualNativeImport").'</a>';
+		print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=importnative&id=' . ((int) $id) . '&folder=' . urlencode($mailFolder) . '">'.$langs->trans("DolistoreManualNativeImport").'</a>';
 
 
 	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'">Fermer</a>';
 
 	print '</div>';
+	}
 
 }
 if (!$id) {
@@ -405,7 +449,7 @@ foreach($emails as $emailEntry) {
 
 		// Actions
 		print '<td>';
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=read&view=plain&uid=' . ((int) $email->header->uid) . '&folder=' . urlencode($emailEntry['folder']) . '">Voir</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=read&view=plain&id=' . ((int) $email->header->msgno) . '&uid=' . ((int) $email->header->uid) . '&folder=' . urlencode($emailEntry['folder']) . '">Voir</a>';
 		//print '<a href="'.$_SERVER['PHP_SELF'].'?action=read&view=html&id='.$email->header->uid.'">HTML</a>';
 		print '</td>';
 

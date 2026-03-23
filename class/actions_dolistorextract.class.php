@@ -1486,13 +1486,13 @@ class ActionsDolistorextract extends CommonHookActions
 			$fetchResult = $contact->fetch('', '', '', trim($buyerData['buyer_email']));
 
 			if ($fetchResult > 0) {
-				if ($fetchResult > 1) { // Multiple contacts with this address
-					$q = 'SELECT s.rowid
-                          FROM ' . $this->db->prefix() . 'societe s
-                          INNER JOIN ' . $this->db->prefix() . 'socpeople sp ON (sp.fk_soc = s.rowid)
-                          WHERE sp.email = "' . $this->db->escape($buyerData['buyer_email']) . '"
-                          ORDER BY s.rowid ASC
-                          LIMIT 1';
+					if ($fetchResult > 1) { // Multiple contacts with this address
+						$q = 'SELECT s.rowid';
+						$q .= ' FROM ' . $this->db->prefix() . 'societe s';
+						$q .= ' INNER JOIN ' . $this->db->prefix() . 'socpeople sp ON (sp.fk_soc = s.rowid)';
+						$q .= ' WHERE sp.email = "' . $this->db->escape($buyerData['buyer_email']) . '"';
+						$q .= ' ORDER BY s.rowid ASC';
+						$q .= ' LIMIT 1';
 					$queryResult = $this->db->query($q);
 					if ($res = $this->db->fetch_object($queryResult)) {
 						$companyId = $res->rowid;
@@ -1519,9 +1519,9 @@ class ActionsDolistorextract extends CommonHookActions
 		if ($companyId > 0) {
 			// Company found: We make sure that the contact exists.
 			$contact = new \Contact($this->db);
-			$sql = "SELECT rowid FROM " . $this->db->prefix() . "socpeople
-                    WHERE fk_soc = " . $companyId . "
-                    AND email = '" . $this->db->escape($buyerData['buyer_email']) . "'";
+			$sql = "SELECT rowid FROM " . $this->db->prefix() . "socpeople";
+			$sql .= " WHERE fk_soc = " . $companyId;
+			$sql .= " AND email = '" . $this->db->escape($buyerData['buyer_email']) . "'";
 			$resql = $this->db->query($sql);
 
 			// If no contact exists, create one
