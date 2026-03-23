@@ -132,7 +132,7 @@ if ($action == 'update' || $action == 'add')
 
 	$consttype=GETPOST('consttype','alpha');
 	$constnote=GETPOST('constnote');
-	$res=dolibarr_set_const($db,$constname,$constvalue,$type[$consttype],0,$constnote,$conf->entity);
+	$res=dolibarr_set_const($db,$constname,$constvalue,'chaine',0,$constnote,$conf->entity);
 
 	if (! $res > 0) $error++;
 
