@@ -38,6 +38,7 @@ if (file_exists("../../main.inc.php")) {
 // Libraries
 require_once DOL_DOCUMENT_ROOT . "/core/lib/admin.lib.php";
 require_once DOL_DOCUMENT_ROOT."/core/class/html.formmail.class.php";
+require_once DOL_DOCUMENT_ROOT."/core/class/html.formcompany.class.php";
 require_once DOL_DOCUMENT_ROOT."/categories/class/categorie.class.php";
 dol_include_once("/dolistorextract/include/ssilence/php-imap-client/autoload.php");
 
@@ -218,6 +219,7 @@ echo $langs->trans("DolistorextractSetupPage");
 
 $form=new Form($db);
 $formmail=new FormMail($db);
+$formcompany = new FormCompany($db);
 
 print '<table class="noborder" width="100%">';
 print '<tr class="liste_titre">';
@@ -268,7 +270,11 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultAvailabilityIdLabel").'</td><td>';
-print $form->selectarray('constvalue', $availabilityOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'));
+if (method_exists($formcompany, 'selectAvailabilityDelay')) {
+	print $formcompany->selectAvailabilityDelay(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'), 'constvalue', '', 1);
+} else {
+	print $form->selectarray('constvalue', $availabilityOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'));
+}
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
@@ -296,7 +302,11 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultInputReasonIdLabel").'</td><td>';
-print $form->selectarray('constvalue', $originOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'));
+if (method_exists($formcompany, 'selectInputReason')) {
+	print $formcompany->selectInputReason(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'), 'constvalue', '', 1);
+} else {
+	print $form->selectarray('constvalue', $originOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'));
+}
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
@@ -308,7 +318,11 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultCondReglementIdLabel").'</td><td>';
-print $form->selectarray('constvalue', $condReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'));
+if (method_exists($form, 'select_conditions_paiements')) {
+	print $form->select_conditions_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'), 'constvalue');
+} else {
+	print $form->selectarray('constvalue', $condReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'));
+}
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
