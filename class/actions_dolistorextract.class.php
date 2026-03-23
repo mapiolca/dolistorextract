@@ -977,7 +977,7 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		if (getDolGlobalInt('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER')) {
-			$orderValidateResult = $this->validateCustomerOrder($order, $user);
+			$orderValidateResult = $order->valid($user);
 			if ($orderValidateResult <= 0) {
 				$validationError = $this->getOrderValidationErrorDetails($order);
 				$this->db->rollback();
@@ -1081,26 +1081,6 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		return $createdLines;
-	}
-
-	/**
-	 * Validates a customer order with compatibility for method name changes.
-	 *
-	 * @param Commande $order Customer order object
-	 * @param User     $user  Current user
-	 * @return int            >0 on success, <=0 on failure
-	 */
-	private function validateCustomerOrder(Commande $order, User $user): int
-	{
-		if (is_callable(array($order, 'validate'))) {
-			return (int) $order->validate($user);
-		}
-		if (is_callable(array($order, 'valid'))) {
-			return (int) $order->valid($user);
-		}
-
-		$order->error = 'missing_order_validation_method';
-		return -1;
 	}
 
 	/**
