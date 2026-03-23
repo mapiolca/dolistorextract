@@ -68,9 +68,20 @@ $action = GETPOST('action', 'alpha');
 function dolistorextractGetDictionaryOptions($db, $tableName, $labelExpression, $whereClause = '')
 {
 	$options = array(0 => '');
+	$table = $db->prefix() . $tableName;
+	$hasActiveColumn = false;
+	$resqlColumns = $db->query('SHOW COLUMNS FROM ' . $table . ' LIKE "active"');
+	if ($resqlColumns) {
+		$hasActiveColumn = ($db->num_rows($resqlColumns) > 0);
+		$db->free($resqlColumns);
+	}
+
 	$sql = 'SELECT rowid, ' . $labelExpression . ' as label';
-	$sql .= ' FROM ' . $db->prefix() . $tableName;
-	$sql .= ' WHERE active = 1';
+	$sql .= ' FROM ' . $table;
+	$sql .= ' WHERE 1 = 1';
+	if ($hasActiveColumn) {
+		$sql .= ' AND active = 1';
+	}
 	if (!empty($whereClause)) {
 		$sql .= ' AND ' . $whereClause;
 	}
@@ -163,10 +174,10 @@ $condReglementOptions = dolistorextractGetDictionaryOptions($db, 'c_payment_term
 $modeReglementOptions = dolistorextractGetDictionaryOptions($db, 'c_paiement', 'libelle');
 
 $bankAccountOptions = array(0 => '');
-$sqlBankAccount = 'SELECT rowid, CONCAT(ref_account, " - ", label) as label';
+$sqlBankAccount = 'SELECT rowid, CONCAT(ref, " - ", label) as label';
 $sqlBankAccount .= ' FROM ' . $db->prefix() . 'bank_account';
 $sqlBankAccount .= ' WHERE entity IN (' . getEntity('bank_account') . ')';
-$sqlBankAccount .= ' ORDER BY ref_account ASC';
+$sqlBankAccount .= ' ORDER BY ref ASC';
 $resqlBankAccount = $db->query($sqlBankAccount);
 if ($resqlBankAccount) {
 	while ($objBankAccount = $db->fetch_object($resqlBankAccount)) {
@@ -209,7 +220,11 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultShippingMethodIdLabel").'</td><td>';
-print $form->selectarray('constvalue', $shippingMethodOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'));
+if (method_exists($form, 'selectShippingMethod')) {
+	print $form->selectShippingMethod(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'), 'constvalue', 1, '', 0, 1);
+} else {
+	print $form->selectarray('constvalue', $shippingMethodOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'));
+}
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
@@ -245,7 +260,11 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultModeReglementIdLabel").'</td><td>';
-print $form->selectarray('constvalue', $modeReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'));
+if (method_exists($form, 'select_types_paiements')) {
+	print $form->select_types_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'), 'constvalue');
+} else {
+	print $form->selectarray('constvalue', $modeReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'));
+}
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
@@ -257,7 +276,11 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultBankAccountIdLabel").'</td><td>';
-print $form->selectarray('constvalue', $bankAccountOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'));
+if (method_exists($form, 'select_comptes')) {
+	print $form->select_comptes(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'), 'constvalue', 0, '', 1);
+} else {
+	print $form->selectarray('constvalue', $bankAccountOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'));
+}
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
