@@ -305,8 +305,8 @@ class ActionsDolistorextract extends CommonHookActions
 			return -1;
 		}
 
-		// Select the folder Inbox
-		$imap->selectFolder(getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER') ? getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER') : 'INBOX');
+		// Select configured source folder
+		$imap->selectFolder($this->getConfiguredImapFolderToRead());
 
 		// Fetch all the messages in the current folder
 		$emails = $imap->getMessages();
@@ -316,116 +316,248 @@ class ActionsDolistorextract extends CommonHookActions
 			$this->logOutput .= '<br/><strong class="error">' . $langs->trans("DolistoreMailSendDisabled") . '</strong>';
 		}
 
-		// Filter only unread Dolistore emails
-		$dolistoreEmails = [];
-		foreach ($emails as $email) {
-			if (strpos($email->header->subject, 'DoliStore') !== false && !$email->header->seen) {
-				$dolistoreEmails[] = $email;
-			}
-		}
+		$batchResult = $this->processMailBatch($emails, false);
+		$processedCount = (int) ($batchResult['processed'] ?? 0);
+		$errorCount = (int) ($batchResult['errors'] ?? 0);
+		$mailResults = (array) ($batchResult['mail_results'] ?? array());
 
-		if (empty($dolistoreEmails)) {
+		if ($processedCount === 0 && empty($mailResults)) {
 			$this->logOutput .= '<br/>' . $langs->trans("DolistoreNoUnreadMailFound");
 			return 0;
 		}
 
+		$this->applyImapPostProcessing($imap, $mailResults);
+
+		if ($errorCount > 0) {
+			return -$errorCount;
+		}
+
+		return $processedCount;
+	}
+
+	/**
+	 * Returns configured source folder.
+	 *
+	 * @return string
+	 */
+	public function getConfiguredImapFolderToRead(): string
+	{
+		$folder = trim((string) getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER'));
+		return ($folder !== '') ? $folder : 'INBOX';
+	}
+
+	/**
+	 * Central API to process a batch of emails with the same business flow.
+	 *
+	 * @param array $emails          Raw IMAP messages
+	 * @param bool  $includeSeenMail Include seen emails (manual mode)
+	 * @return array<string,mixed>
+	 */
+	public function processMailBatch(array $emails, bool $includeSeenMail = false): array
+	{
+		global $langs;
+
+		$result = array(
+			'processed' => 0,
+			'errors' => 0,
+			'orders' => array(),
+			'mail_results' => array()
+		);
+
+		$dolistoreEmails = $this->filterProcessableEmails($emails, $includeSeenMail);
+		if (empty($dolistoreEmails)) {
+			return $result;
+		}
+
 		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreEmailsToProcessCount", count($dolistoreEmails)) . '</strong>';
-
-		// Process all emails at once
-		$result = $this->launchImportProcess($dolistoreEmails);
-
-		// Process results by order reference
-		if (is_array($result)) {
-			// Organize emails by order reference
-			$emailsByOrderRef = [];
+		$orderResults = $this->launchImportProcess($dolistoreEmails);
+		if (!is_array($orderResults)) {
 			foreach ($dolistoreEmails as $email) {
-				$dolistoreMailExtract = new \dolistoreMailExtract($this->db, $email->message->text);
-				$data = $dolistoreMailExtract->extractAllDatas();
+				$mailKey = $this->getEmailUniqueKey($email);
+				$result['mail_results'][$mailKey] = array(
+					'uid' => (int) ($email->header->uid ?? 0),
+					'msgno' => (int) ($email->header->msgno ?? 0),
+					'order_ref' => $this->extractOrderRefFromEmail($email),
+					'status' => 'error'
+				);
+			}
+			$result['errors'] = count($dolistoreEmails);
+			return $result;
+		}
+		$result['orders'] = $orderResults;
 
-				if (!empty($data) && !empty($data['order_ref'])) {
-					$orderRef = $data['order_ref'];
-					if (!isset($emailsByOrderRef[$orderRef])) {
-						$emailsByOrderRef[$orderRef] = [];
-					}
-					$emailsByOrderRef[$orderRef][] = $email;
-				} else {
-					// Email not associated with any valid order, move to error folder
-					if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR')) {
-						$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
-						if (!$moveResult) {
-							$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
-						}
-					}
+		$emailsByOrderRef = array();
+		foreach ($dolistoreEmails as $email) {
+			$emailOrderRef = $this->extractOrderRefFromEmail($email);
+			$mailKey = $this->getEmailUniqueKey($email);
+
+			if ($emailOrderRef !== '') {
+				if (!isset($emailsByOrderRef[$emailOrderRef])) {
+					$emailsByOrderRef[$emailOrderRef] = array();
 				}
+				$emailsByOrderRef[$emailOrderRef][] = $email;
 			}
 
-			// Process emails by order reference
-			$successCount = 0;
-			$errorCount = 0;
+			$result['mail_results'][$mailKey] = array(
+				'uid' => (int) ($email->header->uid ?? 0),
+				'msgno' => (int) ($email->header->msgno ?? 0),
+				'order_ref' => $emailOrderRef,
+				'status' => 'pending'
+			);
+		}
 
-			foreach ($result as $orderRef => $orderSuccess) {
-				if (isset($emailsByOrderRef[$orderRef])) {
-					if ($orderSuccess) {
-						// Order processed successfully
-						$successCount++;
-						foreach ($emailsByOrderRef[$orderRef] as $email) {
-							$imap->setSeenMessage($email->header->msgno, true);
-							if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE')) {
-								$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
-								if (!$moveResult) {
-									$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
-								}
-							}
-						}
-					} else {
-						// Order processing failed, move all related emails to error folder
-						$errorCount++;
-						foreach ($emailsByOrderRef[$orderRef] as $email) {
-							if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR')) {
-								$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREEXTRACT_IMAP_FOLDER_ERROR'));
-								if (!$moveResult) {
-									$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
-								}
-							}
-						}
-						$this->logOutput .= '<br/>-> <strong class="error">' . $langs->trans("DolistoreOrderProcessingFailed", $orderRef) . '</strong>';
-					}
-				}
+		foreach ($orderResults as $orderRef => $orderSuccess) {
+			if (empty($emailsByOrderRef[$orderRef])) {
+				continue;
 			}
-
-			// Return overall result
-			if ($errorCount > 0) {
-				return -$errorCount;
+			if ($orderSuccess) {
+				$result['processed']++;
 			} else {
-				return $successCount;
+				$result['errors']++;
 			}
-		} else {
-			// Fallback to the old integer result format
-			if ($result < 0) {
-				$this->logOutput .= '-> <strong class="error">FAIL</strong>';
+			foreach ($emailsByOrderRef[$orderRef] as $email) {
+				$mailKey = $this->getEmailUniqueKey($email);
+				$result['mail_results'][$mailKey]['status'] = $orderSuccess ? 'success' : 'error';
+			}
+		}
 
-				// Move all emails to error folder as we can't determine which ones succeeded
-				foreach ($dolistoreEmails as $email) {
-					if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR')) {
-						$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
-						if (!$moveResult) {
-							$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
-						}
+		foreach ($result['mail_results'] as $mailKey => $mailResult) {
+			if ($mailResult['status'] === 'pending') {
+				$result['mail_results'][$mailKey]['status'] = 'error';
+				$result['errors']++;
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Central API to process one email.
+	 *
+	 * @param object $email           Raw IMAP message
+	 * @param bool   $includeSeenMail Include seen emails
+	 * @return array<string,mixed>
+	 */
+	public function processSingleMail(object $email, bool $includeSeenMail = true): array
+	{
+		$batchResult = $this->processMailBatch(array($email), $includeSeenMail);
+		$mailResults = (array) ($batchResult['mail_results'] ?? array());
+		$firstResult = reset($mailResults);
+		if (!is_array($firstResult)) {
+			return array(
+				'uid' => (int) ($email->header->uid ?? 0),
+				'msgno' => (int) ($email->header->msgno ?? 0),
+				'order_ref' => '',
+				'status' => 'error'
+			);
+		}
+
+		return $firstResult;
+	}
+
+	/**
+	 * Applies IMAP side-effects for a manually processed email.
+	 *
+	 * @param Imap  $imap       IMAP client
+	 * @param array $mailResult Structured result for one email
+	 * @return void
+	 */
+	public function applyManualImapPostProcessing(Imap $imap, array $mailResult): void
+	{
+		$this->applyImapPostProcessing($imap, array($mailResult));
+	}
+
+	/**
+	 * Filters processable Dolistore emails from a message list.
+	 *
+	 * @param array $emails          Raw IMAP messages
+	 * @param bool  $includeSeenMail Include seen emails
+	 * @return array
+	 */
+	private function filterProcessableEmails(array $emails, bool $includeSeenMail = false): array
+	{
+		$dolistoreEmails = array();
+		foreach ($emails as $email) {
+			if (empty($email->header->subject) || strpos($email->header->subject, 'DoliStore') === false) {
+				continue;
+			}
+			if (!$includeSeenMail && !empty($email->header->seen)) {
+				continue;
+			}
+			$dolistoreEmails[] = $email;
+		}
+
+		return $dolistoreEmails;
+	}
+
+	/**
+	 * Extract order reference from one raw email.
+	 *
+	 * @param object $email Raw IMAP message
+	 * @return string
+	 */
+	private function extractOrderRefFromEmail(object $email): string
+	{
+		$body = !empty($email->message->text) ? (string) $email->message->text : (string) ($email->message->html ?? '');
+		$dolistoreMailExtract = new \dolistoreMailExtract($this->db, $body);
+		$data = $dolistoreMailExtract->extractAllDatas();
+
+		return !empty($data['order_ref']) ? (string) $data['order_ref'] : '';
+	}
+
+	/**
+	 * Builds a stable key for one message.
+	 *
+	 * @param object $email Raw IMAP message
+	 * @return string
+	 */
+	private function getEmailUniqueKey(object $email): string
+	{
+		if (!empty($email->header->uid)) {
+			return 'uid_' . ((string) $email->header->uid);
+		}
+		if (!empty($email->header->msgno)) {
+			return 'msg_' . ((string) $email->header->msgno);
+		}
+		return 'mail_' . substr(md5((string) json_encode($email)), 0, 12);
+	}
+
+	/**
+	 * Applies IMAP side-effects from centralized results.
+	 *
+	 * @param Imap  $imap        IMAP client
+	 * @param array $mailResults Structured result by email
+	 * @return void
+	 */
+	private function applyImapPostProcessing(Imap $imap, array $mailResults): void
+	{
+		global $langs;
+
+		$archiveFolder = trim((string) getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
+		$errorFolder = trim((string) getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
+
+		foreach ($mailResults as $mailResult) {
+			$status = (string) ($mailResult['status'] ?? 'error');
+			$uid = (int) ($mailResult['uid'] ?? 0);
+			$msgno = (int) ($mailResult['msgno'] ?? 0);
+
+			if ($status === 'success') {
+				if ($msgno > 0) {
+					$imap->setSeenMessage($msgno, true);
+				}
+				if ($uid > 0 && $archiveFolder !== '') {
+					$moveResult = $imap->moveMessage($uid, $archiveFolder);
+					if (!$moveResult) {
+						$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $uid, $archiveFolder);
 					}
 				}
-				return $result;
 			} else {
-				// Mark all emails as read and archive them
-				foreach ($dolistoreEmails as $email) {
-					$imap->setSeenMessage($email->header->msgno, true);
-					if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE')) {
-						$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
-						if (!$moveResult) {
-							$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
-						}
+				if ($uid > 0 && $errorFolder !== '') {
+					$moveResult = $imap->moveMessage($uid, $errorFolder);
+					if (!$moveResult) {
+						$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $uid, $errorFolder);
 					}
 				}
-				return $result;
 			}
 		}
 	}
@@ -1666,12 +1798,13 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		foreach ($emails as $email) {
-			// Only mails from Dolistore and not seen
-			if (strpos($email->header->subject, 'DoliStore') !== false && !$email->header->seen) {
+			// Only Dolistore emails should be provided by upstream centralized filtering.
+			if (strpos($email->header->subject, 'DoliStore') !== false) {
 				$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreProcessingEmail", dol_escape_htmltag($email->header->subject)) . '</strong>';
 
 				// Data extraction
-				$dolistoreMailExtract = new \dolistoreMailExtract($this->db, $email->message->text);
+				$body = !empty($email->message->text) ? (string) $email->message->text : (string) ($email->message->html ?? '');
+				$dolistoreMailExtract = new \dolistoreMailExtract($this->db, $body);
 				$emailLanguage = $dolistoreMailExtract->detectLang($email->header->subject);
 				$data = $dolistoreMailExtract->extractAllDatas();
 

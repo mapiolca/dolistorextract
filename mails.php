@@ -138,6 +138,7 @@ if (empty($reshook))
 llxHeader('', $langs->trans('DolistoreMailsList'),'');
 
 $form=new Form($db);
+$dolistorextractActions = new \ActionsDolistorextract($db);
 
 $mailbox = getDolGlobalString('DOLISTOREXTRACT_IMAP_SERVER');
 $username = getDolGlobalString('DOLISTOREXTRACT_IMAP_USER');
@@ -154,8 +155,8 @@ try{
 	die(); // Oh no :( we failed
 }
 
-// Select the folder Inbox
-$imap->selectFolder('INBOX');
+// Select configured source folder (same as CRON flow)
+$imap->selectFolder($dolistorextractActions->getConfiguredImapFolderToRead());
 
 /*
  * Import des données du message
@@ -163,8 +164,8 @@ $imap->selectFolder('INBOX');
 if ($action == 'import' || $action == 'importnative') {
 	$email = $imap->getMessage((int) $id);
 
-	$dolistorextractActions = new \ActionsDolistorextract($db);
-	$res = $dolistorextractActions->launchImportProcess(array($email));
+	$mailResult = $dolistorextractActions->processSingleMail($email, true);
+	$dolistorextractActions->applyManualImapPostProcessing($imap, $mailResult);
 	$nativeImportLog = $dolistorextractActions->logOutput;
 	setEventMessages($langs->trans("DolistoreNativeImportDone"), null, 'mesgs');
 	$action = 'read';
