@@ -77,3 +77,4 @@ DolistoreAssociationThirdpartyCreateButton=Crear tercero Association Dolibarr
 DolistoreAssociationThirdpartyCreated=Tercero Association Dolibarr creado (ID: %s).
 DolistoreAssociationThirdpartyExists=El tercero Association Dolibarr ya existe (ID: %s).
 DolistoreAssociationThirdpartyCreateError=No se pudo crear el tercero Association Dolibarr.
+DolistoreBillingThirdpartyLabel=Tercero de facturación Dolistore

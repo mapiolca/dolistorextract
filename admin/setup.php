@@ -198,6 +198,7 @@ if ($action == 'create_dolistore_association_thirdparty') {
 	$resql = $db->query($sql);
 	if ($resql && ($obj = $db->fetch_object($resql))) {
 		$db->free($resql);
+		dolibarr_set_const($db, 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', (int) $obj->rowid, 'entier', 0, '', $conf->entity);
 		setEventMessages($langs->trans("DolistoreAssociationThirdpartyExists", (int) $obj->rowid), null, 'warnings');
 	} else {
 		$societe = new Societe($db);
@@ -213,6 +214,7 @@ if ($action == 'create_dolistore_association_thirdparty') {
 		$socid = $societe->create($user);
 		if ($socid > 0) {
 			dolibarr_set_const($db, 'DOLISTOREXTRACT_ASSOCIATION_DOLIBARR_THIRDPARTY_ID', $socid, 'entier', 0, '', $conf->entity);
+			dolibarr_set_const($db, 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', $socid, 'entier', 0, '', $conf->entity);
 			setEventMessages($langs->trans("DolistoreAssociationThirdpartyCreated", (int) $socid), null, 'mesgs');
 		} else {
 			setEventMessages($langs->trans("DolistoreAssociationThirdpartyCreateError"), null, 'errors');
@@ -416,6 +418,18 @@ print $langs->trans("DolistoreAssociationThirdpartyDataHint");
 print '</td><td align="center" width="80">';
 print '<a class="button button-edit" href="'.$_SERVER['PHP_SELF'].'?action=create_dolistore_association_thirdparty&token='.$_SESSION['newtoken'].'">'.$langs->trans("DolistoreAssociationThirdpartyCreateButton").'</a>';
 print '</td></tr>';
+
+$var=!$var;
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_BILLING_THIRDPARTY_ID">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreBillingThirdpartyLabel").'</td><td>';
+print $form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)');
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
 
 $var=!$var;
 print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';

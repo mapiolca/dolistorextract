@@ -188,3 +188,4 @@ DolistoreAssociationThirdpartyCreateButton=Créer le tiers Association Dolibarr
 DolistoreAssociationThirdpartyCreated=Tiers Association Dolibarr créé (ID : %s).
 DolistoreAssociationThirdpartyExists=Le tiers Association Dolibarr existe déjà (ID : %s).
 DolistoreAssociationThirdpartyCreateError=Impossible de créer le tiers Association Dolibarr.
+DolistoreBillingThirdpartyLabel=Tiers de facturation Dolistore

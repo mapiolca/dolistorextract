@@ -179,3 +179,4 @@ DolistoreAssociationThirdpartyCreateButton=Create Association Dolibarr thirdpart
 DolistoreAssociationThirdpartyCreated=Association Dolibarr thirdparty created (ID: %s).
 DolistoreAssociationThirdpartyExists=Association Dolibarr thirdparty already exists (ID: %s).
 DolistoreAssociationThirdpartyCreateError=Unable to create Association Dolibarr thirdparty.
+DolistoreBillingThirdpartyLabel=Dolistore billing thirdparty

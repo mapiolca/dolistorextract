@@ -77,3 +77,4 @@ DolistoreAssociationThirdpartyCreateButton=Association-Dolibarr-Drittpartei erst
 DolistoreAssociationThirdpartyCreated=Association-Dolibarr-Drittpartei erstellt (ID: %s).
 DolistoreAssociationThirdpartyExists=Association-Dolibarr-Drittpartei existiert bereits (ID: %s).
 DolistoreAssociationThirdpartyCreateError=Association-Dolibarr-Drittpartei konnte nicht erstellt werden.
+DolistoreBillingThirdpartyLabel=Dolistore-Abrechnungsdrittpartei
