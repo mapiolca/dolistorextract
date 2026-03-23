@@ -448,7 +448,14 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->loadRequiredClasses();
 
 		$user = new \User($this->db);
-		$user->fetch(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'));
+		$actionUserId = getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS');
+		$actionUserFetchResult = $user->fetch($actionUserId);
+		if ($actionUserFetchResult <= 0) {
+			dol_syslog(__METHOD__ . ' unable to load actions user id=' . ((int) $actionUserId), LOG_ERR);
+			$this->logOutput .= '<br/><span class="error">' . $langs->trans("ErrorBadValueForParameter", 'DOLISTOREXTRACT_USER_FOR_ACTIONS') . '</span>';
+			return -1;
+		}
+		$user->getrights();
 
 		// 2. Data extraction (read-only)
 		$ordersData = $this->extractOrdersData($emails);
@@ -977,11 +984,12 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		if (getDolGlobalInt('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER')) {
-			$orderValidateResult = $order->validate($user);
+			$orderValidateResult = $order->valid($user);
 			if ($orderValidateResult <= 0) {
+				$validationError = $this->getOrderValidationErrorDetails($order);
 				$this->db->rollback();
-				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->error)) . '</span>';
-				dol_syslog(__METHOD__ . ' failed to validate order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' error=' . $order->error, LOG_ERR);
+				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($validationError)) . '</span>';
+				dol_syslog(__METHOD__ . ' failed to validate order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' error=' . $validationError, LOG_ERR);
 				return $result;
 			}
 		}
@@ -1063,23 +1071,16 @@ class ActionsDolistorextract extends CommonHookActions
 			}
 			$serviceId = $this->getServiceIdByDolistoreId($itemReference);
 			$itemDesc = $this->buildDolistoreOrderLineDescription($item, $isRefunded);
-
-				$lineId = $order->addline($itemDesc, $itemUnitPrice, $itemQty, 0, 0, 0, $serviceId);
+			$lineId = $order->addline($itemDesc, $itemUnitPrice, $itemQty, 0, 0, 0, $serviceId);
 			if ($lineId <= 0) {
 				dol_syslog(__METHOD__ . ' failed addline for order_id=' . ((int) $order->id) . ' item_reference=' . $itemReference . ' error=' . $order->error, LOG_ERR);
 				return -1;
 			}
 
-			if (class_exists('OrderLine')) {
-				$orderLine = new OrderLine($this->db);
-				if ($orderLine->fetch($lineId) > 0) {
-					$orderLine->array_options['options_dolistore_item_ref'] = $itemReference;
-					$lineExtraResult = $orderLine->insertExtraFields();
-					if ($lineExtraResult < 0) {
-						dol_syslog(__METHOD__ . ' failed set line extrafield on line_id=' . ((int) $lineId), LOG_ERR);
-						return -1;
-					}
-				}
+			$lineExtraResult = $this->setOrderLineDolistoreItemRef((int) $lineId, $itemReference);
+			if ($lineExtraResult < 0) {
+				dol_syslog(__METHOD__ . ' failed set line extrafield on line_id=' . ((int) $lineId), LOG_ERR);
+				return -1;
 			}
 
 			dol_syslog(__METHOD__ . ' created order line line_id=' . ((int) $lineId) . ' service_id=' . ((int) $serviceId) . ' dolistore_item_ref=' . $itemReference, LOG_INFO);
@@ -1087,6 +1088,67 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		return $createdLines;
+	}
+
+	/**
+	 * Builds a readable validation error string from order object and database state.
+	 *
+	 * @param Commande $order Customer order object
+	 * @return string         Validation error details
+	 */
+	private function getOrderValidationErrorDetails(Commande $order): string
+	{
+		$error = trim((string) $order->error);
+		if ($error === '' && !empty($order->errors) && is_array($order->errors)) {
+			$error = trim(implode(' | ', $order->errors));
+		}
+		if ($error === '') {
+			$error = trim((string) $this->db->lasterror());
+		}
+		if ($error === '') {
+			$error = 'unknown_validation_error';
+		}
+
+		return $error;
+	}
+
+	/**
+	 * Persists Dolistore item reference on order line extrafields.
+	 * This avoids CommonObjectLine::insertExtraFields() which can update
+	 * fk_user_modif on llx_commandedet on some versions where the field does not exist.
+	 *
+	 * @param int    $lineId        Order line id
+	 * @param string $itemReference Dolistore item reference
+	 * @return int                  1 on success, 0 if no data, -1 on error
+	 */
+	private function setOrderLineDolistoreItemRef(int $lineId, string $itemReference): int
+	{
+		$itemReference = trim($itemReference);
+		if ($lineId <= 0 || $itemReference === '') {
+			return 0;
+		}
+
+		$sqlCheck = "SELECT COUNT(rowid) as nb";
+		$sqlCheck .= " FROM ".MAIN_DB_PREFIX."commandedet_extrafields";
+		$sqlCheck .= " WHERE fk_object = ".((int) $lineId);
+		$resCheck = $this->db->query($sqlCheck);
+		if (!$resCheck) {
+			return -1;
+		}
+		$objCheck = $this->db->fetch_object($resCheck);
+		$this->db->free($resCheck);
+		$exists = !empty($objCheck) ? (int) $objCheck->nb : 0;
+
+		if ($exists > 0) {
+			$sql = "UPDATE ".MAIN_DB_PREFIX."commandedet_extrafields";
+			$sql .= " SET dolistore_item_ref = '".$this->db->escape($itemReference)."'";
+			$sql .= " WHERE fk_object = ".((int) $lineId);
+		} else {
+			$sql = "INSERT INTO ".MAIN_DB_PREFIX."commandedet_extrafields (fk_object, dolistore_item_ref)";
+			$sql .= " VALUES (".((int) $lineId).", '".$this->db->escape($itemReference)."')";
+		}
+
+		return $this->db->query($sql) ? 1 : -1;
 	}
 
 	/**
