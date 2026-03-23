@@ -40,6 +40,7 @@ require_once DOL_DOCUMENT_ROOT . "/core/lib/admin.lib.php";
 require_once DOL_DOCUMENT_ROOT."/core/class/html.formmail.class.php";
 require_once DOL_DOCUMENT_ROOT."/core/class/html.formcompany.class.php";
 require_once DOL_DOCUMENT_ROOT."/categories/class/categorie.class.php";
+require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 dol_include_once("/dolistorextract/include/ssilence/php-imap-client/autoload.php");
 
 use SSilence\ImapClient\ImapClientException;
@@ -185,6 +186,37 @@ if ($action == 'create_dolistore_order_category') {
 	} else {
 		$db->rollback();
 		setEventMessages($langs->trans("DolistoreOrderCategoryCreateError"), null, 'errors');
+	}
+}
+
+if ($action == 'create_dolistore_association_thirdparty') {
+	$sql = 'SELECT rowid FROM ' . $db->prefix() . 'societe';
+	$sql .= ' WHERE siret = "52033993800018"';
+	$sql .= ' AND entity IN (' . getEntity('societe') . ')';
+	$sql .= ' ORDER BY rowid ASC';
+	$sql .= ' LIMIT 1';
+	$resql = $db->query($sql);
+	if ($resql && ($obj = $db->fetch_object($resql))) {
+		$db->free($resql);
+		setEventMessages($langs->trans("DolistoreAssociationThirdpartyExists", (int) $obj->rowid), null, 'warnings');
+	} else {
+		$societe = new Societe($db);
+		$societe->name = 'Association Dolibarr';
+		$societe->address = '265 RUE DE LA VALLEE';
+		$societe->zip = '45160';
+		$societe->town = 'OLIVET';
+		$societe->country_code = 'FR';
+		$societe->idprof1 = '520339938';
+		$societe->idprof2 = '52033993800018';
+		$societe->tva_intra = 'FR87520339938';
+		$societe->client = 2;
+		$socid = $societe->create($user);
+		if ($socid > 0) {
+			dolibarr_set_const($db, 'DOLISTOREXTRACT_ASSOCIATION_DOLIBARR_THIRDPARTY_ID', $socid, 'entier', 0, '', $conf->entity);
+			setEventMessages($langs->trans("DolistoreAssociationThirdpartyCreated", (int) $socid), null, 'mesgs');
+		} else {
+			setEventMessages($langs->trans("DolistoreAssociationThirdpartyCreateError"), null, 'errors');
+		}
 	}
 }
 
@@ -377,6 +409,13 @@ print '<br>';
 print '<a class="button button-edit" href="'.$_SERVER['PHP_SELF'].'?action=create_dolistore_order_category&token='.$_SESSION['newtoken'].'">'.$langs->trans("DolistoreCreateOrderCategoryButton").'</a>';
 print "</td></tr>\n";
 print '</form>';
+
+$var=!$var;
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreAssociationThirdpartyLabel").'</td><td>';
+print $langs->trans("DolistoreAssociationThirdpartyDataHint");
+print '</td><td align="center" width="80">';
+print '<a class="button button-edit" href="'.$_SERVER['PHP_SELF'].'?action=create_dolistore_association_thirdparty&token='.$_SESSION['newtoken'].'">'.$langs->trans("DolistoreAssociationThirdpartyCreateButton").'</a>';
+print '</td></tr>';
 
 $var=!$var;
 print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
