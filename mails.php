@@ -52,16 +52,20 @@ include_once 'class/dolistoreMailExtract.class.php';
 
 dol_include_once("/dolistorextract/include/ssilence/php-imap-client/autoload.php");
 
-use SSilence\ImapClient\ImapClientException;
-use SSilence\ImapClient\ImapConnect;
-use SSilence\ImapClient\ImapClient as Imap;
-
 // Load traductions files requiredby by page
 $langs->load("dolistorextract@dolistorextract");
 $langs->load("other");
 
 // Get parameters
 $id			= GETPOST('id', 'int');
+$uid		= GETPOST('uid', 'int');
+$mailFolder = GETPOST('folder', 'alphanohtml');
+if (empty($mailFolder)) {
+	$mailFolder = getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER');
+	if (empty($mailFolder)) {
+		$mailFolder = 'INBOX';
+	}
+}
 $action		= GETPOST('action','alpha');
 $cancel     = GETPOST('cancel');
 $view       = GETPOST('view');
@@ -139,31 +143,21 @@ llxHeader('', $langs->trans('DolistoreMailsList'),'');
 
 $form=new Form($db);
 
-$mailbox = getDolGlobalString('DOLISTOREXTRACT_IMAP_SERVER');
-$username = getDolGlobalString('DOLISTOREXTRACT_IMAP_USER');
-$password = getDolGlobalString('DOLISTOREXTRACT_IMAP_PWD');
-$encryption = Imap::ENCRYPT_SSL;
-
-// Open connection
-try{
-	$imap = new Imap($mailbox, $username, $password, $encryption);
-	// You can also check out example-connect.php for more connection options
-
-}catch (ImapClientException $error){
-	echo $error->getMessage().PHP_EOL;
-	die(); // Oh no :( we failed
+$dolistorextractActions = new \ActionsDolistorextract($db);
+$imap = $dolistorextractActions->openImapClient();
+if (!$imap) {
+	print '<div class="error">'.$langs->trans("Error").'</div>';
+	llxFooter();
+	$db->close();
+	exit;
 }
-
-// Select the folder Inbox
-$imap->selectFolder('INBOX');
 
 /*
  * Import des données du message
  */
 if ($action == 'import' || $action == 'importnative') {
-	$email = $imap->getMessage((int) $id);
-
-	$dolistorextractActions = new \ActionsDolistorextract($db);
+	$imap->selectFolder($mailFolder);
+	$email = ((int) $uid > 0) ? $imap->getMessage(array('uid' => (int) $uid)) : $imap->getMessage((int) $id);
 	$res = $dolistorextractActions->launchImportProcess(array($email));
 	$nativeImportLog = $dolistorextractActions->logOutput;
 	setEventMessages($langs->trans("DolistoreNativeImportDone"), null, 'mesgs');
@@ -176,7 +170,8 @@ if ($action == 'import' || $action == 'importnative') {
 if ($action == 'read') {
 	print load_fiche_titre($langs->trans('DolistoreMailShow'));
 
-	$email = $imap->getMessage((int) $id);
+	$imap->selectFolder($mailFolder);
+	$email = ((int) $uid > 0) ? $imap->getMessage(array('uid' => (int) $uid)) : $imap->getMessage((int) $id);
 
 	if ($view == 'plain') {
 		print '<pre>';
@@ -195,8 +190,6 @@ if ($action == 'read') {
 	$langEmail = $dolistoreMailExtract->detectLang($email->header->subject);
 
 	$dolistoreMail = new \dolistoreMail();
-	$dolistorextractActions = new \ActionsDolistorextract($db);
-
 	$dolistoreMail->setDatas($datas);
 
 	// Search exactly by name
@@ -314,7 +307,7 @@ if ($action == 'read') {
 
 	print '<div class="center">';
 	// TODO: check if already imported
-	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=importnative&id='.$id.'">'.$langs->trans("DolistoreManualNativeImport").'</a>';
+		print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=importnative&uid=' . ((int) $uid) . '&folder=' . urlencode($mailFolder) . '">'.$langs->trans("DolistoreManualNativeImport").'</a>';
 
 
 	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'">Fermer</a>';
@@ -328,16 +321,21 @@ if (!$id) {
 print load_fiche_titre($langs->trans('DolistoreMailsList'));
 
 // Count the messages in current folder
-$overallMessages = $imap->countMessages();
-$unreadMessages = $imap->countUnreadMessages();
+$emails = $dolistorextractActions->fetchDolistoreEmailsFromConfiguredLocation($imap, false);
+$overallMessages = count($emails);
+$unreadMessages = 0;
+foreach ($emails as $emailEntry) {
+	if (empty($emailEntry['message']->header->seen)) {
+		$unreadMessages++;
+	}
+}
 
 print '<div class="info">'.$overallMessages.' messages / '. $unreadMessages.' non lus</div>';
-// Fetch all the messages in the current folder
-$emails = $imap->getMessages();
 
 print '<table class="liste">';
 
 print '<tr class="liste_titre">';
+print '<th>Dossier</th>';
 print '<th>Date</th>';
 print '<th>ID</th>';
 print '<th>Ref</th>';
@@ -349,7 +347,8 @@ print '<th>Lu/Non Lu</th>';
 print '<th>Actions</th>';
 print '</tr>';
 
-foreach($emails as $email) {
+foreach($emails as $emailEntry) {
+	$email = $emailEntry['message'];
 
 	$mailExtract = new \dolistoreMailExtract($db, $email->message->html);
 
@@ -361,6 +360,8 @@ foreach($emails as $email) {
 		$datasOrder = dolistoreMailExtract::extractOrderDatasFromSubject($email->header->subject, $langEmail);
 
 		print '<tr>';
+
+		print '<td>' . dol_escape_htmltag($emailEntry['folder']) . '</td>';
 
 		// Date
 		print '<td>';
@@ -404,7 +405,7 @@ foreach($emails as $email) {
 
 		// Actions
 		print '<td>';
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=read&view=plain&id='.$email->header->msgno.'">Voir</a>';
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=read&view=plain&uid=' . ((int) $email->header->uid) . '&folder=' . urlencode($emailEntry['folder']) . '">Voir</a>';
 		//print '<a href="'.$_SERVER['PHP_SELF'].'?action=read&view=html&id='.$email->header->uid.'">HTML</a>';
 		print '</td>';
 

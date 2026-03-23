@@ -74,6 +74,8 @@ class ActionsDolistorextract extends CommonHookActions
 	public const DOLISTORE_UNMAPPED_BEHAVIOR_BLOCK = 'block';
 	public const DOLISTORE_UNMAPPED_BEHAVIOR_SKIP = 'skip';
 	public const DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL = 'manual';
+	public const DOLISTORE_UNMAPPED_POLICY_ABANDON = 'abandon';
+	public const DOLISTORE_UNMAPPED_POLICY_CREATE = 'create';
 
 	public $db;
 	public $dao;
@@ -292,44 +294,29 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->nbErrors = 0;
 		$langs->load('main');
 
-		$mailbox = getDolGlobalString('DOLISTOREXTRACT_IMAP_SERVER');
-		$username = getDolGlobalString('DOLISTOREXTRACT_IMAP_USER');
-		$password = getDolGlobalString('DOLISTOREXTRACT_IMAP_PWD');
-		$encryption = Imap::ENCRYPT_SSL;
-
-		// Open connection
-		try {
-			$imap = new Imap($mailbox, $username, $password, $encryption);
-		} catch (ImapClientException $error) {
-			$this->errors[] = $error->getMessage() . PHP_EOL;
+		$imap = $this->openImapClient();
+		if (!$imap) {
 			return -1;
 		}
 
-		// Select the folder Inbox
-		$imap->selectFolder(getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER') ? getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER') : 'INBOX');
-
-		// Fetch all the messages in the current folder
-		$emails = $imap->getMessages();
-		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreMailsToProcess", count($emails)) . '</strong>';
+		$emailEntries = $this->fetchDolistoreEmailsFromConfiguredLocation($imap, true);
+		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreMailsToProcess", count($emailEntries)) . '</strong>';
 
 		if (getDolGlobalString('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU')) {
 			$this->logOutput .= '<br/><strong class="error">' . $langs->trans("DolistoreMailSendDisabled") . '</strong>';
 		}
 
-		// Filter only unread Dolistore emails
-		$dolistoreEmails = [];
-		foreach ($emails as $email) {
-			if (strpos($email->header->subject, 'DoliStore') !== false && !$email->header->seen) {
-				$dolistoreEmails[] = $email;
-			}
-		}
-
-		if (empty($dolistoreEmails)) {
+		if (empty($emailEntries)) {
 			$this->logOutput .= '<br/>' . $langs->trans("DolistoreNoUnreadMailFound");
 			return 0;
 		}
 
-		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreEmailsToProcessCount", count($dolistoreEmails)) . '</strong>';
+		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreEmailsToProcessCount", count($emailEntries)) . '</strong>';
+
+		$dolistoreEmails = array();
+		foreach ($emailEntries as $emailEntry) {
+			$dolistoreEmails[] = $emailEntry['message'];
+		}
 
 		// Process all emails at once
 		$result = $this->launchImportProcess($dolistoreEmails);
@@ -338,7 +325,8 @@ class ActionsDolistorextract extends CommonHookActions
 		if (is_array($result)) {
 			// Organize emails by order reference
 			$emailsByOrderRef = [];
-			foreach ($dolistoreEmails as $email) {
+			foreach ($emailEntries as $emailEntry) {
+				$email = $emailEntry['message'];
 				$dolistoreMailExtract = new \dolistoreMailExtract($this->db, $email->message->text);
 				$data = $dolistoreMailExtract->extractAllDatas();
 
@@ -347,15 +335,10 @@ class ActionsDolistorextract extends CommonHookActions
 					if (!isset($emailsByOrderRef[$orderRef])) {
 						$emailsByOrderRef[$orderRef] = [];
 					}
-					$emailsByOrderRef[$orderRef][] = $email;
+					$emailsByOrderRef[$orderRef][] = $emailEntry;
 				} else {
 					// Email not associated with any valid order, move to error folder
-					if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR')) {
-						$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
-						if (!$moveResult) {
-							$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
-						}
-					}
+					$this->moveEmailEntryToErrorFolder($imap, $emailEntry);
 				}
 			}
 
@@ -368,25 +351,14 @@ class ActionsDolistorextract extends CommonHookActions
 					if ($orderSuccess) {
 						// Order processed successfully
 						$successCount++;
-						foreach ($emailsByOrderRef[$orderRef] as $email) {
-							$imap->setSeenMessage($email->header->msgno, true);
-							if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE')) {
-								$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
-								if (!$moveResult) {
-									$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
-								}
-							}
+						foreach ($emailsByOrderRef[$orderRef] as $emailEntry) {
+							$this->markEmailEntryAsProcessed($imap, $emailEntry);
 						}
 					} else {
 						// Order processing failed, move all related emails to error folder
 						$errorCount++;
-						foreach ($emailsByOrderRef[$orderRef] as $email) {
-							if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR')) {
-								$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREEXTRACT_IMAP_FOLDER_ERROR'));
-								if (!$moveResult) {
-									$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
-								}
-							}
+						foreach ($emailsByOrderRef[$orderRef] as $emailEntry) {
+							$this->moveEmailEntryToErrorFolder($imap, $emailEntry);
 						}
 						$this->logOutput .= '<br/>-> <strong class="error">' . $langs->trans("DolistoreOrderProcessingFailed", $orderRef) . '</strong>';
 					}
@@ -405,28 +377,178 @@ class ActionsDolistorextract extends CommonHookActions
 				$this->logOutput .= '-> <strong class="error">FAIL</strong>';
 
 				// Move all emails to error folder as we can't determine which ones succeeded
-				foreach ($dolistoreEmails as $email) {
-					if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR')) {
-						$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
-						if (!$moveResult) {
-							$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR'));
-						}
-					}
+				foreach ($emailEntries as $emailEntry) {
+					$this->moveEmailEntryToErrorFolder($imap, $emailEntry);
 				}
 				return $result;
 			} else {
 				// Mark all emails as read and archive them
-				foreach ($dolistoreEmails as $email) {
-					$imap->setSeenMessage($email->header->msgno, true);
-					if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE')) {
-						$moveResult = $imap->moveMessage($email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
-						if (!$moveResult) {
-							$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $email->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
-						}
-					}
+				foreach ($emailEntries as $emailEntry) {
+					$this->markEmailEntryAsProcessed($imap, $emailEntry);
 				}
 				return $result;
 			}
+		}
+	}
+
+	/**
+	 * Open the configured IMAP client connection.
+	 *
+	 * @return Imap|null
+	 */
+	public function openImapClient(): ?Imap
+	{
+		$mailbox = getDolGlobalString('DOLISTOREXTRACT_IMAP_SERVER');
+		$username = getDolGlobalString('DOLISTOREXTRACT_IMAP_USER');
+		$password = getDolGlobalString('DOLISTOREXTRACT_IMAP_PWD');
+		$encryption = Imap::ENCRYPT_SSL;
+
+		try {
+			return new Imap($mailbox, $username, $password, $encryption);
+		} catch (ImapClientException $error) {
+			$this->errors[] = $error->getMessage() . PHP_EOL;
+			$this->logOutput .= '<br/><span class="error">' . dol_escape_htmltag($error->getMessage()) . '</span>';
+			dol_syslog(__METHOD__ . ' failed to open IMAP connection error=' . $error->getMessage(), LOG_ERR);
+		}
+
+		return null;
+	}
+
+	/**
+	 * Read Dolistore emails from configured folder and optional subfolders.
+	 *
+	 * @param Imap $imap Active IMAP client
+	 * @param bool $onlyUnread Restrict to unread messages
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function fetchDolistoreEmailsFromConfiguredLocation(Imap $imap, bool $onlyUnread = true): array
+	{
+		global $langs;
+
+		$emailEntries = array();
+		$folders = $this->getConfiguredImapFoldersToScan($imap);
+		if (empty($folders)) {
+			return $emailEntries;
+		}
+
+		foreach ($folders as $folderName) {
+			if (!$imap->selectFolder($folderName)) {
+				$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreImapFolderSelectFailed", dol_escape_htmltag($folderName)) . '</span>';
+				dol_syslog(__METHOD__ . ' unable to select folder=' . $folderName, LOG_WARNING);
+				continue;
+			}
+
+			$messages = $imap->getMessages();
+			foreach ($messages as $message) {
+				$isDolistore = (strpos((string) $message->header->subject, 'DoliStore') !== false);
+				if (!$isDolistore) {
+					continue;
+				}
+				if ($onlyUnread && !empty($message->header->seen)) {
+					continue;
+				}
+
+				$emailEntries[] = array(
+					'folder' => $folderName,
+					'message' => $message
+				);
+			}
+		}
+
+		return $emailEntries;
+	}
+
+	/**
+	 * Get list of folders to scan from configured source folder.
+	 *
+	 * @param Imap $imap Active IMAP client
+	 * @return array<int,string>
+	 */
+	private function getConfiguredImapFoldersToScan(Imap $imap): array
+	{
+		$rootFolder = trim((string) getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER'));
+		if ($rootFolder === '') {
+			$rootFolder = 'INBOX';
+		}
+
+		$allFolders = $imap->getFolders(null, 1);
+		if (!is_array($allFolders) || empty($allFolders)) {
+			return array($rootFolder);
+		}
+
+		$folders = array();
+		foreach ($allFolders as $folderName) {
+			if ($folderName === $rootFolder) {
+				$folders[] = $folderName;
+				continue;
+			}
+			if (preg_match('/^' . preg_quote($rootFolder, '/') . '[\/\.]/', $folderName)) {
+				$folders[] = $folderName;
+			}
+		}
+
+		if (empty($folders)) {
+			$folders[] = $rootFolder;
+		}
+
+		sort($folders);
+
+		return array_values(array_unique($folders));
+	}
+
+	/**
+	 * Mark message as processed and move it to archive folder when configured.
+	 *
+	 * @param Imap  $imap       Active IMAP client
+	 * @param array $emailEntry Mail payload with folder + message keys
+	 * @return void
+	 */
+	private function markEmailEntryAsProcessed(Imap $imap, array $emailEntry): void
+	{
+		global $langs;
+
+		$message = $emailEntry['message'];
+		$sourceFolder = (string) $emailEntry['folder'];
+		if (!$imap->selectFolder($sourceFolder)) {
+			$this->logOutput .= '<br/>' . $langs->trans("DolistoreImapFolderSelectFailed", dol_escape_htmltag($sourceFolder));
+			return;
+		}
+
+		$imap->setSeenMessage((int) $message->header->msgno);
+		if (getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE')) {
+			$moveResult = $imap->moveMessage((int) $message->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
+			if (!$moveResult) {
+				$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $message->header->uid, getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE'));
+			}
+		}
+	}
+
+	/**
+	 * Move message to configured error folder.
+	 *
+	 * @param Imap  $imap       Active IMAP client
+	 * @param array $emailEntry Mail payload with folder + message keys
+	 * @return void
+	 */
+	private function moveEmailEntryToErrorFolder(Imap $imap, array $emailEntry): void
+	{
+		global $langs;
+
+		$errorFolder = getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR');
+		if (empty($errorFolder)) {
+			return;
+		}
+
+		$message = $emailEntry['message'];
+		$sourceFolder = (string) $emailEntry['folder'];
+		if (!$imap->selectFolder($sourceFolder)) {
+			$this->logOutput .= '<br/>' . $langs->trans("DolistoreImapFolderSelectFailed", dol_escape_htmltag($sourceFolder));
+			return;
+		}
+
+		$moveResult = $imap->moveMessage((int) $message->header->uid, $errorFolder);
+		if (!$moveResult) {
+			$this->logOutput .= '<br/>' . $langs->trans("DolistoreErrorMovingMessage", $message->header->uid, $errorFolder);
 		}
 	}
 
@@ -1464,7 +1586,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$successList = [];
 		$mappedItems = array();
 		$hasUnmappedItems = false;
-		$unmappedBehavior = $this->getUnmappedServiceBehavior();
+		$unmappedPolicy = $this->getUnmappedServicePolicy();
 
 		foreach ($items as $product) {
 			$product = $this->enforceDolistoreServiceBusinessRule($product);
@@ -1483,19 +1605,20 @@ class ActionsDolistorextract extends CommonHookActions
 				}
 
 				$hasUnmappedItems = true;
-				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_BLOCK) {
-					$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreUnmappedPolicyBlockedOrder", dol_escape_htmltag($orderRef), dol_escape_htmltag((string) ($product['item_reference'] ?? ''))) . '</span>';
-					dol_syslog(__METHOD__ . ' blocking import for order_ref=' . $orderRef . ' because service mapping is missing for ref=' . ((string) ($product['item_reference'] ?? '')), LOG_ERR);
-					return null;
+				if ($unmappedPolicy === self::DOLISTORE_UNMAPPED_POLICY_CREATE) {
+					$createResult = $this->createServiceFromDolistoreData($user, (string) ($product['item_reference'] ?? ''), (string) ($product['item_name'] ?? ''), (string) ($product['item_reference'] ?? ''));
+					if (!empty($createResult['success']) && !empty($createResult['service_id'])) {
+						$product['fk_service'] = (int) $createResult['service_id'];
+						$mappedItems[] = $product;
+						$successList[] = $product['item_name'];
+						$this->notifyConfiguredUserForUnmappedService($orderRef, (string) ($product['item_reference'] ?? ''), (string) ($product['item_name'] ?? ''), self::DOLISTORE_UNMAPPED_POLICY_CREATE, (string) ($createResult['service_ref'] ?? ''));
+						continue;
+					}
 				}
-				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP) {
-					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreUnmappedPolicySkippedLine", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag($orderRef)) . '</span>';
-					dol_syslog(__METHOD__ . ' skipping line for order_ref=' . $orderRef . ' item_reference=' . ((string) ($product['item_reference'] ?? '')) . ' because mapping is missing', LOG_WARNING);
-				}
-				if ($unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL) {
-					$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreUnmappedPolicyManualPending", dol_escape_htmltag($orderRef), dol_escape_htmltag((string) ($product['item_reference'] ?? ''))) . '</span>';
-					dol_syslog(__METHOD__ . ' manual mapping required for order_ref=' . $orderRef . ' item_reference=' . ((string) ($product['item_reference'] ?? '')), LOG_INFO);
-				}
+
+				$this->notifyConfiguredUserForUnmappedService($orderRef, (string) ($product['item_reference'] ?? ''), (string) ($product['item_name'] ?? ''), self::DOLISTORE_UNMAPPED_POLICY_ABANDON);
+				$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreUnmappedPolicyAbandonLine", dol_escape_htmltag((string) ($product['item_reference'] ?? '')), dol_escape_htmltag($orderRef)) . '</span>';
+				dol_syslog(__METHOD__ . ' line abandoned for order_ref=' . $orderRef . ' item_reference=' . ((string) ($product['item_reference'] ?? '')) . ' unmapped policy=' . $unmappedPolicy, LOG_WARNING);
 			} else {
 				$mappedItems[] = $product;
 				$successList[] = $product['item_name'];
@@ -1504,13 +1627,8 @@ class ActionsDolistorextract extends CommonHookActions
 			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passed empty or to be adapted
 		}
 
-		if ($hasUnmappedItems && $unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL) {
-			$this->lastOrderImportStatus = 'manual_pending';
-			return array();
-		}
-
 		if (empty($mappedItems)) {
-			$this->lastOrderImportStatus = ($hasUnmappedItems && $unmappedBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP) ? 'skipped_unmapped' : '';
+			$this->lastOrderImportStatus = ($hasUnmappedItems ? 'skipped_unmapped' : '');
 			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreNoServiceCandidate") . '</span>';
 			return array();
 		}
@@ -1532,23 +1650,28 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
-	 * Returns configured behavior when a Dolistore service mapping is missing.
+	 * Returns configured policy when a Dolistore service mapping is missing.
 	 *
-	 * @return string One of self::DOLISTORE_UNMAPPED_BEHAVIOR_*
+	 * @return string One of self::DOLISTORE_UNMAPPED_POLICY_*
 	 */
-	private function getUnmappedServiceBehavior(): string
+	private function getUnmappedServicePolicy(): string
 	{
-		$behavior = trim((string) getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR'));
-		$allowed = array(
-			self::DOLISTORE_UNMAPPED_BEHAVIOR_BLOCK,
-			self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP,
-			self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL
-		);
-		if (!in_array($behavior, $allowed, true)) {
-			return self::DOLISTORE_UNMAPPED_BEHAVIOR_MANUAL;
+		$policy = trim((string) getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY'));
+		if ($policy === '') {
+			$legacyBehavior = trim((string) getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR'));
+			if ($legacyBehavior === self::DOLISTORE_UNMAPPED_BEHAVIOR_SKIP) {
+				$policy = self::DOLISTORE_UNMAPPED_POLICY_CREATE;
+			} else {
+				$policy = self::DOLISTORE_UNMAPPED_POLICY_ABANDON;
+			}
 		}
 
-		return $behavior;
+		$allowed = array(self::DOLISTORE_UNMAPPED_POLICY_ABANDON, self::DOLISTORE_UNMAPPED_POLICY_CREATE);
+		if (!in_array($policy, $allowed, true)) {
+			return self::DOLISTORE_UNMAPPED_POLICY_ABANDON;
+		}
+
+		return $policy;
 	}
 
 	/**
@@ -1637,6 +1760,45 @@ class ActionsDolistorextract extends CommonHookActions
 			}
 		}
 	}
+
+	/**
+	 * Notify configured internal user about an unmapped Dolistore service workflow.
+	 *
+	 * @param string $orderRef Order reference
+	 * @param string $itemReference Dolistore item reference
+	 * @param string $itemName Dolistore item name
+	 * @param string $actionTaken Action taken (abandon|create)
+	 * @param string $serviceRef Created service reference
+	 * @return void
+	 */
+	private function notifyConfiguredUserForUnmappedService(string $orderRef, string $itemReference, string $itemName, string $actionTaken, string $serviceRef = ''): void
+	{
+		global $langs;
+
+		$userId = getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS');
+		if ($userId <= 0) {
+			return;
+		}
+
+		$user = new User($this->db);
+		if ($user->fetch($userId) <= 0 || empty($user->email)) {
+			return;
+		}
+
+		require_once DOL_DOCUMENT_ROOT . '/core/class/CMailFile.class.php';
+		$from = getDolGlobalString('MAIN_INFO_SOCIETE_NOM') . ' <' . getDolGlobalString('MAIN_INFO_SOCIETE_MAIL') . '>';
+		$to = $user->email;
+		$subject = $langs->transnoentitiesnoconv("DolistoreUnmappedNotifySubject", $orderRef, $itemReference);
+		$message = $langs->transnoentitiesnoconv("DolistoreUnmappedNotifyBody", $orderRef, $itemReference, $itemName, $actionTaken, $serviceRef);
+
+		$mail = new CMailFile($subject, $to, $from, $message);
+		if ($mail->sendfile()) {
+			$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreUnmappedNotifySent", dol_escape_htmltag($to)) . '</span>';
+			return;
+		}
+
+		$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreUnmappedNotifyFailed", dol_escape_htmltag($to)) . '</span>';
+	}
 	/**
 	 * Load required classes if not already loaded
 	 *
@@ -1666,8 +1828,8 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		foreach ($emails as $email) {
-			// Only mails from Dolistore and not seen
-			if (strpos($email->header->subject, 'DoliStore') !== false && !$email->header->seen) {
+			// Only Dolistore emails
+			if (strpos($email->header->subject, 'DoliStore') !== false) {
 				$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreProcessingEmail", dol_escape_htmltag($email->header->subject)) . '</strong>';
 
 				// Data extraction

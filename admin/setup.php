@@ -244,6 +244,26 @@ print '</form></div>';
 print '</td></tr>';
 
 $var=!$var;
+$arrayUnmappedServicePolicy = array(
+	'abandon' => $langs->trans("DolistoreUnmappedPolicyAbandon"),
+	'create' => $langs->trans("DolistoreUnmappedPolicyCreate")
+);
+$selectedUnmappedPolicy = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY');
+if (!in_array($selectedUnmappedPolicy, array('abandon', 'create'), true)) {
+	$selectedUnmappedPolicy = 'abandon';
+}
+print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
+print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
+print '<input type="hidden" name="action" value="update">';
+print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY">';
+print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreUnmappedPolicyLabel").'</td><td>';
+print $form->selectarray('constvalue', $arrayUnmappedServicePolicy, $selectedUnmappedPolicy);
+print '</td><td align="center" width="80">';
+print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
+print "</td></tr>\n";
+print '</form>';
+
+$var=!$var;
 $arrayUnmappedServiceBehavior = array(
 	'block' => $langs->trans("DolistoreUnmappedBehaviorBlock"),
 	'skip' => $langs->trans("DolistoreUnmappedBehaviorSkip"),
