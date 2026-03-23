@@ -56,6 +56,36 @@ if (! $user->admin) {
 // Parameters
 $action = GETPOST('action', 'alpha');
 
+/**
+ * Returns options list from a dictionary table.
+ *
+ * @param DoliDB $db Database handler
+ * @param string $tableName Dictionary table name without prefix
+ * @param string $labelExpression SQL label expression
+ * @param string $whereClause Extra where clause
+ * @return array<int,string>
+ */
+function dolistorextractGetDictionaryOptions($db, $tableName, $labelExpression, $whereClause = '')
+{
+	$options = array(0 => '');
+	$sql = 'SELECT rowid, ' . $labelExpression . ' as label';
+	$sql .= ' FROM ' . $db->prefix() . $tableName;
+	$sql .= ' WHERE active = 1';
+	if (!empty($whereClause)) {
+		$sql .= ' AND ' . $whereClause;
+	}
+	$sql .= ' ORDER BY label ASC';
+	$resql = $db->query($sql);
+	if ($resql) {
+		while ($obj = $db->fetch_object($resql)) {
+			$options[(int) $obj->rowid] = (string) $obj->label;
+		}
+		$db->free($resql);
+	}
+
+	return $options;
+}
+
 
 
 /*
@@ -66,6 +96,9 @@ if ($action == 'update' || $action == 'add')
 {
 	$constname=GETPOST('constname','alpha');
 	$constvalue=(GETPOST('constvalue_'.$constname) ? GETPOST('constvalue_'.$constname) : GETPOST('constvalue'));
+	if ($constname === 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES' && is_array($constvalue)) {
+		$constvalue = implode(',', array_map('intval', $constvalue));
+	}
 
 	$consttype=GETPOST('consttype','alpha');
 	$constnote=GETPOST('constnote');
@@ -123,6 +156,40 @@ print '<td align="center">'.$langs->trans("Action").'</td>';
 print "</tr>\n";
 $var=true;
 
+$availabilityOptions = dolistorextractGetDictionaryOptions($db, 'c_availability', 'label');
+$shippingMethodOptions = dolistorextractGetDictionaryOptions($db, 'c_shipment_mode', 'label');
+$originOptions = dolistorextractGetDictionaryOptions($db, 'c_input_reason', 'label');
+$condReglementOptions = dolistorextractGetDictionaryOptions($db, 'c_payment_term', 'libelle');
+$modeReglementOptions = dolistorextractGetDictionaryOptions($db, 'c_paiement', 'libelle');
+
+$bankAccountOptions = array(0 => '');
+$sqlBankAccount = 'SELECT rowid, CONCAT(ref_account, " - ", label) as label';
+$sqlBankAccount .= ' FROM ' . $db->prefix() . 'bank_account';
+$sqlBankAccount .= ' WHERE entity IN (' . getEntity('bank_account') . ')';
+$sqlBankAccount .= ' ORDER BY ref_account ASC';
+$resqlBankAccount = $db->query($sqlBankAccount);
+if ($resqlBankAccount) {
+	while ($objBankAccount = $db->fetch_object($resqlBankAccount)) {
+		$bankAccountOptions[(int) $objBankAccount->rowid] = (string) $objBankAccount->label;
+	}
+	$db->free($resqlBankAccount);
+}
+
+$orderCategoryOptions = array();
+$sqlOrderCategories = 'SELECT rowid, label';
+$sqlOrderCategories .= ' FROM ' . $db->prefix() . 'categorie';
+$sqlOrderCategories .= ' WHERE type = 16';
+$sqlOrderCategories .= ' AND entity IN (' . getEntity('category') . ')';
+$sqlOrderCategories .= ' ORDER BY label ASC';
+$resqlOrderCategories = $db->query($sqlOrderCategories);
+if ($resqlOrderCategories) {
+	while ($objOrderCategory = $db->fetch_object($resqlOrderCategories)) {
+		$orderCategoryOptions[(int) $objOrderCategory->rowid] = (string) $objOrderCategory->label;
+	}
+	$db->free($resqlOrderCategories);
+}
+$selectedOrderCategories = array_filter(array_map('intval', preg_split('/[,; ]+/', (string) getDolGlobalString('DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES'))));
+
 // IMAP server
 $var=!$var;
 print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
@@ -130,7 +197,7 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultAvailabilityIdLabel").'</td><td>';
-print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID') .'" placeholder="0">';
+print $form->selectarray('constvalue', $availabilityOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'));
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
@@ -142,7 +209,7 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultShippingMethodIdLabel").'</td><td>';
-print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID') .'" placeholder="0">';
+print $form->selectarray('constvalue', $shippingMethodOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'));
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
@@ -154,7 +221,7 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultInputReasonIdLabel").'</td><td>';
-print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID') .'" placeholder="0">';
+print $form->selectarray('constvalue', $originOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'));
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
@@ -166,7 +233,7 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultCondReglementIdLabel").'</td><td>';
-print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID') .'" placeholder="0">';
+print $form->selectarray('constvalue', $condReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'));
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
@@ -178,7 +245,7 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultModeReglementIdLabel").'</td><td>';
-print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID') .'" placeholder="0">';
+print $form->selectarray('constvalue', $modeReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'));
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
@@ -190,7 +257,7 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultBankAccountIdLabel").'</td><td>';
-print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID') .'" placeholder="0">';
+print $form->selectarray('constvalue', $bankAccountOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'));
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
@@ -202,7 +269,7 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultOrderCategoriesLabel").'</td><td>';
-print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES') .'" placeholder="1,2,3">';
+print $form->multiselectarray('constvalue', $orderCategoryOptions, $selectedOrderCategories);
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print "</td></tr>\n";
