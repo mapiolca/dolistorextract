@@ -1087,6 +1087,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$order->date = $dateOrder;
 		$order->ref_client = $orderRefClient;
 		$order->note_private = $this->buildDolistoreImportPrivateNote($orderData);
+		$this->applyConfiguredOrderDefaults($order);
 
 		$this->db->begin();
 		$orderCreateResult = $order->create($user);
@@ -1117,6 +1118,7 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		$this->db->commit();
+		$this->assignConfiguredOrderCategories($order, $user);
 
 		$result['success'] = true;
 		$result['code'] = 'created';
@@ -1128,6 +1130,56 @@ class ActionsDolistorextract extends CommonHookActions
 		dol_syslog(__METHOD__ . ' order created order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' ref_client=' . $orderRefClient, LOG_INFO);
 
 		return $result;
+	}
+
+	/**
+	 * Applies configured default values on order object before create.
+	 *
+	 * @param Commande $order Customer order object
+	 * @return void
+	 */
+	private function applyConfiguredOrderDefaults(Commande $order): void
+	{
+		$order->availability_id = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID');
+		$order->shipping_method_id = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID');
+		$order->demand_reason_id = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID');
+		$order->cond_reglement_id = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID');
+		$order->mode_reglement_id = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID');
+		$order->fk_account = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID');
+	}
+
+	/**
+	 * Assigns configured categories on imported order.
+	 *
+	 * @param Commande $order Customer order object
+	 * @param User     $user  User context
+	 * @return void
+	 */
+	private function assignConfiguredOrderCategories(Commande $order, User $user): void
+	{
+		$categoriesRaw = trim((string) getDolGlobalString('DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES'));
+		if ($categoriesRaw === '' || empty($order->id)) {
+			return;
+		}
+
+		$categoryIds = preg_split('/[,; ]+/', $categoriesRaw);
+		$categoryIds = array_filter(array_map('intval', (array) $categoryIds));
+		if (empty($categoryIds)) {
+			return;
+		}
+
+		if (method_exists($order, 'setCategories')) {
+			$order->setCategories($categoryIds, 'customer_order');
+			return;
+		}
+
+		foreach ($categoryIds as $categoryId) {
+			if ((int) $categoryId > 0) {
+				$sql = "INSERT IGNORE INTO " . MAIN_DB_PREFIX . "categorie_object (fk_categorie, fk_object)";
+				$sql .= " VALUES (" . ((int) $categoryId) . ", " . ((int) $order->id) . ")";
+				$this->db->query($sql);
+			}
+		}
 	}
 
 	/**
