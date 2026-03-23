@@ -72,20 +72,33 @@ function dolistorextractGetDictionaryOptions($db, $tableName, $labelExpression, 
 
 	$options = array(0 => '');
 	$table = $db->prefix() . $tableName;
-	$hasActiveColumn = false;
-	$hasCodeColumn = false;
-	$resqlColumns = $db->query('SHOW COLUMNS FROM ' . $table . ' LIKE "active"');
-	if ($resqlColumns) {
-		$hasActiveColumn = ($db->num_rows($resqlColumns) > 0);
-		$db->free($resqlColumns);
+	$columns = array();
+	$resqlAllColumns = $db->query('SHOW COLUMNS FROM ' . $table);
+	if ($resqlAllColumns) {
+		while ($objcol = $db->fetch_object($resqlAllColumns)) {
+			$columns[] = (string) $objcol->Field;
+		}
+		$db->free($resqlAllColumns);
 	}
-	$resqlCodeColumn = $db->query('SHOW COLUMNS FROM ' . $table . ' LIKE "code"');
-	if ($resqlCodeColumn) {
-		$hasCodeColumn = ($db->num_rows($resqlCodeColumn) > 0);
-		$db->free($resqlCodeColumn);
+	if (empty($columns)) {
+		return $options;
 	}
 
-	$sql = 'SELECT rowid, ' . $labelExpression . ' as label';
+	$idColumn = in_array('rowid', $columns, true) ? 'rowid' : (in_array('id', $columns, true) ? 'id' : '');
+	if ($idColumn === '') {
+		return $options;
+	}
+	$labelColumn = in_array('label', $columns, true) ? 'label' : (in_array('libelle', $columns, true) ? 'libelle' : (in_array('code', $columns, true) ? 'code' : ''));
+	if ($labelColumn === '') {
+		return $options;
+	}
+
+	$hasActiveColumn = false;
+	$hasCodeColumn = false;
+	$hasActiveColumn = in_array('active', $columns, true);
+	$hasCodeColumn = in_array('code', $columns, true);
+
+	$sql = 'SELECT ' . $idColumn . ' as rowid, ' . $labelColumn . ' as label';
 	if ($hasCodeColumn) {
 		$sql .= ', code';
 	}
