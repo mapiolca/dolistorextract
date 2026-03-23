@@ -448,7 +448,14 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->loadRequiredClasses();
 
 		$user = new \User($this->db);
-		$user->fetch(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'));
+		$actionUserId = getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS');
+		$actionUserFetchResult = $user->fetch($actionUserId);
+		if ($actionUserFetchResult <= 0) {
+			dol_syslog(__METHOD__ . ' unable to load actions user id=' . ((int) $actionUserId), LOG_ERR);
+			$this->logOutput .= '<br/><span class="error">' . $langs->trans("ErrorBadValueForParameter", 'DOLISTOREXTRACT_USER_FOR_ACTIONS') . '</span>';
+			return -1;
+		}
+		$user->getrights();
 
 		// 2. Data extraction (read-only)
 		$ordersData = $this->extractOrdersData($emails);
