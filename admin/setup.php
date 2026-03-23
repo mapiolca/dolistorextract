@@ -139,6 +139,9 @@ if ($action == 'update' || $action == 'add')
 {
 	$constname=GETPOST('constname','alpha');
 	$constvalue=(GETPOST('constvalue_'.$constname) ? GETPOST('constvalue_'.$constname) : GETPOST('constvalue'));
+	if ($constname === 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES' && GETPOSTISARRAY('categories')) {
+		$constvalue = GETPOST('categories', 'array');
+	}
 	if ($constname === 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES' && is_array($constvalue)) {
 		$constvalue = implode(',', array_map('intval', $constvalue));
 	}
@@ -349,7 +352,11 @@ print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
 print '<input type="hidden" name="action" value="update">';
 print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES">';
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultOrderCategoriesLabel").'</td><td>';
-print $form->multiselectarray('constvalue', $orderCategoryOptions, $selectedOrderCategories);
+print '<span class="fas fa-tag pictofixedwidth"></span>';
+print '<span class="multiselectarraycategories">';
+print '<input type="hidden" name="categories_multiselect" value="1">';
+print $form->multiselectarray('categories', $orderCategoryOptions, $selectedOrderCategories, '', 0, 'minwidth100 widthcentpercentminusxx');
+print '</span>';
 print '</td><td align="center" width="80">';
 print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
 print '<br>';
