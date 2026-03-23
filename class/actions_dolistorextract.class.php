@@ -1168,8 +1168,12 @@ class ActionsDolistorextract extends CommonHookActions
 			return;
 		}
 
+		if (method_exists($order, 'setCategoriesCommon')) {
+			$order->setCategoriesCommon($categoryIds, Categorie::TYPE_CUSTOMER_ORDER);
+			return;
+		}
 		if (method_exists($order, 'setCategories')) {
-			$order->setCategories($categoryIds, 'customer_order');
+			$order->setCategories($categoryIds);
 			return;
 		}
 
