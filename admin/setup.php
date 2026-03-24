@@ -167,6 +167,28 @@ function dolistorextractPrintUpdateRow($rowClass, $label, $constname, $fieldHtml
 	print '</td></tr>';
 }
 
+/**
+ * Capture HTML printed by Dolibarr form helpers and normalize returned value.
+ *
+ * @param callable $renderer Renderer callback
+ * @return string
+ */
+function dolistorextractCaptureFieldHtml($renderer)
+{
+	ob_start();
+	$returnValue = call_user_func($renderer);
+	$fieldHtml = ob_get_clean();
+
+	if ($fieldHtml !== '') {
+		return $fieldHtml;
+	}
+	if (is_string($returnValue)) {
+		return $returnValue;
+	}
+
+	return '';
+}
+
 /*
  * Actions
  */
@@ -329,12 +351,24 @@ if ($resqlOrderCategories) {
 $selectedOrderCategories = array_filter(array_map('intval', preg_split('/[,; ]+/', (string) getDolGlobalString('DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES'))));
 
 $selectRows = array();
-$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID', $langs->trans('DolistoreDefaultAvailabilityIdLabel'), method_exists($formcompany, 'selectAvailabilityDelay') ? $formcompany->selectAvailabilityDelay(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'), 'constvalue', '', 1) : $form->selectarray('constvalue', $availabilityOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID')));
-$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID', $langs->trans('DolistoreDefaultShippingMethodIdLabel'), method_exists($form, 'selectShippingMethod') ? $form->selectShippingMethod(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'), 'constvalue', 1, '', 0, 1) : $form->selectarray('constvalue', $shippingMethodOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID')));
-$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID', $langs->trans('DolistoreDefaultInputReasonIdLabel'), method_exists($formcompany, 'selectInputReason') ? $formcompany->selectInputReason(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'), 'constvalue', '', 1) : $form->selectarray('constvalue', $originOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID')));
-$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID', $langs->trans('DolistoreDefaultCondReglementIdLabel'), method_exists($form, 'select_conditions_paiements') ? $form->select_conditions_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'), 'constvalue') : $form->selectarray('constvalue', $condReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID')));
-$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID', $langs->trans('DolistoreDefaultModeReglementIdLabel'), method_exists($form, 'select_types_paiements') ? $form->select_types_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'), 'constvalue') : $form->selectarray('constvalue', $modeReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID')));
-$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID', $langs->trans('DolistoreDefaultBankAccountIdLabel'), method_exists($form, 'select_comptes') ? $form->select_comptes(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'), 'constvalue', 0, '', 1) : $form->selectarray('constvalue', $bankAccountOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID')));
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID', $langs->trans('DolistoreDefaultAvailabilityIdLabel'), dolistorextractCaptureFieldHtml(function () use ($formcompany, $form, $availabilityOptions) {
+	return method_exists($formcompany, 'selectAvailabilityDelay') ? $formcompany->selectAvailabilityDelay(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'), 'constvalue', '', 1) : $form->selectarray('constvalue', $availabilityOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'));
+}));
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID', $langs->trans('DolistoreDefaultShippingMethodIdLabel'), dolistorextractCaptureFieldHtml(function () use ($form, $shippingMethodOptions) {
+	return method_exists($form, 'selectShippingMethod') ? $form->selectShippingMethod(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'), 'constvalue', 1, '', 0, 1) : $form->selectarray('constvalue', $shippingMethodOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'));
+}));
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID', $langs->trans('DolistoreDefaultInputReasonIdLabel'), dolistorextractCaptureFieldHtml(function () use ($formcompany, $form, $originOptions) {
+	return method_exists($formcompany, 'selectInputReason') ? $formcompany->selectInputReason(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'), 'constvalue', '', 1) : $form->selectarray('constvalue', $originOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'));
+}));
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID', $langs->trans('DolistoreDefaultCondReglementIdLabel'), dolistorextractCaptureFieldHtml(function () use ($form, $condReglementOptions) {
+	return method_exists($form, 'select_conditions_paiements') ? $form->select_conditions_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'), 'constvalue') : $form->selectarray('constvalue', $condReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'));
+}));
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID', $langs->trans('DolistoreDefaultModeReglementIdLabel'), dolistorextractCaptureFieldHtml(function () use ($form, $modeReglementOptions) {
+	return method_exists($form, 'select_types_paiements') ? $form->select_types_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'), 'constvalue') : $form->selectarray('constvalue', $modeReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'));
+}));
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID', $langs->trans('DolistoreDefaultBankAccountIdLabel'), dolistorextractCaptureFieldHtml(function () use ($form, $bankAccountOptions) {
+	return method_exists($form, 'select_comptes') ? $form->select_comptes(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'), 'constvalue', 0, '', 1) : $form->selectarray('constvalue', $bankAccountOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'));
+}));
 
 foreach ($selectRows as $row) {
 	$var = !$var;
@@ -344,7 +378,9 @@ foreach ($selectRows as $row) {
 $var = !$var;
 $fieldCategories = '<span class="fas fa-tag pictofixedwidth"></span><span class="multiselectarraycategories">';
 $fieldCategories .= '<input type="hidden" name="categories_multiselect" value="1">';
-$fieldCategories .= $form->multiselectarray('categories', $orderCategoryOptions, $selectedOrderCategories, '', 0, 'minwidth100 widthcentpercentminusxx');
+$fieldCategories .= dolistorextractCaptureFieldHtml(function () use ($form, $orderCategoryOptions, $selectedOrderCategories) {
+	return $form->multiselectarray('categories', $orderCategoryOptions, $selectedOrderCategories, '', 0, 'minwidth100 widthcentpercentminusxx');
+});
 $fieldCategories .= '</span>';
 $extraCategoryAction = '<a class="button button-edit" href="'.$self.'?action=create_dolistore_order_category&token='.$token.'">'.$langs->trans("DolistoreCreateOrderCategoryButton").'</a>';
 dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreDefaultOrderCategoriesLabel"), 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES', $fieldCategories, $self, $token, $extraCategoryAction);
@@ -355,7 +391,9 @@ print '<a class="button button-edit" href="'.$self.'?action=create_dolistore_ass
 print '</td></tr>';
 
 $var = !$var;
-$fieldBillingThirdparty = $form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)');
+$fieldBillingThirdparty = dolistorextractCaptureFieldHtml(function () use ($form) {
+	return $form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)');
+});
 dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreBillingThirdpartyLabel"), 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', $fieldBillingThirdparty, $self, $token);
 
 $textConstants = array(
