@@ -132,6 +132,41 @@ function dolistorextractGetDictionaryOptions($db, $tableName, $labelExpression, 
 	return $options;
 }
 
+/**
+ * Print one update row while keeping form tags inside table cells.
+ *
+ * @param string $rowClass Row class
+ * @param string $label Label
+ * @param string $constname Constant name
+ * @param string $fieldHtml Field html
+ * @param string $self Self URL
+ * @param string $token CSRF token
+ * @param string $extraActionHtml Optional extra html in action cell
+ * @return void
+ */
+function dolistorextractPrintUpdateRow($rowClass, $label, $constname, $fieldHtml, $self, $token, $extraActionHtml = '')
+{
+	global $langs;
+	static $lineid = 0;
+
+	$lineid++;
+	$formid = 'dolistorextractsetupform'.$lineid;
+
+	print '<tr '.$rowClass.'><td>'.$label.'</td><td>';
+	print '<form id="'.$formid.'" action="'.$self.'" method="POST">';
+	print '<input type="hidden" name="token" value="'.$token.'">';
+	print '<input type="hidden" name="action" value="update">';
+	print '<input type="hidden" name="constname" value="'.$constname.'">';
+	print $fieldHtml;
+	print '</form>';
+	print '</td><td align="center" width="80">';
+	print '<a class="button" href="#" onclick="document.getElementById(\''.$formid.'\').submit(); return false;">'.$langs->trans("Update").'</a>';
+	if (!empty($extraActionHtml)) {
+		print '<br>'.$extraActionHtml;
+	}
+	print '</td></tr>';
+}
+
 /*
  * Actions
  */
@@ -301,30 +336,16 @@ $selectRows[] = array('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID', $langs->trans('
 
 foreach ($selectRows as $row) {
 	$var = !$var;
-	print '<form action="'.$self.'" method="POST">';
-	print '<input type="hidden" name="token" value="'.$token.'">';
-	print '<input type="hidden" name="action" value="update">';
-	print '<input type="hidden" name="constname" value="'.$row[0].'">';
-	print '<tr '.$bc[$var].'><td>'.$row[1].'</td><td>'.$row[2].'</td><td align="center" width="80">';
-	print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-	print "</td></tr>\n";
-	print '</form>';
+	dolistorextractPrintUpdateRow($bc[$var], $row[1], $row[0], $row[2], $self, $token);
 }
 
 $var = !$var;
-print '<form action="'.$self.'" method="POST">';
-print '<input type="hidden" name="token" value="'.$token.'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultOrderCategoriesLabel").'</td><td>';
-print '<span class="fas fa-tag pictofixedwidth"></span><span class="multiselectarraycategories">';
-print '<input type="hidden" name="categories_multiselect" value="1">';
-print $form->multiselectarray('categories', $orderCategoryOptions, $selectedOrderCategories, '', 0, 'minwidth100 widthcentpercentminusxx');
-print '</span></td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button"><br>';
-print '<a class="button button-edit" href="'.$self.'?action=create_dolistore_order_category&token='.$token.'">'.$langs->trans("DolistoreCreateOrderCategoryButton").'</a>';
-print "</td></tr>\n";
-print '</form>';
+$fieldCategories = '<span class="fas fa-tag pictofixedwidth"></span><span class="multiselectarraycategories">';
+$fieldCategories .= '<input type="hidden" name="categories_multiselect" value="1">';
+$fieldCategories .= $form->multiselectarray('categories', $orderCategoryOptions, $selectedOrderCategories, '', 0, 'minwidth100 widthcentpercentminusxx');
+$fieldCategories .= '</span>';
+$extraCategoryAction = '<a class="button button-edit" href="'.$self.'?action=create_dolistore_order_category&token='.$token.'">'.$langs->trans("DolistoreCreateOrderCategoryButton").'</a>';
+dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreDefaultOrderCategoriesLabel"), 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES', $fieldCategories, $self, $token, $extraCategoryAction);
 
 $var = !$var;
 print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreAssociationThirdpartyLabel").'</td><td>'.$langs->trans("DolistoreAssociationThirdpartyDataHint").'</td><td align="center" width="80">';
@@ -332,14 +353,8 @@ print '<a class="button button-edit" href="'.$self.'?action=create_dolistore_ass
 print '</td></tr>';
 
 $var = !$var;
-print '<form action="'.$self.'" method="POST">';
-print '<input type="hidden" name="token" value="'.$token.'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_BILLING_THIRDPARTY_ID">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreBillingThirdpartyLabel").'</td><td>'.$form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)').'</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+$fieldBillingThirdparty = $form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)');
+dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreBillingThirdpartyLabel"), 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', $fieldBillingThirdparty, $self, $token);
 
 $textConstants = array(
 	array('DOLISTOREXTRACT_IMAP_SERVER', 'DolistorExtractImapServer', 'text', ''),
@@ -352,20 +367,12 @@ $textConstants = array(
 );
 foreach ($textConstants as $textDefinition) {
 	$var = !$var;
-	print '<form action="'.$self.'" method="POST">';
-	print '<input type="hidden" name="token" value="'.$token.'">';
-	print '<input type="hidden" name="action" value="update">';
-	print '<input type="hidden" name="constname" value="'.$textDefinition[0].'">';
-	print '<tr '.$bc[$var].'><td>'.$langs->trans($textDefinition[1]).'</td><td>';
-	print '<input type="'.$textDefinition[2].'" class="text flat" name="constvalue" value="'.dol_escape_htmltag(getDolGlobalString($textDefinition[0])).'"';
+	$fieldText = '<input type="'.$textDefinition[2].'" class="text flat" name="constvalue" value="'.dol_escape_htmltag(getDolGlobalString($textDefinition[0])).'"';
 	if (!empty($textDefinition[3])) {
-		print ' placeholder="'.$textDefinition[3].'"';
+		$fieldText .= ' placeholder="'.$textDefinition[3].'"';
 	}
-	print '>';
-	print '</td><td align="center" width="80">';
-	print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-	print "</td></tr>\n";
-	print '</form>';
+	$fieldText .= '>';
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans($textDefinition[1]), $textDefinition[0], $fieldText, $self, $token);
 }
 
 $var=!$var;
@@ -395,16 +402,8 @@ print '</form></div>';
 print '</td></tr>';
 
 $var = !$var;
-print '<form action="'.$self.'" method="POST">';
-print '<input type="hidden" name="token" value="'.$token.'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_COMMISSION_PERCENT">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreCommissionPercentLabel").'</td><td>';
-print '<input type="text" class="text flat" name="constvalue" value="' . dol_escape_htmltag(getDolGlobalString('DOLISTOREXTRACT_COMMISSION_PERCENT')) .'" placeholder="0"><span class="opacitymedium"> %</span>';
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+$fieldCommission = '<input type="text" class="text flat" name="constvalue" value="' . dol_escape_htmltag(getDolGlobalString('DOLISTOREXTRACT_COMMISSION_PERCENT')) .'" placeholder="0"><span class="opacitymedium"> %</span>';
+dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreCommissionPercentLabel"), 'DOLISTOREXTRACT_COMMISSION_PERCENT', $fieldCommission, $self, $token);
 
 $var=!$var;
 $arrayUnmappedServicePolicy = array(
@@ -415,14 +414,8 @@ $selectedUnmappedPolicy = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_P
 if (!in_array($selectedUnmappedPolicy, array('abandon', 'create'), true)) {
 	$selectedUnmappedPolicy = 'abandon';
 }
-print '<form action="'.$self.'" method="POST">';
-print '<input type="hidden" name="token" value="'.$token.'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreUnmappedPolicyLabel").'</td><td>'.$form->selectarray('constvalue', $arrayUnmappedServicePolicy, $selectedUnmappedPolicy).'</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+$fieldPolicy = $form->selectarray('constvalue', $arrayUnmappedServicePolicy, $selectedUnmappedPolicy);
+dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreUnmappedPolicyLabel"), 'DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY', $fieldPolicy, $self, $token);
 
 $var=!$var;
 $arrayUnmappedServiceBehavior = array(
@@ -434,24 +427,12 @@ $selectedUnmappedBehavior = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE
 if (!in_array($selectedUnmappedBehavior, array('block', 'skip', 'manual'), true)) {
 	$selectedUnmappedBehavior = 'manual';
 }
-print '<form action="'.$self.'" method="POST">';
-print '<input type="hidden" name="token" value="'.$token.'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreUnmappedBehaviorLabel").'</td><td>'.$form->selectarray('constvalue', $arrayUnmappedServiceBehavior, $selectedUnmappedBehavior).'</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+$fieldBehavior = $form->selectarray('constvalue', $arrayUnmappedServiceBehavior, $selectedUnmappedBehavior);
+dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreUnmappedBehaviorLabel"), 'DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR', $fieldBehavior, $self, $token);
 
 $var = !$var;
-print '<form action="'.$self.'" method="POST">';
-print '<input type="hidden" name="token" value="'.$token.'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_USER_FOR_ACTIONS">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractUserForActions").'</td><td>'.$form->select_dolusers(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'), 'constvalue').'</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+$fieldUserForActions = $form->select_dolusers(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'), 'constvalue');
+dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractUserForActions"), 'DOLISTOREXTRACT_USER_FOR_ACTIONS', $fieldUserForActions, $self, $token);
 
 $arrayTemplates = array();
 $ret = $formmail->fetchAllEMailTemplate('dolistore_extract', $user, $langs);
@@ -462,24 +443,12 @@ if ($ret > 0) {
 }
 
 $var = !$var;
-print '<form action="'.$self.'" method="POST">';
-print '<input type="hidden" name="token" value="'.$token.'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_EMAIL_TEMPLATE_FR">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractEmailTemplateFr").'</td><td>'.$form->selectarray('constvalue', $arrayTemplates, getDolGlobalString('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR')).'</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+$fieldTemplateFr = $form->selectarray('constvalue', $arrayTemplates, getDolGlobalString('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR'));
+dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractEmailTemplateFr"), 'DOLISTOREXTRACT_EMAIL_TEMPLATE_FR', $fieldTemplateFr, $self, $token);
 
 $var = !$var;
-print '<form action="'.$self.'" method="POST">';
-print '<input type="hidden" name="token" value="'.$token.'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_EMAIL_TEMPLATE_EN">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractEmailTemplateEn").'</td><td>'.$form->selectarray('constvalue', $arrayTemplates, getDolGlobalString('DOLISTOREXTRACT_EMAIL_TEMPLATE_EN')).'</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+$fieldTemplateEn = $form->selectarray('constvalue', $arrayTemplates, getDolGlobalString('DOLISTOREXTRACT_EMAIL_TEMPLATE_EN'));
+dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractEmailTemplateEn"), 'DOLISTOREXTRACT_EMAIL_TEMPLATE_EN', $fieldTemplateEn, $self, $token);
 
 print '</table>';
 print '<br>';
