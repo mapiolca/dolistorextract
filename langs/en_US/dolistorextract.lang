@@ -194,3 +194,4 @@ DolistoreAssociationThirdpartyExists=Association Dolibarr thirdparty already exi
 DolistoreAssociationThirdpartyCreateError=Unable to create Association Dolibarr thirdparty.
 DolistoreBillingThirdpartyLabel=Dolistore billing thirdparty
 DolistorextractEmailsImap = Emails/IMAP
+DolistorextractCustomerOrders = Customer orders

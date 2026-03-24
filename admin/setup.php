@@ -307,7 +307,9 @@ $formcompany = new FormCompany($db);
 $self = $_SERVER['PHP_SELF'];
 $token = $_SESSION['newtoken'];
 $mode = GETPOST('mode', 'aZ09');
-$mode = ($mode === 'emailsimap') ? 'emailsimap' : 'settings';
+if (!in_array($mode, array('settings', 'customerorders', 'emailsimap'), true)) {
+	$mode = 'settings';
+}
 
 print dol_get_fiche_head($head, $mode, $langs->trans("Module500000Name"), -1, "dolistore@dolistorextract");
 print '<table class="noborder" width="100%">';
@@ -318,7 +320,7 @@ print '<td align="center">'.$langs->trans("Action").'</td>';
 print "</tr>\n";
 $var = true;
 
-if ($mode === 'settings') {
+if ($mode === 'customerorders') {
 	$availabilityOptions = dolistorextractGetDictionaryOptions($db, 'c_availability', 'label');
 	$shippingMethodOptions = dolistorextractGetDictionaryOptions($db, 'c_shipment_mode', 'label');
 	$originOptions = dolistorextractGetDictionaryOptions($db, 'c_input_reason', 'label');
@@ -384,23 +386,11 @@ $fieldCategories .= '<input type="hidden" name="categories_multiselect" value="1
 $fieldCategories .= dolistorextractCaptureFieldHtml(function () use ($form, $orderCategoryOptions, $selectedOrderCategories) {
 	return $form->multiselectarray('categories', $orderCategoryOptions, $selectedOrderCategories, '', 0, 'minwidth100 widthcentpercentminusxx');
 });
-$fieldCategories .= '</span>';
-$extraCategoryAction = '<a class="button button-edit" href="'.$self.'?action=create_dolistore_order_category&token='.$token.'">'.$langs->trans("DolistoreCreateOrderCategoryButton").'</a>';
-dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreDefaultOrderCategoriesLabel"), 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES', $fieldCategories, $self, $token, $extraCategoryAction);
+	$fieldCategories .= '</span>';
+	$extraCategoryAction = '<a class="button button-edit" href="'.$self.'?action=create_dolistore_order_category&token='.$token.'">'.$langs->trans("DolistoreCreateOrderCategoryButton").'</a>';
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreDefaultOrderCategoriesLabel"), 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES', $fieldCategories, $self, $token, $extraCategoryAction);
 
-$var = !$var;
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreAssociationThirdpartyLabel").'</td><td>'.$langs->trans("DolistoreAssociationThirdpartyDataHint").'</td><td align="center" width="80">';
-print '<a class="button button-edit" href="'.$self.'?action=create_dolistore_association_thirdparty&token='.$token.'">'.$langs->trans("DolistoreAssociationThirdpartyCreateButton").'</a>';
-print '</td></tr>';
-
-$var = !$var;
-$fieldBillingThirdparty = dolistorextractCaptureFieldHtml(function () use ($form) {
-	return $form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)');
-});
-dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreBillingThirdpartyLabel"), 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', $fieldBillingThirdparty, $self, $token);
-
-	$var=!$var;
-
+	$var = !$var;
 	print '<tr '.$bc[$var].'>';
 	print '<td>'.$langs->trans('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER').'</td>';
 	print '<td align="center">&nbsp;</td>';
@@ -411,40 +401,52 @@ dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreBillingThirdpar
 	print ajax_constantonoff('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER');
 	print '</form></div>';
 	print '</td></tr>';
-
-$var = !$var;
-$fieldCommission = '<input type="text" class="text flat" name="constvalue" value="' . dol_escape_htmltag(getDolGlobalString('DOLISTOREXTRACT_COMMISSION_PERCENT')) .'" placeholder="0"><span class="opacitymedium"> %</span>';
-dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreCommissionPercentLabel"), 'DOLISTOREXTRACT_COMMISSION_PERCENT', $fieldCommission, $self, $token);
-
-$var=!$var;
-$arrayUnmappedServicePolicy = array(
-	'abandon' => $langs->trans("DolistoreUnmappedPolicyAbandon"),
-	'create' => $langs->trans("DolistoreUnmappedPolicyCreate")
-);
-$selectedUnmappedPolicy = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY');
-if (!in_array($selectedUnmappedPolicy, array('abandon', 'create'), true)) {
-	$selectedUnmappedPolicy = 'abandon';
 }
-$fieldPolicy = $form->selectarray('constvalue', $arrayUnmappedServicePolicy, $selectedUnmappedPolicy);
-dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreUnmappedPolicyLabel"), 'DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY', $fieldPolicy, $self, $token);
 
-$var=!$var;
-$arrayUnmappedServiceBehavior = array(
-	'block' => $langs->trans("DolistoreUnmappedBehaviorBlock"),
-	'skip' => $langs->trans("DolistoreUnmappedBehaviorSkip"),
-	'manual' => $langs->trans("DolistoreUnmappedBehaviorManual")
-);
-$selectedUnmappedBehavior = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR');
-if (!in_array($selectedUnmappedBehavior, array('block', 'skip', 'manual'), true)) {
-	$selectedUnmappedBehavior = 'manual';
-}
-$fieldBehavior = $form->selectarray('constvalue', $arrayUnmappedServiceBehavior, $selectedUnmappedBehavior);
-dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreUnmappedBehaviorLabel"), 'DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR', $fieldBehavior, $self, $token);
+if ($mode === 'settings') {
+	$var = !$var;
+	print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreAssociationThirdpartyLabel").'</td><td>'.$langs->trans("DolistoreAssociationThirdpartyDataHint").'</td><td align="center" width="80">';
+	print '<a class="button button-edit" href="'.$self.'?action=create_dolistore_association_thirdparty&token='.$token.'">'.$langs->trans("DolistoreAssociationThirdpartyCreateButton").'</a>';
+	print '</td></tr>';
 
-$var = !$var;
-$fieldUserForActions = $form->select_dolusers(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'), 'constvalue');
-dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractUserForActions"), 'DOLISTOREXTRACT_USER_FOR_ACTIONS', $fieldUserForActions, $self, $token);
+	$var = !$var;
+	$fieldBillingThirdparty = dolistorextractCaptureFieldHtml(function () use ($form) {
+		return $form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)');
+	});
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreBillingThirdpartyLabel"), 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', $fieldBillingThirdparty, $self, $token);
 
+	$var = !$var;
+	$fieldCommission = '<input type="text" class="text flat" name="constvalue" value="' . dol_escape_htmltag(getDolGlobalString('DOLISTOREXTRACT_COMMISSION_PERCENT')) .'" placeholder="0"><span class="opacitymedium"> %</span>';
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreCommissionPercentLabel"), 'DOLISTOREXTRACT_COMMISSION_PERCENT', $fieldCommission, $self, $token);
+
+	$var=!$var;
+	$arrayUnmappedServicePolicy = array(
+		'abandon' => $langs->trans("DolistoreUnmappedPolicyAbandon"),
+		'create' => $langs->trans("DolistoreUnmappedPolicyCreate")
+	);
+	$selectedUnmappedPolicy = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY');
+	if (!in_array($selectedUnmappedPolicy, array('abandon', 'create'), true)) {
+		$selectedUnmappedPolicy = 'abandon';
+	}
+	$fieldPolicy = $form->selectarray('constvalue', $arrayUnmappedServicePolicy, $selectedUnmappedPolicy);
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreUnmappedPolicyLabel"), 'DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY', $fieldPolicy, $self, $token);
+
+	$var=!$var;
+	$arrayUnmappedServiceBehavior = array(
+		'block' => $langs->trans("DolistoreUnmappedBehaviorBlock"),
+		'skip' => $langs->trans("DolistoreUnmappedBehaviorSkip"),
+		'manual' => $langs->trans("DolistoreUnmappedBehaviorManual")
+	);
+	$selectedUnmappedBehavior = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR');
+	if (!in_array($selectedUnmappedBehavior, array('block', 'skip', 'manual'), true)) {
+		$selectedUnmappedBehavior = 'manual';
+	}
+	$fieldBehavior = $form->selectarray('constvalue', $arrayUnmappedServiceBehavior, $selectedUnmappedBehavior);
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreUnmappedBehaviorLabel"), 'DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR', $fieldBehavior, $self, $token);
+
+	$var = !$var;
+	$fieldUserForActions = $form->select_dolusers(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'), 'constvalue');
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractUserForActions"), 'DOLISTOREXTRACT_USER_FOR_ACTIONS', $fieldUserForActions, $self, $token);
 }
 
 if ($mode === 'emailsimap') {

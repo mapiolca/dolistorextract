@@ -203,3 +203,4 @@ DolistoreAssociationThirdpartyExists=Le tiers Association Dolibarr existe déjà
 DolistoreAssociationThirdpartyCreateError=Impossible de créer le tiers Association Dolibarr.
 DolistoreBillingThirdpartyLabel=Tiers de facturation Dolistore
 DolistorextractEmailsImap = Courriels/IMAP
+DolistorextractCustomerOrders = Commandes client
