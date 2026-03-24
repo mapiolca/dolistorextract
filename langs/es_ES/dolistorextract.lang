@@ -78,3 +78,17 @@ DolistoreAssociationThirdpartyCreated=Tercero Association Dolibarr creado (ID: %
 DolistoreAssociationThirdpartyExists=El tercero Association Dolibarr ya existe (ID: %s).
 DolistoreAssociationThirdpartyCreateError=No se pudo crear el tercero Association Dolibarr.
 DolistoreBillingThirdpartyLabel=Tercero de facturación Dolistore
+
+DolistorextractAbout = Acerca de
+DolistorextractAboutPage = Información sobre el módulo Dolistorextract
+DolistorextractAboutGeneral = Información general
+DolistorextractAboutVersion = Versión
+DolistorextractAboutFamily = Familia
+DolistorextractAboutDescription = Descripción
+DolistorextractAboutMaintainer = Mantenedor
+DolistorextractAboutResources = Recursos
+DolistorextractAboutDocumentation = Documentación
+DolistorextractAboutDocumentationLink = Ver información de licencia
+DolistorextractAboutSupport = Soporte
+DolistorextractAboutSupportValue = Consulte con su contacto técnico
+DolistorextractAboutContact = Contacto
