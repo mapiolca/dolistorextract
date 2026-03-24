@@ -151,6 +151,7 @@ function dolistorextractPrintUpdateRow($rowClass, $label, $constname, $fieldHtml
 
 	$lineid++;
 	$formid = 'dolistorextractsetupform'.$lineid;
+	$fieldHtml = preg_replace('/<select\b/i', '<select data-dolistorextract-select2="1" ', $fieldHtml);
 
 	print '<tr '.$rowClass.'><td>'.$label.'</td><td>';
 	print '<form id="'.$formid.'" action="'.$self.'" method="POST">';
@@ -500,6 +501,20 @@ if ($mode === 'emailsimap') {
 
 print '</table>';
 print '<br>';
+
+print '<script>
+$(document).ready(function () {
+	if (typeof $.fn.select2 === "undefined") return;
+	$("select[data-dolistorextract-select2=\'1\']").each(function () {
+		var $select = $(this);
+		if ($select.hasClass("select2-hidden-accessible")) return;
+		$select.select2({
+			width: "resolve",
+			language: (typeof select2arrayoflanguage === "undefined") ? "en" : select2arrayoflanguage
+		});
+	});
+});
+</script>';
 
 if ($mode === 'emailsimap') {
 	print '<a class="butActions" href="'.$_SERVER['PHP_SELF'].'?mode=emailsimap&action=test_connect">Test IMAP</a>';
