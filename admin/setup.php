@@ -260,7 +260,11 @@ if ($action == 'create_dolistore_association_thirdparty') {
  * View
  */
 $page_name = "DolistorextractSetup";
-llxHeader('', $langs->trans($page_name));
+$pageTitle = $langs->trans($page_name);
+if ($pageTitle === $page_name || strpos($pageTitle, 'mon module') !== false) {
+	$pageTitle = $langs->trans("Setup").' '.$langs->trans("Module500000Name");
+}
+llxHeader('', $pageTitle);
 
 if (!function_exists('imap_open')) {
 	print '<div class="error">Extension IMAP manquante !</div>';
@@ -270,14 +274,12 @@ if (!function_exists('imap_open')) {
 $linkback = '<a href="' . DOL_URL_ROOT . '/admin/modules.php">'
 		. $langs->trans("BackToModuleList") . '</a>';
 
-print load_fiche_titre($langs->trans($page_name), $linkback);
+print load_fiche_titre($pageTitle, $linkback);
 
 // Configuration header
 $head = dolistorextractAdminPrepareHead();
 print dol_get_fiche_head($head, 'settings', $langs->trans("Module500000Name"), -1, "dolistore@dolistorextract");
 // Setup page goes here
-echo $langs->trans("DolistorextractSetupPage");
-
 $form = new Form($db);
 $formmail = new FormMail($db);
 $formcompany = new FormCompany($db);
