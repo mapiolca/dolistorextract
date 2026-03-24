@@ -28,7 +28,7 @@ Module500000Desc = Dolistorextract module description
 #
 # Page d'administration
 #
-DolistorextractSetup = Configuration du module mon module
+DolistorextractSetup = Configuration du module Dolistorextract
 Settings = Réglages
 DolistorextractSetupPage = Page de réglage du module Dolistorextract
 DolistorextractAbout = À propos
@@ -202,3 +202,5 @@ DolistoreAssociationThirdpartyCreated=Tiers Association Dolibarr créé (ID : %s
 DolistoreAssociationThirdpartyExists=Le tiers Association Dolibarr existe déjà (ID : %s).
 DolistoreAssociationThirdpartyCreateError=Impossible de créer le tiers Association Dolibarr.
 DolistoreBillingThirdpartyLabel=Tiers de facturation Dolistore
+DolistorextractEmailsImap = Courriels/IMAP
+DolistorextractCustomerOrders = Commandes client
