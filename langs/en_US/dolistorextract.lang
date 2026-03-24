@@ -193,3 +193,4 @@ DolistoreAssociationThirdpartyCreated=Association Dolibarr thirdparty created (I
 DolistoreAssociationThirdpartyExists=Association Dolibarr thirdparty already exists (ID: %s).
 DolistoreAssociationThirdpartyCreateError=Unable to create Association Dolibarr thirdparty.
 DolistoreBillingThirdpartyLabel=Dolistore billing thirdparty
+DolistorextractEmailsImap = Emails/IMAP
