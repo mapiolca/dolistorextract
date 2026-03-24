@@ -78,3 +78,17 @@ DolistoreAssociationThirdpartyCreated=Association-Dolibarr-Drittpartei erstellt 
 DolistoreAssociationThirdpartyExists=Association-Dolibarr-Drittpartei existiert bereits (ID: %s).
 DolistoreAssociationThirdpartyCreateError=Association-Dolibarr-Drittpartei konnte nicht erstellt werden.
 DolistoreBillingThirdpartyLabel=Dolistore-Abrechnungsdrittpartei
+
+DolistorextractAbout = Über
+DolistorextractAboutPage = Informationen zum Modul Dolistorextract
+DolistorextractAboutGeneral = Allgemeine Informationen
+DolistorextractAboutVersion = Version
+DolistorextractAboutFamily = Familie
+DolistorextractAboutDescription = Beschreibung
+DolistorextractAboutMaintainer = Maintainer
+DolistorextractAboutResources = Ressourcen
+DolistorextractAboutDocumentation = Dokumentation
+DolistorextractAboutDocumentationLink = Lizenzinformationen anzeigen
+DolistorextractAboutSupport = Support
+DolistorextractAboutSupportValue = Wenden Sie sich an Ihren technischen Ansprechpartner
+DolistorextractAboutContact = Kontakt

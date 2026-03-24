@@ -37,6 +37,7 @@ if (file_exists("../../main.inc.php")) {
 
 // Libraries
 require_once DOL_DOCUMENT_ROOT . "/core/lib/admin.lib.php";
+require_once __DIR__ . '/dolistorextract.lib.php';
 require_once DOL_DOCUMENT_ROOT."/core/class/html.formmail.class.php";
 require_once DOL_DOCUMENT_ROOT."/core/class/html.formcompany.class.php";
 require_once DOL_DOCUMENT_ROOT."/categories/class/categorie.class.php";
@@ -239,15 +240,8 @@ $linkback = '<a href="' . DOL_URL_ROOT . '/admin/modules.php">'
 print load_fiche_titre($langs->trans($page_name), $linkback);
 
 // Configuration header
-//$head = dolistorextractAdminPrepareHead();
-/*dol_fiche_head(
-	$head,
-	'settings',
-	$langs->trans("Module500000Name"),
-	0,
-	"dolistorextract@dolistorextract"
-);
-*/
+$head = dolistorextractAdminPrepareHead();
+print dol_get_fiche_head($head, 'settings', $langs->trans("Module500000Name"), -1, "dolistore@dolistorextract");
 // Setup page goes here
 echo $langs->trans("DolistorextractSetupPage");
 
@@ -684,5 +678,5 @@ if ($action == 'test_connect') {
 }
 
 // Page end
-dol_fiche_end();
+print dol_get_fiche_end();
 llxFooter();
