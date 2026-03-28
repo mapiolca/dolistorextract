@@ -40,6 +40,16 @@ function dolistorextractAdminPrepareHead()
 	$head[$h][2] = 'settings';
 	$h++;
 
+	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php?mode=customerorders', 1);
+	$head[$h][1] = $langs->trans("DolistorextractCustomerOrders");
+	$head[$h][2] = 'customerorders';
+	$h++;
+
+	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php?mode=emailsimap', 1);
+	$head[$h][1] = $langs->trans("DolistorextractEmailsImap");
+	$head[$h][2] = 'emailsimap';
+	$h++;
+
 	$head[$h][0] = dol_buildpath('/dolistorextract/admin/about.php', 1);
 	$head[$h][1] = $langs->trans("DolistorextractAbout");
 	$head[$h][2] = 'about';
