@@ -132,7 +132,63 @@ function dolistorextractGetDictionaryOptions($db, $tableName, $labelExpression, 
 	return $options;
 }
 
+/**
+ * Print one update row while keeping form tags inside table cells.
+ *
+ * @param string $rowClass Row class
+ * @param string $label Label
+ * @param string $constname Constant name
+ * @param string $fieldHtml Field html
+ * @param string $self Self URL
+ * @param string $token CSRF token
+ * @param string $extraActionHtml Optional extra html in action cell
+ * @return void
+ */
+function dolistorextractPrintUpdateRow($rowClass, $label, $constname, $fieldHtml, $self, $token, $extraActionHtml = '')
+{
+	global $langs;
+	static $lineid = 0;
 
+	$lineid++;
+	$formid = 'dolistorextractsetupform'.$lineid;
+	$fieldHtml = preg_replace('/<select\b/i', '<select data-dolistorextract-select2="1" ', $fieldHtml);
+
+	print '<tr '.$rowClass.'><td>'.$label.'</td><td>';
+	print '<form id="'.$formid.'" action="'.$self.'" method="POST">';
+	print '<input type="hidden" name="token" value="'.$token.'">';
+	print '<input type="hidden" name="action" value="update">';
+	print '<input type="hidden" name="constname" value="'.$constname.'">';
+	print $fieldHtml;
+	print '</form>';
+	print '</td><td align="center" width="80">';
+	print '<a class="button" href="#" onclick="document.getElementById(\''.$formid.'\').submit(); return false;">'.$langs->trans("Update").'</a>';
+	if (!empty($extraActionHtml)) {
+		print '<br>'.$extraActionHtml;
+	}
+	print '</td></tr>';
+}
+
+/**
+ * Capture HTML printed by Dolibarr form helpers and normalize returned value.
+ *
+ * @param callable $renderer Renderer callback
+ * @return string
+ */
+function dolistorextractCaptureFieldHtml($renderer)
+{
+	ob_start();
+	$returnValue = call_user_func($renderer);
+	$fieldHtml = ob_get_clean();
+
+	if ($fieldHtml !== '') {
+		return $fieldHtml;
+	}
+	if (is_string($returnValue)) {
+		return $returnValue;
+	}
+
+	return '';
+}
 
 /*
  * Actions
@@ -227,7 +283,11 @@ if ($action == 'create_dolistore_association_thirdparty') {
  * View
  */
 $page_name = "DolistorextractSetup";
-llxHeader('', $langs->trans($page_name));
+$pageTitle = $langs->trans($page_name);
+if ($pageTitle === $page_name || strpos($pageTitle, 'mon module') !== false) {
+	$pageTitle = $langs->trans("Setup").' '.$langs->trans("Module500000Name");
+}
+llxHeader('', $pageTitle);
 
 if (!function_exists('imap_open')) {
 	print '<div class="error">Extension IMAP manquante !</div>';
@@ -237,31 +297,36 @@ if (!function_exists('imap_open')) {
 $linkback = '<a href="' . DOL_URL_ROOT . '/admin/modules.php">'
 		. $langs->trans("BackToModuleList") . '</a>';
 
-print load_fiche_titre($langs->trans($page_name), $linkback);
+print load_fiche_titre($pageTitle, $linkback);
 
 // Configuration header
 $head = dolistorextractAdminPrepareHead();
-print dol_get_fiche_head($head, 'settings', $langs->trans("Module500000Name"), -1, "dolistore@dolistorextract");
 // Setup page goes here
-echo $langs->trans("DolistorextractSetupPage");
-
-$form=new Form($db);
-$formmail=new FormMail($db);
+$form = new Form($db);
+$formmail = new FormMail($db);
 $formcompany = new FormCompany($db);
+$self = $_SERVER['PHP_SELF'];
+$token = $_SESSION['newtoken'];
+$mode = GETPOST('mode', 'aZ09');
+if (!in_array($mode, array('settings', 'customerorders', 'emailsimap'), true)) {
+	$mode = 'settings';
+}
 
+print dol_get_fiche_head($head, $mode, $langs->trans("Module500000Name"), -1, "dolistore@dolistorextract");
 print '<table class="noborder" width="100%">';
 print '<tr class="liste_titre">';
 print '<td>'.$langs->trans("Description").'</td>';
 print '<td>'.$langs->trans("Value").'</td>';
 print '<td align="center">'.$langs->trans("Action").'</td>';
 print "</tr>\n";
-$var=true;
+$var = true;
 
-$availabilityOptions = dolistorextractGetDictionaryOptions($db, 'c_availability', 'label');
-$shippingMethodOptions = dolistorextractGetDictionaryOptions($db, 'c_shipment_mode', 'label');
-$originOptions = dolistorextractGetDictionaryOptions($db, 'c_input_reason', 'label');
-$condReglementOptions = dolistorextractGetDictionaryOptions($db, 'c_payment_term', 'libelle');
-$modeReglementOptions = dolistorextractGetDictionaryOptions($db, 'c_paiement', 'libelle');
+if ($mode === 'customerorders') {
+	$availabilityOptions = dolistorextractGetDictionaryOptions($db, 'c_availability', 'label');
+	$shippingMethodOptions = dolistorextractGetDictionaryOptions($db, 'c_shipment_mode', 'label');
+	$originOptions = dolistorextractGetDictionaryOptions($db, 'c_input_reason', 'label');
+	$condReglementOptions = dolistorextractGetDictionaryOptions($db, 'c_payment_term', 'libelle');
+	$modeReglementOptions = dolistorextractGetDictionaryOptions($db, 'c_paiement', 'libelle');
 
 $bankAccountOptions = array(0 => '');
 $sqlBankAccount = 'SELECT rowid, CONCAT(ref, " - ", label) as label';
@@ -291,367 +356,170 @@ if ($resqlOrderCategories) {
 }
 $selectedOrderCategories = array_filter(array_map('intval', preg_split('/[,; ]+/', (string) getDolGlobalString('DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES'))));
 
-// IMAP server
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultAvailabilityIdLabel").'</td><td>';
-if (method_exists($formcompany, 'selectAvailabilityDelay')) {
-	print $formcompany->selectAvailabilityDelay(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'), 'constvalue', '', 1);
-} else {
-	print $form->selectarray('constvalue', $availabilityOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'));
+$selectRows = array();
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID', $langs->trans('DolistoreDefaultAvailabilityIdLabel'), dolistorextractCaptureFieldHtml(function () use ($formcompany, $form, $availabilityOptions) {
+	return method_exists($formcompany, 'selectAvailabilityDelay') ? $formcompany->selectAvailabilityDelay(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'), 'constvalue', '', 1) : $form->selectarray('constvalue', $availabilityOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID'));
+}));
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID', $langs->trans('DolistoreDefaultShippingMethodIdLabel'), dolistorextractCaptureFieldHtml(function () use ($form, $shippingMethodOptions) {
+	return method_exists($form, 'selectShippingMethod') ? $form->selectShippingMethod(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'), 'constvalue', 1, '', 0, 1) : $form->selectarray('constvalue', $shippingMethodOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'));
+}));
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID', $langs->trans('DolistoreDefaultInputReasonIdLabel'), dolistorextractCaptureFieldHtml(function () use ($formcompany, $form, $originOptions) {
+	return method_exists($formcompany, 'selectInputReason') ? $formcompany->selectInputReason(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'), 'constvalue', '', 1) : $form->selectarray('constvalue', $originOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'));
+}));
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID', $langs->trans('DolistoreDefaultCondReglementIdLabel'), dolistorextractCaptureFieldHtml(function () use ($form, $condReglementOptions) {
+	return method_exists($form, 'select_conditions_paiements') ? $form->select_conditions_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'), 'constvalue') : $form->selectarray('constvalue', $condReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'));
+}));
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID', $langs->trans('DolistoreDefaultModeReglementIdLabel'), dolistorextractCaptureFieldHtml(function () use ($form, $modeReglementOptions) {
+	return method_exists($form, 'select_types_paiements') ? $form->select_types_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'), 'constvalue') : $form->selectarray('constvalue', $modeReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'));
+}));
+$selectRows[] = array('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID', $langs->trans('DolistoreDefaultBankAccountIdLabel'), dolistorextractCaptureFieldHtml(function () use ($form, $bankAccountOptions) {
+	return method_exists($form, 'select_comptes') ? $form->select_comptes(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'), 'constvalue', 0, '', 1) : $form->selectarray('constvalue', $bankAccountOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'));
+}));
+
+foreach ($selectRows as $row) {
+	$var = !$var;
+	dolistorextractPrintUpdateRow($bc[$var], $row[1], $row[0], $row[2], $self, $token);
 }
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
 
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultShippingMethodIdLabel").'</td><td>';
-if (method_exists($form, 'selectShippingMethod')) {
-	print $form->selectShippingMethod(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'), 'constvalue', 1, '', 0, 1);
-} else {
-	print $form->selectarray('constvalue', $shippingMethodOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID'));
+$var = !$var;
+$fieldCategories = '<span class="fas fa-tag pictofixedwidth"></span><span class="multiselectarraycategories">';
+$fieldCategories .= '<input type="hidden" name="categories_multiselect" value="1">';
+$fieldCategories .= dolistorextractCaptureFieldHtml(function () use ($form, $orderCategoryOptions, $selectedOrderCategories) {
+	return $form->multiselectarray('categories', $orderCategoryOptions, $selectedOrderCategories, '', 0, 'minwidth100 widthcentpercentminusxx');
+});
+	$fieldCategories .= '</span>';
+	$extraCategoryAction = '<a class="button button-edit" href="'.$self.'?action=create_dolistore_order_category&token='.$token.'">'.$langs->trans("DolistoreCreateOrderCategoryButton").'</a>';
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreDefaultOrderCategoriesLabel"), 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES', $fieldCategories, $self, $token, $extraCategoryAction);
+
+	$var = !$var;
+	print '<tr '.$bc[$var].'>';
+	print '<td>'.$langs->trans('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER').'</td>';
+	print '<td align="center">&nbsp;</td>';
+	print '<td align="right">';
+	print '<div class="notopnoleft"><form method="POST" action="'.$self.'">';
+	print '<input type="hidden" name="token" value="'.$token.'">';
+	print '<input type="hidden" name="action" value="set_DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER">';
+	print ajax_constantonoff('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER');
+	print '</form></div>';
+	print '</td></tr>';
 }
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
 
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultInputReasonIdLabel").'</td><td>';
-if (method_exists($formcompany, 'selectInputReason')) {
-	print $formcompany->selectInputReason(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'), 'constvalue', '', 1);
-} else {
-	print $form->selectarray('constvalue', $originOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID'));
-}
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+if ($mode === 'settings') {
+	$var = !$var;
+	print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreAssociationThirdpartyLabel").'</td><td>'.$langs->trans("DolistoreAssociationThirdpartyDataHint").'</td><td align="center" width="80">';
+	print '<a class="button button-edit" href="'.$self.'?action=create_dolistore_association_thirdparty&token='.$token.'">'.$langs->trans("DolistoreAssociationThirdpartyCreateButton").'</a>';
+	print '</td></tr>';
 
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultCondReglementIdLabel").'</td><td>';
-if (method_exists($form, 'select_conditions_paiements')) {
-	print $form->select_conditions_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'), 'constvalue');
-} else {
-	print $form->selectarray('constvalue', $condReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID'));
-}
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+	$var = !$var;
+	$fieldBillingThirdparty = dolistorextractCaptureFieldHtml(function () use ($form) {
+		return $form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)');
+	});
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreBillingThirdpartyLabel"), 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', $fieldBillingThirdparty, $self, $token);
 
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultModeReglementIdLabel").'</td><td>';
-if (method_exists($form, 'select_types_paiements')) {
-	print $form->select_types_paiements(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'), 'constvalue');
-} else {
-	print $form->selectarray('constvalue', $modeReglementOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID'));
-}
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+	$var = !$var;
+	$fieldCommission = '<input type="text" class="text flat" name="constvalue" value="' . dol_escape_htmltag(getDolGlobalString('DOLISTOREXTRACT_COMMISSION_PERCENT')) .'" placeholder="0"><span class="opacitymedium"> %</span>';
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreCommissionPercentLabel"), 'DOLISTOREXTRACT_COMMISSION_PERCENT', $fieldCommission, $self, $token);
 
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultBankAccountIdLabel").'</td><td>';
-if (method_exists($form, 'select_comptes')) {
-	print $form->select_comptes(getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'), 'constvalue', 0, '', 1);
-} else {
-	print $form->selectarray('constvalue', $bankAccountOptions, getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID'));
-}
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreDefaultOrderCategoriesLabel").'</td><td>';
-print '<span class="fas fa-tag pictofixedwidth"></span>';
-print '<span class="multiselectarraycategories">';
-print '<input type="hidden" name="categories_multiselect" value="1">';
-print $form->multiselectarray('categories', $orderCategoryOptions, $selectedOrderCategories, '', 0, 'minwidth100 widthcentpercentminusxx');
-print '</span>';
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print '<br>';
-print '<a class="button button-edit" href="'.$_SERVER['PHP_SELF'].'?action=create_dolistore_order_category&token='.$_SESSION['newtoken'].'">'.$langs->trans("DolistoreCreateOrderCategoryButton").'</a>';
-print "</td></tr>\n";
-print '</form>';
-
-$var=!$var;
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreAssociationThirdpartyLabel").'</td><td>';
-print $langs->trans("DolistoreAssociationThirdpartyDataHint");
-print '</td><td align="center" width="80">';
-print '<a class="button button-edit" href="'.$_SERVER['PHP_SELF'].'?action=create_dolistore_association_thirdparty&token='.$_SESSION['newtoken'].'">'.$langs->trans("DolistoreAssociationThirdpartyCreateButton").'</a>';
-print '</td></tr>';
-
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_BILLING_THIRDPARTY_ID">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreBillingThirdpartyLabel").'</td><td>';
-print $form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)');
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_IMAP_SERVER">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractImapServer").'</td><td>';
-print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_IMAP_SERVER') .'" />';
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-// IMAP server port
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_IMAP_SERVER_PORT">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractImapServerPort").'</td><td>';
-print '<input type="input" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_IMAP_SERVER_PORT') .'" />';
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-// Imap User
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_IMAP_USER">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractImapUser").'</td><td>';
-print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_IMAP_USER') .'" />';
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-// IMAP password
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_IMAP_PWD">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractImapPassword").'</td><td>';
-print '<input type="password" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_IMAP_PWD') .'" />';
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-
-
-// IMAP FOLDER
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_IMAP_FOLDER">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractImapFolder").'</td><td>';
-print '<input type="input" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER') .'" placeholder="INBOX" />';
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-
-// IMAP FOLDER ARCHIVE
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractImapFolderArchive").'</td><td>';
-print '<input type="input" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE') .'"  placeholder="INBOX/ARCHIVES" />';
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-// IMAP FOLDER ERROR
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_IMAP_FOLDER_ERROR">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractImapFolderError").'</td><td>';
-print '<input type="input" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_IMAP_FOLDER_ERROR') .'" placeholder="INBOX/ERRORS" />';
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-$var=!$var;
-
-print '<tr '.$bc[$var].'>';
-print '<td>'.$langs->trans('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU').'</td>';
-print '<td align="center">&nbsp;</td>';
-print '<td align="right">';
-print '<div class="notopnoleft"><form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="set_DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU">';
-print ajax_constantonoff('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU');
-print '</form></div>';
-print '</td></tr>';
-
-$var=!$var;
-
-print '<tr '.$bc[$var].'>';
-print '<td>'.$langs->trans('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER').'</td>';
-print '<td align="center">&nbsp;</td>';
-print '<td align="right">';
-print '<div class="notopnoleft"><form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="set_DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER">';
-print ajax_constantonoff('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER');
-print '</form></div>';
-print '</td></tr>';
-
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_COMMISSION_PERCENT">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreCommissionPercentLabel").'</td><td>';
-print '<input type="text" class="text flat" name="constvalue" value="' . getDolGlobalString('DOLISTOREXTRACT_COMMISSION_PERCENT') .'" placeholder="0">';
-print '<span class="opacitymedium"> %</span>';
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-$var=!$var;
-$arrayUnmappedServicePolicy = array(
-	'abandon' => $langs->trans("DolistoreUnmappedPolicyAbandon"),
-	'create' => $langs->trans("DolistoreUnmappedPolicyCreate")
-);
-$selectedUnmappedPolicy = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY');
-if (!in_array($selectedUnmappedPolicy, array('abandon', 'create'), true)) {
-	$selectedUnmappedPolicy = 'abandon';
-}
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreUnmappedPolicyLabel").'</td><td>';
-print $form->selectarray('constvalue', $arrayUnmappedServicePolicy, $selectedUnmappedPolicy);
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-$var=!$var;
-$arrayUnmappedServiceBehavior = array(
-	'block' => $langs->trans("DolistoreUnmappedBehaviorBlock"),
-	'skip' => $langs->trans("DolistoreUnmappedBehaviorSkip"),
-	'manual' => $langs->trans("DolistoreUnmappedBehaviorManual")
-);
-$selectedUnmappedBehavior = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR');
-if (!in_array($selectedUnmappedBehavior, array('block', 'skip', 'manual'), true)) {
-	$selectedUnmappedBehavior = 'manual';
-}
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreUnmappedBehaviorLabel").'</td><td>';
-print $form->selectarray('constvalue', $arrayUnmappedServiceBehavior, $selectedUnmappedBehavior);
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-
-// User for actions
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_USER_FOR_ACTIONS">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractUserForActions").'</td><td>';
-print $form->select_dolusers(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'), 'constvalue');
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
-
-// Search email template
-$arrayTemplates = array();
-$ret = $formmail->fetchAllEMailTemplate('dolistore_extract', $user, $langs);
-if ($ret > 0) {
-	foreach ($formmail->lines_model as $modelEmail) {
-		$arrayTemplates[$modelEmail->id] = $modelEmail->label;
+	$var=!$var;
+	$arrayUnmappedServicePolicy = array(
+		'abandon' => $langs->trans("DolistoreUnmappedPolicyAbandon"),
+		'create' => $langs->trans("DolistoreUnmappedPolicyCreate")
+	);
+	$selectedUnmappedPolicy = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY');
+	if (!in_array($selectedUnmappedPolicy, array('abandon', 'create'), true)) {
+		$selectedUnmappedPolicy = 'abandon';
 	}
+	$fieldPolicy = $form->selectarray('constvalue', $arrayUnmappedServicePolicy, $selectedUnmappedPolicy);
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreUnmappedPolicyLabel"), 'DOLISTOREXTRACT_UNMAPPED_SERVICE_POLICY', $fieldPolicy, $self, $token);
+
+	$var=!$var;
+	$arrayUnmappedServiceBehavior = array(
+		'block' => $langs->trans("DolistoreUnmappedBehaviorBlock"),
+		'skip' => $langs->trans("DolistoreUnmappedBehaviorSkip"),
+		'manual' => $langs->trans("DolistoreUnmappedBehaviorManual")
+	);
+	$selectedUnmappedBehavior = getDolGlobalString('DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR');
+	if (!in_array($selectedUnmappedBehavior, array('block', 'skip', 'manual'), true)) {
+		$selectedUnmappedBehavior = 'manual';
+	}
+	$fieldBehavior = $form->selectarray('constvalue', $arrayUnmappedServiceBehavior, $selectedUnmappedBehavior);
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreUnmappedBehaviorLabel"), 'DOLISTOREXTRACT_UNMAPPED_SERVICE_BEHAVIOR', $fieldBehavior, $self, $token);
+
+	$var = !$var;
+	$fieldUserForActions = $form->select_dolusers(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'), 'constvalue');
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractUserForActions"), 'DOLISTOREXTRACT_USER_FOR_ACTIONS', $fieldUserForActions, $self, $token);
 }
 
-// FR email template
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_EMAIL_TEMPLATE_FR">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractEmailTemplateFr").'</td><td>';
-print $form->selectarray('constvalue', $arrayTemplates, getDolGlobalString('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR'));
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+if ($mode === 'emailsimap') {
+	$textConstants = array(
+		array('DOLISTOREXTRACT_IMAP_SERVER', 'DolistorExtractImapServer', 'text', ''),
+		array('DOLISTOREXTRACT_IMAP_SERVER_PORT', 'DolistorExtractImapServerPort', 'text', ''),
+		array('DOLISTOREXTRACT_IMAP_USER', 'DolistorExtractImapUser', 'text', ''),
+		array('DOLISTOREXTRACT_IMAP_PWD', 'DolistorExtractImapPassword', 'password', ''),
+		array('DOLISTOREXTRACT_IMAP_FOLDER', 'DolistorExtractImapFolder', 'text', 'INBOX'),
+		array('DOLISTOREXTRACT_IMAP_FOLDER_ARCHIVE', 'DolistorExtractImapFolderArchive', 'text', 'INBOX/ARCHIVES'),
+		array('DOLISTOREXTRACT_IMAP_FOLDER_ERROR', 'DolistorExtractImapFolderError', 'text', 'INBOX/ERRORS')
+	);
+	foreach ($textConstants as $textDefinition) {
+		$var = !$var;
+		$fieldText = '<input type="'.$textDefinition[2].'" class="text flat" name="constvalue" value="'.dol_escape_htmltag(getDolGlobalString($textDefinition[0])).'"';
+		if (!empty($textDefinition[3])) {
+			$fieldText .= ' placeholder="'.$textDefinition[3].'"';
+		}
+		$fieldText .= '>';
+		dolistorextractPrintUpdateRow($bc[$var], $langs->trans($textDefinition[1]), $textDefinition[0], $fieldText, $self, $token);
+	}
 
-// EN email template
-$var=!$var;
-print '<form action="'.$_SERVER["PHP_SELF"].'" method="POST">';
-print '<input type="hidden" name="token" value="'.$_SESSION['newtoken'].'">';
-print '<input type="hidden" name="action" value="update">';
-print '<input type="hidden" name="constname" value="DOLISTOREXTRACT_EMAIL_TEMPLATE_EN">';
-print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistorExtractEmailTemplateEn").'</td><td>';
-print $form->selectarray('constvalue', $arrayTemplates, getDolGlobalString('DOLISTOREXTRACT_EMAIL_TEMPLATE_EN'));
-print '</td><td align="center" width="80">';
-print '<input type="submit" class="button" value="'.$langs->trans("Update").'" name="Button">';
-print "</td></tr>\n";
-print '</form>';
+	$var=!$var;
+	print '<tr '.$bc[$var].'>';
+	print '<td>'.$langs->trans('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU').'</td>';
+	print '<td align="center">&nbsp;</td>';
+	print '<td align="right">';
+	print '<div class="notopnoleft"><form method="POST" action="'.$self.'">';
+	print '<input type="hidden" name="token" value="'.$token.'">';
+	print '<input type="hidden" name="action" value="set_DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU">';
+	print ajax_constantonoff('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU');
+	print '</form></div>';
+	print '</td></tr>';
 
+	$arrayTemplates = array();
+	$ret = $formmail->fetchAllEMailTemplate('dolistore_extract', $user, $langs);
+	if ($ret > 0) {
+		foreach ($formmail->lines_model as $modelEmail) {
+			$arrayTemplates[$modelEmail->id] = $modelEmail->label;
+		}
+	}
 
+	$var = !$var;
+	$fieldTemplateFr = $form->selectarray('constvalue', $arrayTemplates, getDolGlobalString('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR'));
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractEmailTemplateFr"), 'DOLISTOREXTRACT_EMAIL_TEMPLATE_FR', $fieldTemplateFr, $self, $token);
+
+	$var = !$var;
+	$fieldTemplateEn = $form->selectarray('constvalue', $arrayTemplates, getDolGlobalString('DOLISTOREXTRACT_EMAIL_TEMPLATE_EN'));
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractEmailTemplateEn"), 'DOLISTOREXTRACT_EMAIL_TEMPLATE_EN', $fieldTemplateEn, $self, $token);
+}
+
+print '<tr class="liste_total"><td colspan="3"></td></tr>';
 print '</table>';
 print '<br>';
 
-print '<a class="butActions" href="'.$_SERVER['PHP_SELF'].'?action=test_connect">Test IMAP</a>';
+print '<script>
+$(document).ready(function () {
+	if (typeof $.fn.select2 === "undefined") return;
+	$("select[data-dolistorextract-select2=\'1\']").each(function () {
+		var $select = $(this);
+		if ($select.hasClass("select2-hidden-accessible")) return;
+		$select.select2({
+			width: "resolve",
+			language: (typeof select2arrayoflanguage === "undefined") ? "en" : select2arrayoflanguage
+		});
+	});
+});
+</script>';
+
+if ($mode === 'emailsimap') {
+	print '<a class="butActions" href="'.$_SERVER['PHP_SELF'].'?mode=emailsimap&action=test_connect">Test IMAP</a>';
+}
 
 
 if ($action == 'test_connect') {
