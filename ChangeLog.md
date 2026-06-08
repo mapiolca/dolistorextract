@@ -1,7 +1,12 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
-
+- NEW : V2 archive workflow for DoliStore orders.
+    + Added `Commande DoliStore` business object, lines, invoice batches and import journal tables.
+    + IMAP import now archives DoliStore orders instead of creating native customer orders.
+    + Added monthly native customer invoice generation to the configured DoliStore thirdparty.
+    + Added dashboard, order list/card tabs, mail source storage as attached `.eml`, compatibility settings page and granular permissions.
+    + Added Multicompany sharing declaration and environment-aware order lists.
 
 ## Release 1.6
 - FIX : Missing email in company and contact  - 1.6.4 - *18/12/2025* 

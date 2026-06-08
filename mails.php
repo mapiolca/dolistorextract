@@ -49,6 +49,7 @@ include_once(DOL_DOCUMENT_ROOT.'/product/class/product.class.php');
 include_once 'class/actions_dolistorextract.class.php';
 include_once 'class/dolistoreMail.class.php';
 include_once 'class/dolistoreMailExtract.class.php';
+include_once 'lib/dolistoreextract.lib.php';
 
 dol_include_once("/dolistorextract/include/ssilence/php-imap-client/autoload.php");
 
@@ -97,12 +98,14 @@ $cancel     = GETPOST('cancel');
 $view       = GETPOST('view');
 $nativeImportLog = '';
 
-
+if (in_array($action, array('manual_create_service', 'manual_link_service', 'import', 'importnative'), true) && GETPOST('token', 'alphanohtml') === '') {
+	accessforbidden('Invalid token');
+}
 
 if (empty($action) && empty($id) && empty($ref)) $action='view';
 
 // Protection if external user
-if ($user->societe_id > 0 || ! $user->hasRight('dolistorextract', 'read'))
+if ($user->societe_id > 0 || !dolistoreextractUserHasRight($user, 'order', 'read'))
 {
 	accessforbidden();
 }
@@ -182,6 +185,9 @@ if (!$imap) {
  * Import des données du message
  */
 if ($action == 'import' || $action == 'importnative') {
+	if (!dolistoreextractUserHasRight($user, 'order', 'import')) {
+		accessforbidden();
+	}
 	$imap->selectFolder($mailFolder);
 	$messageId = dolistorextractResolveMessageId($imap, $id, $uid);
 	if ($messageId <= 0) {
@@ -189,9 +195,10 @@ if ($action == 'import' || $action == 'importnative') {
 		$action = 'view';
 	} else {
 		$email = $imap->getMessage($messageId);
+		$email->dolistoreextract_folder = $mailFolder;
 		$res = $dolistorextractActions->launchImportProcess(array($email));
 		$nativeImportLog = $dolistorextractActions->logOutput;
-		setEventMessages($langs->trans("DolistoreNativeImportDone"), null, 'mesgs');
+		setEventMessages($langs->trans("DolistoreArchiveImportDone"), null, 'mesgs');
 		$action = 'read';
 		$id = $messageId;
 	}
@@ -317,25 +324,7 @@ if ($action == 'read') {
 	print '<br />';
 	print 'Langue du mail : '.$langEmail;
 
-	// EN template by default
-	$idTemplate = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_EN');
-	if(preg_match('/fr.*/', $langEmail)) {
-		$idTemplate = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR');
-	}
-	$usedTemplate = $formMail->getEMailTemplate($db, 'dolistore_extract', $user, $langs, $idTemplate);
-	$listProductString = implode(', ', $listProduct);
-	$arraySubstitutionDolistore = [
-			'__DOLISTORE_ORDER_NAME__' => $dolistoreMail->order_name,
-			'__DOLISTORE_INVOICE_FIRSTNAME__' => $dolistoreMail->buyer_firstname,
-			'__DOLISTORE_BUYER_COMPANY__' => $dolistoreMail->buyer_company,
-			'__DOLISTORE_INVOICE_LASTNAME__' => $dolistoreMail->buyer_lastname,
-	        '__DOLISTORE_LIST_PRODUCTS__' => $listProductString
-	];
-
-	$subject=make_substitutions($usedTemplate->topic, $arraySubstitutionDolistore);
-	$message=make_substitutions($usedTemplate->content, $arraySubstitutionDolistore);
-	print '<br />Sujet du mail : '.$subject;
-	print '<br />Texte du mail : '.$message;
+	print '<br /><span class="opacitymedium">'.$langs->trans("DolistoreFinalCustomerEmailObsolete").'</span>';
 
 	print '<strong>Données extraites</strong><br/>';
 	print '<pre>';
@@ -350,10 +339,10 @@ if ($action == 'read') {
 
 	print '<div class="center">';
 	// TODO: check if already imported
-		print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=importnative&id=' . ((int) $id) . '&folder=' . urlencode($mailFolder) . '">'.$langs->trans("DolistoreManualNativeImport").'</a>';
+		print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=importnative&id=' . ((int) $id) . '&folder=' . urlencode($mailFolder) . '&token='.newToken().'">'.$langs->trans("DolistoreManualArchiveImport").'</a>';
 
 
-	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'">Fermer</a>';
+	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'">'.$langs->trans("Close").'</a>';
 
 	print '</div>';
 	}

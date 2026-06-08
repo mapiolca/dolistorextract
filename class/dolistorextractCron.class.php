@@ -24,6 +24,7 @@ class dolistorextractCron
 {
 
 	public $db;
+	public $output = '';
 	/**
 	 * Constructor
 	 *
@@ -43,7 +44,7 @@ class dolistorextractCron
 
 		global $conf, $langs, $db;
 
-		require_once 'actions_dolistorextract.class.php';
+		require_once __DIR__.'/actions_dolistorextract.class.php';
 
 		$dolistorextractActions = new \ActionsDolistorextract($this->db);
 		$res = $dolistorextractActions->launchCronJob();
@@ -68,5 +69,64 @@ class dolistorextractCron
 			$this->output.= '<br/>' . $res . ' ventes traitée(s)';
 			return 0;
 		}
+	}
+
+	/**
+	 * Run DoliStore monthly invoice generation.
+	 *
+	 * @return int 0 if OK, <0 if KO
+	 */
+	public function runInvoice() : int
+	{
+		global $langs;
+
+		require_once DOL_DOCUMENT_ROOT.'/user/class/user.class.php';
+		require_once __DIR__.'/actions_dolistorextract.class.php';
+
+		$user = new User($this->db);
+		$userId = getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS');
+		if ($userId <= 0) {
+			$userId = 1;
+		}
+		if ($user->fetch($userId) <= 0) {
+			$this->output .= 'Unable to load DoliStore action user';
+			return -1;
+		}
+		$user->getrights();
+
+		$dolistorextractActions = new \ActionsDolistorextract($this->db);
+		$res = $dolistorextractActions->generateMonthlyDolistoreInvoice($user);
+		$this->output .= $dolistorextractActions->logOutput;
+
+		if ($res < 0) {
+			if (!empty($dolistorextractActions->error)) {
+				$this->output .= '<br/>'.$dolistorextractActions->error;
+			}
+			if (!empty($dolistorextractActions->errors) && is_array($dolistorextractActions->errors)) {
+				$this->output .= '<br/>'.implode('<br/>', $dolistorextractActions->errors);
+			}
+			return -1;
+		}
+
+		$this->output .= '<br/>'.($res > 0 ? $langs->trans('DolistoreInvoiceGenerated', $res) : $langs->trans('DolistoreInvoiceNothingToDo'));
+		return 0;
+	}
+
+	/**
+	 * Run optional daily notification.
+	 *
+	 * @return int
+	 */
+	public function runDailyNotification() : int
+	{
+		global $langs;
+
+		if (!getDolGlobalInt('DOLISTOREXTRACT_DAILY_NOTIFICATION_ENABLED')) {
+			$this->output .= $langs->trans('DolistoreDailyNotificationDisabled');
+			return 0;
+		}
+
+		$this->output .= $langs->trans('DolistoreDailyNotificationNotImplemented');
+		return 0;
 	}
 }
