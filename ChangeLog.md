@@ -1,6 +1,7 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Replace monthly dashboard summary tables with native Dolibarr line graphs.
 - FIX : Align DoliStore business list tables and order lines with native Dolibarr table rendering.
 - FIX : Prevent DoliStore order cards from trying to load a missing PDF document model.
 - FIX : Display DoliStore orders still pending in the configured mailbox from the archived order list.

@@ -9,6 +9,7 @@ if (!$res) die('Include of main fails');
 require_once __DIR__.'/class/dolistoreOrder.class.php';
 require_once __DIR__.'/lib/dolistoreextract.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
+require_once DOL_DOCUMENT_ROOT.'/core/class/dolgraph.class.php';
 
 $langs->loadLangs(array('dolistorextract@dolistorextract', 'bills'));
 if (!isModEnabled('dolistorextract') || !dolistoreextractUserHasRight($user, 'order', 'read')) accessforbidden();
@@ -73,6 +74,50 @@ function dolistoreextractScalar($db, $sql)
 	return $obj ? (float) $obj->v : 0;
 }
 
+function dolistoreextractMonthlyGraphData($db, $sql, $valuefield)
+{
+	$data = array();
+	$resql = $db->query($sql);
+	if (!$resql) {
+		dol_print_error($db);
+		return $data;
+	}
+
+	while ($obj = $db->fetch_object($resql)) {
+		$data[] = array($obj->period, (float) $obj->{$valuefield});
+	}
+	$db->free($resql);
+
+	return array_reverse($data);
+}
+
+function dolistoreextractPrintLineGraph($title, $legend, $data, $graphid)
+{
+	global $langs;
+
+	$dolgraph = new DolGraph();
+	$dolgraph->setWidth('100%');
+	$dolgraph->setHeight('220');
+	$dolgraph->setShowLegend(0);
+
+	print '<table class="noborder nohover centpercent">';
+	print '<tr class="liste_titre"><th>'.$title.'</th></tr>';
+	print '<tr class="oddeven"><td class="center">';
+	if (!empty($data)) {
+		$dolgraph->SetData($data);
+		$dolgraph->SetLegend(array($legend));
+		$dolgraph->SetType(array('lines'));
+		$dolgraph->SetMinValue(0);
+		$dolgraph->SetMaxValue(max(1, $dolgraph->GetCeilMaxValue()));
+		$dolgraph->draw($graphid);
+		print $dolgraph->show();
+	} else {
+		print $dolgraph->show($langs->trans('NoRecordFound'));
+	}
+	print '</td></tr>';
+	print '</table>';
+}
+
 $ordersMonth = dolistoreextractScalar($db, 'SELECT COUNT(rowid) as v FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere." AND dolistore_order_date >= '".$db->escape($monthStart)."'");
 $amountMonth = dolistoreextractScalar($db, 'SELECT SUM(total_ht) as v FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere." AND dolistore_order_date >= '".$db->escape($monthStart)."'");
 $amountInvoiceable = dolistoreextractScalar($db, 'SELECT SUM(billable_total_ht) as v FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere.' AND fk_facture IS NULL AND release_date <= \''.dol_print_date(dol_now(), '%Y-%m-%d').'\'');
@@ -126,23 +171,13 @@ foreach ($cards as $card) {
 print '</div><br>';
 
 print '<div class="fichecenter"><div class="fichehalfleft">';
-print '<table class="noborder centpercent"><tr class="liste_titre"><th colspan="3">'.$langs->trans('DolistoreOrdersByMonth').'</th></tr>';
 $sql = 'SELECT DATE_FORMAT(dolistore_order_date, "%Y-%m") as period, COUNT(rowid) as nb FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere.' GROUP BY period ORDER BY period DESC LIMIT 12';
-$resql = $db->query($sql);
-while ($resql && ($obj = $db->fetch_object($resql))) {
-	print '<tr class="oddeven"><td>'.dol_escape_htmltag($obj->period).'</td><td class="right">'.((int) $obj->nb).'</td><td><div class="barre" style="height:8px;width:'.min(100, ((int) $obj->nb * 8)).'%;"></div></td></tr>';
-}
-if ($resql) $db->free($resql);
-print '</table>';
+$ordersByMonthData = dolistoreextractMonthlyGraphData($db, $sql, 'nb');
+dolistoreextractPrintLineGraph($langs->trans('DolistoreOrdersByMonth'), $langs->trans('Orders'), $ordersByMonthData, 'dolistoreextract_orders_by_month');
 print '</div><div class="fichehalfright">';
-print '<table class="noborder centpercent"><tr class="liste_titre"><th colspan="3">'.$langs->trans('DolistoreAmountsByMonth').'</th></tr>';
 $sql = 'SELECT DATE_FORMAT(dolistore_order_date, "%Y-%m") as period, SUM(total_ht) as amount FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere.' GROUP BY period ORDER BY period DESC LIMIT 12';
-$resql = $db->query($sql);
-while ($resql && ($obj = $db->fetch_object($resql))) {
-	print '<tr class="oddeven"><td>'.dol_escape_htmltag($obj->period).'</td><td class="right">'.price($obj->amount).'</td><td><div class="barre" style="height:8px;width:'.min(100, ((float) $obj->amount)).'%;"></div></td></tr>';
-}
-if ($resql) $db->free($resql);
-print '</table>';
+$amountsByMonthData = dolistoreextractMonthlyGraphData($db, $sql, 'amount');
+dolistoreextractPrintLineGraph($langs->trans('DolistoreAmountsByMonth'), $langs->trans('Amount'), $amountsByMonthData, 'dolistoreextract_amounts_by_month');
 print '</div></div><br>';
 
 print '<table class="noborder centpercent"><tr class="liste_titre"><th colspan="3">'.$langs->trans('DolistoreSalesByProduct').'</th></tr>';
