@@ -317,7 +317,7 @@ if (empty($filteredPendingOrders)) {
 			$urlView .= '&uid='.$messageUid;
 			$urlView .= '&folder='.urlencode((string) ($pendingOrder['folder'] ?? ''));
 		}
-		$pendingActionHtml = '<td class="center">'.($urlView !== '' ? '<a class="button small" href="'.dol_escape_htmltag($urlView).'">'.$langs->trans('View').'</a>' : '').'</td>';
+		$pendingActionHtml = '<td class="center">'.($urlView !== '' ? '<a href="'.dol_escape_htmltag($urlView).'">'.img_picto($langs->trans('View'), 'fa-eye').'</a>' : '').'</td>';
 
 		print '<tr class="oddeven">';
 		if ($actionColumnLeft) print $pendingActionHtml;

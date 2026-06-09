@@ -65,7 +65,7 @@ function dolistoreextractOrderPrepareHead($object)
 	$id = (int) $object->id;
 
 	$head[$h][0] = dol_buildpath('/dolistorextract/card.php', 1).'?id='.$id;
-	$head[$h][1] = $langs->trans('DolistoreOrderCard');
+	$head[$h][1] = img_picto('', 'bill', 'class="pictofixedwidth"').' '.$langs->trans('DolistoreOrderCard');
 	$head[$h][2] = 'card';
 	$h++;
 

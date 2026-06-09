@@ -85,6 +85,7 @@ class DolistoreOrder extends CommonObject
 	public $customer_country;
 	public $customer_country_code;
 	public $fk_soc_customer;
+	public $socid;
 	public $fk_contact_customer;
 	public $fk_soc_dolistore;
 	public $fk_facture;
@@ -249,6 +250,7 @@ class DolistoreOrder extends CommonObject
 
 		$this->id = $this->db->last_insert_id(MAIN_DB_PREFIX.$this->table_element);
 		$this->rowid = $this->id;
+		$this->socid = (int) $this->fk_soc_customer;
 
 		if (!$notrigger) {
 			$result = $this->call_trigger('DOLISTOREEXTRACT_ORDER_CREATE', $user);
@@ -314,6 +316,7 @@ class DolistoreOrder extends CommonObject
 			$this->error = $this->db->lasterror();
 			return -1;
 		}
+		$this->socid = (int) $this->fk_soc_customer;
 
 		if (!$notrigger) {
 			$result = $this->call_trigger('DOLISTOREEXTRACT_ORDER_UPDATE', $user);
@@ -529,6 +532,51 @@ class DolistoreOrder extends CommonObject
 	}
 
 	/**
+	 * Fetch native linked objects and expose the invoice stored on the archive.
+	 *
+	 * @param int|null     $sourceid        Source object id
+	 * @param string       $sourcetype      Source object type
+	 * @param int|null     $targetid        Target object id
+	 * @param string       $targettype      Target object type
+	 * @param string       $clause          SQL clause between source and target filters
+	 * @param int          $alsosametype    Include links to objects with same type
+	 * @param string       $orderby         SQL order by
+	 * @param int|string   $loadalsoobjects Load linked objects
+	 * @return int
+	 */
+	public function fetchObjectLinked($sourceid = null, $sourcetype = '', $targetid = null, $targettype = '', $clause = 'OR', $alsosametype = 1, $orderby = 'sourcetype', $loadalsoobjects = 1)
+	{
+		$result = parent::fetchObjectLinked($sourceid, $sourcetype, $targetid, $targettype, $clause, $alsosametype, $orderby, $loadalsoobjects);
+		if ($result < 0 || empty($this->fk_facture)) {
+			return $result;
+		}
+		if (function_exists('isModEnabled') && !isModEnabled('invoice')) {
+			return $result;
+		}
+		if (empty($loadalsoobjects) || (!is_numeric($loadalsoobjects) && $loadalsoobjects !== 'facture')) {
+			return $result;
+		}
+
+		$invoiceId = (int) $this->fk_facture;
+		foreach (($this->linkedObjects['facture'] ?? array()) as $linkedObject) {
+			if (!empty($linkedObject->id) && (int) $linkedObject->id === $invoiceId) {
+				return $result;
+			}
+		}
+
+		require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+
+		$invoice = new Facture($this->db);
+		if ($invoice->fetch($invoiceId) > 0) {
+			$linkKey = 'dolistoreextract_fk_facture_'.$invoiceId;
+			$this->linkedObjectsIds['facture'][$linkKey] = $invoiceId;
+			$this->linkedObjects['facture'][$linkKey] = $invoice;
+		}
+
+		return $result;
+	}
+
+	/**
 	 * Return object URL.
 	 *
 	 * @param int $withpicto Add picto
@@ -682,6 +730,7 @@ class DolistoreOrder extends CommonObject
 		$this->invoice_date = $this->normalizeTimestamp($obj->invoice_date);
 		$this->email_date = $this->normalizeTimestamp($obj->email_date);
 		$this->datec = $this->normalizeTimestamp($obj->datec);
+		$this->socid = (int) $this->fk_soc_customer;
 	}
 
 	/**

@@ -1,6 +1,8 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Align the DoliStore order card banner and transverse blocks with native Dolibarr rendering.
+- FIX : Replace pending DoliStore mailbox order text action with a native eye icon.
 - FIX : Align DoliStore order list filter buttons and column selector with native Dolibarr list settings.
 - FIX : Replace monthly dashboard summary tables with native Dolibarr line graphs.
 - FIX : Align DoliStore business list tables and order lines with native Dolibarr table rendering.
