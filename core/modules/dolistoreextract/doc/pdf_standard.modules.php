@@ -3,13 +3,13 @@
 
 require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
-require_once __DIR__.'/../modules_dolistoreextract.php';
+require_once __DIR__.'/../modules_dolistoreorder.php';
 require_once dirname(__DIR__, 4).'/lib/dolistoreextract.lib.php';
 
 /**
  * Standard PDF model for DoliStore orders.
  */
-class pdf_standard extends ModelePDFDolistoreextract
+class pdf_standard extends ModelePDFDolistoreOrder
 {
 	public $db;
 	public $name;

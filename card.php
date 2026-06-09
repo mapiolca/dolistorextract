@@ -155,7 +155,7 @@ print '<div class="fichecenter">';
 print '<div class="fichehalfleft">';
 print '<a name="builddoc"></a>';
 $genallowed = dolistoreextractUserHasRight($user, 'order', 'read');
-$formfile->showdocuments('dolistoreextract', $object->ref, $uploadDir, $_SERVER['PHP_SELF'].'?id='.(int) $object->id, $genallowed, dolistoreextractUserHasRight($user, 'order', 'delete'), $modelselected, 1, 0, 0, 0, 0, '', '', '', $langs->defaultlang, '', $object);
+$formfile->showdocuments('dolistoreextract:DolistoreOrder', $object->ref, $uploadDir, $_SERVER['PHP_SELF'].'?id='.(int) $object->id, $genallowed, dolistoreextractUserHasRight($user, 'order', 'delete'), $modelselected, 1, 0, 0, 0, 0, '', '', '', $langs->defaultlang, '', $object);
 print '<br>';
 $form->showLinkedObjectBlock($object);
 print '</div>';
