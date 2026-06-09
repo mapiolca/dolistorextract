@@ -99,25 +99,6 @@ print '</div>';
 print '</div>';
 
 print '<div class="clearboth"></div><br>';
-print '<div class="fichecenter">';
-print '<div class="fichehalfleft">';
-print '<a name="builddoc"></a>';
-$uploadDir = dolistoreextractGetOrderUploadDir($object);
-$genallowed = 0; // No DoliStore order PDF model is provided yet; keep native attachments only.
-$formfile->showdocuments('dolistoreextract', $object->ref, $uploadDir, $_SERVER['PHP_SELF'].'?id='.(int) $object->id, $genallowed, dolistoreextractUserHasRight($user, 'order', 'delete'), '', 1, 0, 0, 0, 0, '', '', '', $langs);
-print '<br>';
-$form->showLinkedObjectBlock($object);
-print '</div>';
-print '<div class="fichehalfright">';
-if (isModEnabled('agenda')) {
-	$MAXEVENT = 10;
-	$morehtmlcenter = '';
-	$formactions->showactions($object, $object->element, 0, 1, '', $MAXEVENT, '', $morehtmlcenter);
-}
-print '</div>';
-print '</div>';
-
-print '<div class="clearboth"></div><br>';
 print '<div id="dolistore-order-lines">';
 print load_fiche_titre($langs->trans('DolistoreOrderLines'), '', 'product');
 print '<div class="div-table-responsive-no-min">';
@@ -157,6 +138,25 @@ print '<div class="tabsAction">';
 if (dolistoreextractUserHasRight($user, 'order', 'delete')) {
 	print '<a class="butActionDelete" href="'.$_SERVER['PHP_SELF'].'?id='.(int) $object->id.'&action=confirm_delete&token='.newToken().'">'.$langs->trans('Delete').'</a>';
 }
+print '</div>';
+
+print '<div class="clearboth"></div><br>';
+print '<div class="fichecenter">';
+print '<div class="fichehalfleft">';
+print '<a name="builddoc"></a>';
+$uploadDir = dolistoreextractGetOrderUploadDir($object);
+$genallowed = 0; // No DoliStore order PDF model is provided yet; keep native attachments only.
+$formfile->showdocuments('dolistoreextract', $object->ref, $uploadDir, $_SERVER['PHP_SELF'].'?id='.(int) $object->id, $genallowed, dolistoreextractUserHasRight($user, 'order', 'delete'), '', 1, 0, 0, 0, 0, '', '', '', $langs);
+print '<br>';
+$form->showLinkedObjectBlock($object);
+print '</div>';
+print '<div class="fichehalfright">';
+if (isModEnabled('agenda')) {
+	$MAXEVENT = 10;
+	$morehtmlcenter = '';
+	$formactions->showactions($object, $object->element, 0, 1, '', $MAXEVENT, '', $morehtmlcenter);
+}
+print '</div>';
 print '</div>';
 
 llxFooter();
