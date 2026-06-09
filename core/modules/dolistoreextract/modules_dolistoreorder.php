@@ -27,6 +27,9 @@ abstract class ModelePDFDolistoreOrder extends CommonDocGenerator
 
 		include_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
 		$list = getListOfModels($db, 'dolistoreextract', $maxfilenamelength);
+		if (!is_array($list)) {
+			$list = array();
+		}
 		if (empty($list)) {
 			$list['standard'] = is_object($langs) ? $langs->trans('DolistoreOrderPdfStandard') : 'Standard';
 		}

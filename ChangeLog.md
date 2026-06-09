@@ -1,6 +1,7 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Normalize the DoliStore order PDF model list before adding the standard fallback model.
 - FIX : Load the DoliStore order PDF model parent before rendering the native document block.
 - FIX : Use the DoliStore order document modulepart to load the native PDF model parent in the order card.
 - FIX : Align DoliStore order attached files tab, PDF generation block and grouped lines with native Dolibarr rendering.
