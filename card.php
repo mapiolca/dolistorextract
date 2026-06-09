@@ -76,7 +76,8 @@ print '<div class="clearboth"></div><br>';
 print '<div class="fichecenter">';
 print '<div class="fichehalfleft">';
 $uploadDir = dolistoreextractGetOrderUploadDir($object);
-$formfile->showdocuments('dolistoreextract', $object->ref, $uploadDir, $_SERVER['PHP_SELF'].'?id='.(int) $object->id, dolistoreextractUserHasRight($user, 'order', 'write'), dolistoreextractUserHasRight($user, 'order', 'delete'), '', 1, 0, 0, 0, 0, '', '', '', $langs);
+$genallowed = 0; // No DoliStore order PDF model is provided yet; keep native attachments only.
+$formfile->showdocuments('dolistoreextract', $object->ref, $uploadDir, $_SERVER['PHP_SELF'].'?id='.(int) $object->id, $genallowed, dolistoreextractUserHasRight($user, 'order', 'delete'), '', 1, 0, 0, 0, 0, '', '', '', $langs);
 print '</div>';
 print '<div class="fichehalfright">';
 print '<table class="noborder centpercent">';

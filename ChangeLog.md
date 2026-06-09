@@ -1,6 +1,7 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Prevent DoliStore order cards from trying to load a missing PDF document model.
 - FIX : Display DoliStore orders still pending in the configured mailbox from the archived order list.
 - FIX : Avoid PHP fatal errors from private SQL quote helpers colliding with Dolibarr `CommonObject::quote()`.
 - NEW : V2 archive workflow for DoliStore orders.

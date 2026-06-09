@@ -21,7 +21,8 @@ llxHeader('', $langs->trans('Documents'));
 print dol_get_fiche_head(dolistoreextractOrderPrepareHead($object), 'documents', $langs->trans('DolistoreOrder'), -1, 'dolistore@dolistorextract');
 dol_banner_tab($object, 'ref', '', 1, 'ref', 'ref', '');
 $uploadDir = dolistoreextractGetOrderUploadDir($object);
-$formfile->showdocuments('dolistoreextract', $object->ref, $uploadDir, $_SERVER['PHP_SELF'].'?id='.(int) $object->id, dolistoreextractUserHasRight($user, 'order', 'write'), dolistoreextractUserHasRight($user, 'order', 'delete'), '', 1, 0, 0, 0, 0, '', '', '', $langs);
+$genallowed = 0; // No DoliStore order PDF model is provided yet; keep native attachments only.
+$formfile->showdocuments('dolistoreextract', $object->ref, $uploadDir, $_SERVER['PHP_SELF'].'?id='.(int) $object->id, $genallowed, dolistoreextractUserHasRight($user, 'order', 'delete'), '', 1, 0, 0, 0, 0, '', '', '', $langs);
 print dol_get_fiche_end();
 llxFooter();
 $db->close();
