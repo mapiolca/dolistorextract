@@ -160,8 +160,8 @@ class DolistoreOrderLine extends CommonObject
 		$sql .= ') VALUES (';
 		$sql .= ((int) $this->entity).',';
 		$sql .= ((int) $this->fk_order).',';
-		$sql .= $this->quote($this->product_dolistore_ref).',';
-		$sql .= $this->quote($this->product_label).',';
+		$sql .= $this->quoteNullableSqlValue($this->product_dolistore_ref).',';
+		$sql .= $this->quoteNullableSqlValue($this->product_label).',';
 		$sql .= (!empty($this->fk_product) ? (int) $this->fk_product : 'NULL').',';
 		$sql .= price2num($this->qty, 'MU').',';
 		$sql .= price2num($this->unit_price_ht, 'MU').',';
@@ -171,10 +171,10 @@ class DolistoreOrderLine extends CommonObject
 		$sql .= price2num($this->billable_unit_price_ht, 'MU').',';
 		$sql .= price2num($this->billable_total_ht, 'MU').',';
 		$sql .= price2num($this->tax_rate, 'MU').',';
-		$sql .= $this->quote($this->description).',';
-		$sql .= $this->quote($this->raw_hash).',';
+		$sql .= $this->quoteNullableSqlValue($this->description).',';
+		$sql .= $this->quoteNullableSqlValue($this->raw_hash).',';
 		$sql .= ((int) $this->status).',';
-		$sql .= $this->quote($this->import_key).',';
+		$sql .= $this->quoteNullableSqlValue($this->import_key).',';
 		$sql .= "'".$this->db->idate(dol_now())."',";
 		$sql .= ((int) $user->id);
 		$sql .= ')';
@@ -207,8 +207,8 @@ class DolistoreOrderLine extends CommonObject
 		$this->calculateAmounts();
 
 		$sql = 'UPDATE '.MAIN_DB_PREFIX.$this->table_element.' SET';
-		$sql .= ' product_dolistore_ref = '.$this->quote($this->product_dolistore_ref);
-		$sql .= ', product_label = '.$this->quote($this->product_label);
+		$sql .= ' product_dolistore_ref = '.$this->quoteNullableSqlValue($this->product_dolistore_ref);
+		$sql .= ', product_label = '.$this->quoteNullableSqlValue($this->product_label);
 		$sql .= ', fk_product = '.(!empty($this->fk_product) ? (int) $this->fk_product : 'NULL');
 		$sql .= ', qty = '.price2num($this->qty, 'MU');
 		$sql .= ', unit_price_ht = '.price2num($this->unit_price_ht, 'MU');
@@ -218,8 +218,8 @@ class DolistoreOrderLine extends CommonObject
 		$sql .= ', billable_unit_price_ht = '.price2num($this->billable_unit_price_ht, 'MU');
 		$sql .= ', billable_total_ht = '.price2num($this->billable_total_ht, 'MU');
 		$sql .= ', tax_rate = '.price2num($this->tax_rate, 'MU');
-		$sql .= ', description = '.$this->quote($this->description);
-		$sql .= ', raw_hash = '.$this->quote($this->raw_hash);
+		$sql .= ', description = '.$this->quoteNullableSqlValue($this->description);
+		$sql .= ', raw_hash = '.$this->quoteNullableSqlValue($this->raw_hash);
 		$sql .= ', status = '.((int) $this->status);
 		$sql .= ', fk_user_modif = '.((int) $user->id);
 		$sql .= ' WHERE rowid = '.((int) $this->id);
@@ -323,7 +323,7 @@ class DolistoreOrderLine extends CommonObject
 	 * @param mixed $value Value
 	 * @return string
 	 */
-	private function quote($value)
+	private function quoteNullableSqlValue($value)
 	{
 		if ($value === null || $value === '') {
 			return 'NULL';

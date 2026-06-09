@@ -1,6 +1,7 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Avoid PHP fatal errors from private SQL quote helpers colliding with Dolibarr `CommonObject::quote()`.
 - NEW : V2 archive workflow for DoliStore orders.
     + Added `Commande DoliStore` business object, lines, invoice batches and import journal tables.
     + IMAP import now archives DoliStore orders instead of creating native customer orders.
