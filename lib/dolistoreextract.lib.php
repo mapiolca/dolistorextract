@@ -26,6 +26,11 @@ function dolistorextractAdminPrepareHead()
 	$head[$h][2] = 'settings';
 	$h++;
 
+	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php?mode=orders', 1);
+	$head[$h][1] = $langs->trans('DolistoreOrdersSetup');
+	$head[$h][2] = 'orders';
+	$h++;
+
 	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php?mode=billing', 1);
 	$head[$h][1] = $langs->trans('DolistoreBilling');
 	$head[$h][2] = 'billing';

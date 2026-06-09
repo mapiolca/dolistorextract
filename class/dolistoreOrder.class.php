@@ -609,12 +609,23 @@ class DolistoreOrder extends CommonObject
 		if (substr($module, -4) === '.php') {
 			$module = substr($module, 0, -4);
 		}
+		if (!preg_match('/^mod_dolistoreextract_order_[a-z0-9_]+$/', $module)) {
+			$module = 'mod_dolistoreextract_order_dse';
+		}
 
-		$file = dol_buildpath('/dolistoreextract/core/modules/dolistoreextract/modules_dolistoreorder.php');
-		if (is_readable($file)) {
+		$modules = array($module);
+		if ($module !== 'mod_dolistoreextract_order_dse') {
+			$modules[] = 'mod_dolistoreextract_order_dse';
+		}
+
+		foreach ($modules as $moduleToLoad) {
+			$file = dol_buildpath('/dolistorextract/core/modules/dolistoreextract/'.$moduleToLoad.'.php');
+			if (!is_readable($file)) {
+				continue;
+			}
 			require_once $file;
-			if (class_exists($module)) {
-				$obj = new $module($this->db);
+			if (class_exists($moduleToLoad)) {
+				$obj = new $moduleToLoad($this->db);
 				$next = $obj->getNextValue(!empty($this->entity) ? (int) $this->entity : (int) $conf->entity, $this);
 				if (!empty($next)) {
 					return $next;
