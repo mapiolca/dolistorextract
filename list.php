@@ -69,6 +69,13 @@ $ordersArrayFields = array(
 
 $selectedFieldsPending = $form->multiSelectArrayWithCheckbox('selectedfields_pendingorders', $pendingArrayFields, $pendingContextPage, getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN'));
 $selectedFieldsOrders = $form->multiSelectArrayWithCheckbox('selectedfields_orders', $ordersArrayFields, $ordersContextPage, getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN'));
+$actionColumnLeft = (bool) getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN');
+$filterContextPage = GETPOST('column_contextpage', 'aZ09');
+$buttonSearch = (GETPOSTISSET('button_search_x') || GETPOSTISSET('button_search'));
+$buttonRemoveFilter = (GETPOSTISSET('button_removefilter_x') || GETPOSTISSET('button_removefilter'));
+$resetPendingFilters = ($buttonRemoveFilter && $filterContextPage === $pendingContextPage);
+$resetOrdersFilters = ($buttonRemoveFilter && $filterContextPage === $ordersContextPage);
+$searchOrders = ($buttonSearch && $filterContextPage === $ordersContextPage);
 
 $pendingSearchFolder = GETPOST('search_pending_folder', 'alphanohtml');
 $pendingSearchRef = GETPOST('search_pending_ref', 'alphanohtml');
@@ -76,6 +83,14 @@ $pendingSearchCustomer = GETPOST('search_pending_customer', 'alphanohtml');
 $pendingSearchEmail = GETPOST('search_pending_email', 'alphanohtml');
 $pendingSearchLang = GETPOST('search_pending_lang', 'alphanohtml');
 $pendingSearchRead = GETPOST('search_pending_read', 'alpha');
+if ($resetPendingFilters) {
+	$pendingSearchFolder = '';
+	$pendingSearchRef = '';
+	$pendingSearchCustomer = '';
+	$pendingSearchEmail = '';
+	$pendingSearchLang = '';
+	$pendingSearchRead = '';
+}
 
 $pendingOrderReader = new ActionsDolistorextract($db);
 $pendingDolistoreOrders = $pendingOrderReader->fetchPendingDolistoreOrdersFromMailbox();
@@ -130,7 +145,7 @@ if (!$sortorder) {
 	$sortorder = 'DESC';
 }
 $page = GETPOST('page', 'int');
-if ($page < 0) {
+if ($page < 0 || $searchOrders || $resetOrdersFilters) {
 	$page = 0;
 }
 $limit = $conf->liste_limit;
@@ -144,6 +159,15 @@ $search_status = GETPOST('search_status', 'intcomma');
 $search_invoiceable = GETPOST('search_invoiceable', 'alpha');
 $search_entity = GETPOST('search_entity', 'array');
 if (!is_array($search_entity)) {
+	$search_entity = array();
+}
+if ($resetOrdersFilters) {
+	$search_ref = '';
+	$search_dolistore_ref = '';
+	$search_customer = '';
+	$search_product = '';
+	$search_status = '';
+	$search_invoiceable = '';
 	$search_entity = array();
 }
 
@@ -232,6 +256,9 @@ print '<input type="hidden" name="column_contextpage" value="'.dol_escape_htmlta
 print '<div class="div-table-responsive">';
 print '<table class="liste centpercent">';
 print '<tr class="liste_titre_filter">';
+if ($actionColumnLeft) {
+	print '<td class="liste_titre center maxwidthsearch">'.$form->showFilterButtons('left').'</td>';
+}
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'folder')) print '<td><input type="text" class="flat maxwidth100" name="search_pending_folder" value="'.dol_escape_htmltag($pendingSearchFolder).'"></td>';
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'email_date')) print '<td></td>';
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'email_id')) print '<td></td>';
@@ -242,14 +269,15 @@ if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'customer_email')) pr
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'contact_name')) print '<td></td>';
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'mail_count')) print '<td></td>';
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'read_status')) print '<td>'.$form->selectarray('search_pending_read', array('read' => $langs->trans('DolistoreMailRead'), 'unread' => $langs->trans('DolistoreMailUnread')), $pendingSearchRead, 1, 0, 0, '', 0, 0, 0, '', 'maxwidth100').'</td>';
-print '<td class="right">';
-print '<button class="liste_titre button_search" type="submit" name="button_search" value="x">'.img_picto($langs->trans('Search'), 'search').'</button> ';
-print '<a class="button button_search" href="'.$_SERVER['PHP_SELF'].'">'.img_picto($langs->trans('RemoveFilter'), 'searchclear').'</a> ';
-print $selectedFieldsPending;
-print '</td>';
+if (!$actionColumnLeft) {
+	print '<td class="liste_titre center maxwidthsearch">'.$form->showFilterButtons().'</td>';
+}
 print '</tr>';
 
 print '<tr class="liste_titre">';
+if ($actionColumnLeft) {
+	print_liste_field_titre($selectedFieldsPending, $_SERVER['PHP_SELF'], '', '', '', '', '', '', 'center maxwidthsearch ');
+}
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'folder')) print '<th>'.$langs->trans('DolistoreEmailFolder').'</th>';
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'email_date')) print '<th>'.$langs->trans('DolistoreEmailDate').'</th>';
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'email_id')) print '<th>'.$langs->trans('ID').'</th>';
@@ -260,7 +288,9 @@ if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'customer_email')) pr
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'contact_name')) print '<th>'.$langs->trans('Contact').'</th>';
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'mail_count')) print '<th class="center">'.$langs->trans('DolistorePendingMailCount').'</th>';
 if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'read_status')) print '<th class="center">'.$langs->trans('DolistoreMailReadStatus').'</th>';
-print '<th>'.$langs->trans('Actions').'</th>';
+if (!$actionColumnLeft) {
+	print_liste_field_titre($selectedFieldsPending, $_SERVER['PHP_SELF'], '', '', '', '', '', '', 'center maxwidthsearch ');
+}
 print '</tr>';
 
 if (empty($filteredPendingOrders)) {
@@ -287,8 +317,10 @@ if (empty($filteredPendingOrders)) {
 			$urlView .= '&uid='.$messageUid;
 			$urlView .= '&folder='.urlencode((string) ($pendingOrder['folder'] ?? ''));
 		}
+		$pendingActionHtml = '<td class="center">'.($urlView !== '' ? '<a class="button small" href="'.dol_escape_htmltag($urlView).'">'.$langs->trans('View').'</a>' : '').'</td>';
 
 		print '<tr class="oddeven">';
+		if ($actionColumnLeft) print $pendingActionHtml;
 		if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'folder')) print '<td>'.dol_escape_htmltag((string) ($pendingOrder['_folder_text'] ?? '')).'</td>';
 		if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'email_date')) print '<td>'.$emailDate.'</td>';
 		if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'email_id')) print '<td>'.dol_escape_htmltag((string) ($pendingOrder['email_id'] ?? '')).'</td>';
@@ -299,7 +331,7 @@ if (empty($filteredPendingOrders)) {
 		if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'contact_name')) print '<td>'.dol_escape_htmltag((string) ($pendingOrder['contact_name'] ?? '')).'</td>';
 		if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'mail_count')) print '<td class="center">'.(int) ($pendingOrder['mail_count'] ?? 0).'</td>';
 		if (dolistoreextractArrayFieldChecked($pendingArrayFields, 'read_status')) print '<td class="center">'.dol_escape_htmltag($readStatus).'</td>';
-		print '<td>'.($urlView !== '' ? '<a class="button small" href="'.dol_escape_htmltag($urlView).'">'.$langs->trans('View').'</a>' : '').'</td>';
+		if (!$actionColumnLeft) print $pendingActionHtml;
 		print '</tr>';
 	}
 }
@@ -320,6 +352,9 @@ print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortor
 print '<div class="div-table-responsive">';
 print '<table class="liste centpercent">';
 print '<tr class="liste_titre_filter">';
+if ($actionColumnLeft) {
+	print '<td class="liste_titre center maxwidthsearch">'.$form->showFilterButtons('left').'</td>';
+}
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'ref')) print '<td><input type="text" class="flat maxwidth100" name="search_ref" value="'.dol_escape_htmltag($search_ref).'"></td>';
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'dolistore_order_ref')) print '<td><input type="text" class="flat maxwidth100" name="search_dolistore_ref" value="'.dol_escape_htmltag($search_dolistore_ref).'"></td>';
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'dolistore_order_date')) print '<td></td>';
@@ -339,14 +374,15 @@ if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'status')) print '<td>
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'invoiceable')) print '<td>'.$form->selectarray('search_invoiceable', array('yes' => $langs->trans('Yes'), 'no' => $langs->trans('No')), $search_invoiceable, 1, 0, 0, '', 0, 0, 0, '', 'maxwidth100').'</td>';
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'invoice_ref')) print '<td></td>';
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'entity')) print '<td>'.$form->multiselectarray('search_entity', $entityOptions, $search_entity, 0, 0, 'minwidth100 maxwidth200').'</td>';
-print '<td class="right">';
-print '<button class="liste_titre button_search" type="submit" name="button_search" value="x">'.img_picto($langs->trans('Search'), 'search').'</button> ';
-print '<a class="button button_search" href="'.$_SERVER['PHP_SELF'].'">'.img_picto($langs->trans('RemoveFilter'), 'searchclear').'</a> ';
-print $selectedFieldsOrders;
-print '</td>';
+if (!$actionColumnLeft) {
+	print '<td class="liste_titre center maxwidthsearch">'.$form->showFilterButtons().'</td>';
+}
 print '</tr>';
 
 print '<tr class="liste_titre">';
+if ($actionColumnLeft) {
+	print_liste_field_titre($selectedFieldsOrders, $_SERVER['PHP_SELF'], '', '', '', '', $sortfield, $sortorder, 'center maxwidthsearch ');
+}
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'ref')) print_liste_field_titre('Ref', $_SERVER['PHP_SELF'], 'o.ref', $param, '', '', $sortfield, $sortorder);
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'dolistore_order_ref')) print_liste_field_titre('DolistoreOrderRef', $_SERVER['PHP_SELF'], 'o.dolistore_order_ref', $param, '', '', $sortfield, $sortorder);
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'dolistore_order_date')) print_liste_field_titre('DolistoreOrderDate', $_SERVER['PHP_SELF'], 'o.dolistore_order_date', $param, '', '', $sortfield, $sortorder);
@@ -358,7 +394,9 @@ if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'status')) print_liste
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'invoiceable')) print_liste_field_titre('DolistoreInvoiceable', $_SERVER['PHP_SELF'], '', $param, '', 'align="center"');
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'invoice_ref')) print_liste_field_titre('DolistoreLinkedInvoice', $_SERVER['PHP_SELF'], 'f.ref', $param, '', '', $sortfield, $sortorder);
 if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'entity')) print_liste_field_titre('Environment', $_SERVER['PHP_SELF'], 'o.entity', $param, '', '', $sortfield, $sortorder);
-print '<td></td>';
+if (!$actionColumnLeft) {
+	print_liste_field_titre($selectedFieldsOrders, $_SERVER['PHP_SELF'], '', '', '', '', $sortfield, $sortorder, 'center maxwidthsearch ');
+}
 print '</tr>';
 
 $rowCount = 0;
@@ -377,6 +415,7 @@ if ($resql) {
 		$rowCount++;
 
 		print '<tr class="oddeven">';
+		if ($actionColumnLeft) print '<td></td>';
 		if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'ref')) print '<td>'.$objectstatic->getNomUrl(1).'</td>';
 		if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'dolistore_order_ref')) print '<td>'.dol_escape_htmltag($obj->dolistore_order_ref).'</td>';
 		if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'dolistore_order_date')) print '<td>'.(!empty($obj->dolistore_order_date) ? dol_print_date($db->jdate($obj->dolistore_order_date), 'day') : '').'</td>';
@@ -388,7 +427,7 @@ if ($resql) {
 		if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'invoiceable')) print '<td class="center">'.($objectstatic->isInvoiceable() ? yn(1) : yn(0)).'</td>';
 		if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'invoice_ref')) print '<td>'.(!empty($obj->fk_facture) ? '<a href="'.DOL_URL_ROOT.'/compta/facture/card.php?facid='.(int) $obj->fk_facture.'">'.dol_escape_htmltag($obj->invoice_ref).'</a>' : '').'</td>';
 		if (dolistoreextractArrayFieldChecked($ordersArrayFields, 'entity')) print '<td>'.dol_escape_htmltag($obj->entity_label ?: $obj->entity).'</td>';
-		print '<td></td>';
+		if (!$actionColumnLeft) print '<td></td>';
 		print '</tr>';
 	}
 	$db->free($resql);
@@ -397,7 +436,25 @@ if ($resql) {
 if ($rowCount === 0) {
 	dolistoreextractPrintNoRecordLine(dolistoreextractVisibleColumnCount($ordersArrayFields, 1));
 } elseif (dolistoreextractArrayFieldChecked($ordersArrayFields, 'billable_total_ht')) {
-	dolistoreextractPrintTotalRow($ordersArrayFields, array('billable_total_ht' => price($totalBillableHt)), 1);
+	print '<tr class="liste_total">';
+	if ($actionColumnLeft) print '<td></td>';
+	$labelPrinted = false;
+	foreach ($ordersArrayFields as $key => $val) {
+		if (empty($val['checked'])) {
+			continue;
+		}
+		$class = !empty($val['align']) ? ' class="'.$val['align'].'"' : '';
+		print '<td'.$class.'>';
+		if ($key === 'billable_total_ht') {
+			print price($totalBillableHt);
+		} elseif (!$labelPrinted) {
+			print $langs->trans('Total');
+			$labelPrinted = true;
+		}
+		print '</td>';
+	}
+	if (!$actionColumnLeft) print '<td></td>';
+	print '</tr>';
 }
 
 print '</table>';
