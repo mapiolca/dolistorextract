@@ -163,10 +163,7 @@ print '<div class="fichecenter">';
 print '<div class="fichehalfleft">';
 print '<a name="builddoc"></a>';
 $urlsource = $_SERVER['PHP_SELF'].'?id='.(int) $object->id;
-if (dolistoreextractUserHasRight($user, 'order', 'read')) {
-	dolistoreextractPrintOrderBuildDocForm($form, $documentContext, $modelselected, $urlsource, (int) $object->id);
-}
-$formfile->showdocuments($documentContext['modulepart'], $documentContext['modulesubdir'], $uploadDir, $urlsource, 0, dolistoreextractUserHasRight($user, 'order', 'delete'), $modelselected, 1, 0, 0, 0, 0, '', 'none', '', $langs->defaultlang, '', $object);
+$formfile->showdocuments($documentContext['modulepart_card'], $documentContext['modulesubdir'], $uploadDir, $urlsource, $usercangeneratedoc, dolistoreextractUserHasRight($user, 'order', 'delete'), $modelselected, 1, 0, 0, 0, 0, '', '', '', $langs->defaultlang, '', $object);
 print '<br>';
 $form->showLinkedObjectBlock($object);
 print '</div>';

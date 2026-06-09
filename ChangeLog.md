@@ -1,6 +1,7 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Restore the DoliStore order attached files block to native Dolibarr `showdocuments()` rendering.
 - FIX : Align the DoliStore order Multicompany badge and document block with native Dolibarr rendering.
 - FIX : Add native setup management for DoliStore order numbering and document models.
 - FIX : Normalize the DoliStore order PDF model list before adding the standard fallback model.

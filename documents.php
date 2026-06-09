@@ -38,7 +38,7 @@ if ($id <= 0 || $object->fetch($id) <= 0) {
 
 $documentContext = dolistoreextractGetOrderDocumentContext($object);
 $upload_dir = $documentContext['upload_dir'];
-$modulepart = $documentContext['modulepart'];
+$modulepart = $documentContext['modulepart_files'];
 $permissiontoadd = dolistoreextractUserHasRight($user, 'order', 'write') || dolistoreextractUserHasRight($user, 'order', 'delete');
 $permtoedit = $permissiontoadd;
 $relativepathwithnofile = $documentContext['modulesubdir'];

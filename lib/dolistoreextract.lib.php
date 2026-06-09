@@ -160,90 +160,19 @@ function dolistoreextractGetOrderUploadDir($object)
  * Return native document context for a DoliStore order.
  *
  * @param DolistoreOrder $object Order
- * @return array{modulepart:string,modulesubdir:string,upload_dir:string,modellist:array<string,string>}
+ * @return array{modulepart_card:string,modulepart_files:string,modulesubdir:string,upload_dir:string}
  */
 function dolistoreextractGetOrderDocumentContext($object)
 {
-	global $db;
-
-	require_once __DIR__.'/../core/modules/dolistoreextract/modules_dolistoreorder.php';
-
 	$ref = dol_sanitizeFileName($object->ref);
 	$modulesubdir = $object->element.'/'.$ref;
-	$modellist = ModelePDFDolistoreOrder::liste_modeles($db);
-	if (!is_array($modellist)) {
-		$modellist = array();
-	}
 
 	return array(
-		'modulepart' => 'dolistoreextract',
+		'modulepart_card' => 'dolistoreextract:DolistoreOrder',
+		'modulepart_files' => 'dolistoreextract',
 		'modulesubdir' => $modulesubdir,
 		'upload_dir' => dolistoreextractGetOrderUploadDir($object),
-		'modellist' => $modellist,
 	);
-}
-
-/**
- * Print native document generation row for a DoliStore order.
- *
- * @param Form                $form            Form helper
- * @param array<string,mixed> $documentContext Document context
- * @param string              $modelselected   Selected model
- * @param string              $urlsource       Source URL
- * @param int                 $id              Object id
- * @return void
- */
-function dolistoreextractPrintOrderBuildDocForm($form, $documentContext, $modelselected, $urlsource, $id)
-{
-	global $conf, $db, $langs;
-
-	$modellist = !empty($documentContext['modellist']) && is_array($documentContext['modellist']) ? $documentContext['modellist'] : array();
-	if (!empty($modellist)) {
-		asort($modellist);
-		if (count($modellist) == 1) {
-			$modelkeys = array_keys($modellist);
-			$modelselected = $modelkeys[0];
-		}
-	}
-
-	print load_fiche_titre($langs->trans('Documents'), '', '');
-	print '<div class="div-table-responsive-no-min">';
-	print '<form action="'.dol_escape_htmltag($urlsource).'#builddoc" method="POST">';
-	print '<input type="hidden" name="token" value="'.newToken().'">';
-	print '<input type="hidden" name="action" value="builddoc">';
-	print '<input type="hidden" name="id" value="'.((int) $id).'">';
-	print '<table class="noborder centpercent">';
-	print '<tr class="liste_titre">';
-	print '<td class="nowrap">';
-	if (!empty($modellist)) {
-		print $langs->trans('Model').' ';
-		print $form->selectarray('model', $modellist, $modelselected, 0, 0, 0, '', 0, 0, 0, '', 'minwidth75 maxwidth200', 1);
-		if (!empty($conf->use_javascript_ajax)) {
-			print ajax_combobox('model');
-		}
-	} else {
-		$langs->load('errors');
-		print '<span class="opacitymedium">'.$langs->trans('WarningNoDocumentModelActivated').'</span>';
-	}
-
-	if (getDolGlobalInt('MAIN_MULTILANGS')) {
-		require_once DOL_DOCUMENT_ROOT.'/core/class/html.formadmin.class.php';
-		$formadmin = new FormAdmin($db);
-		$defaultlang = $langs->getDefaultLang();
-		print ' '.$formadmin->select_language($defaultlang, 'lang_id', 0, array(), 0, 0, 0, 'maxwidth150');
-	}
-	print '</td>';
-	print '<td class="right">';
-	if (!empty($modellist)) {
-		print '<input class="button" type="submit" value="'.$langs->trans('Generate').'">';
-	} else {
-		print img_warning($langs->transnoentitiesnoconv('WarningNoDocumentModelActivated'));
-	}
-	print '</td>';
-	print '</tr>';
-	print '</table>';
-	print '</form>';
-	print '</div>';
 }
 
 /**
