@@ -542,7 +542,9 @@ class ActionsDolistorextract extends CommonHookActions
 
 		foreach ($folders as $folderName) {
 			if (!$imap->selectFolder($folderName)) {
-				$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreImapFolderSelectFailed", dol_escape_htmltag($folderName)) . '</span>';
+				$message = $langs->trans("DolistoreImapFolderSelectFailed", $folderName);
+				$this->errors[] = $message;
+				$this->logOutput .= '<br/><span class="warning">' . dol_escape_htmltag($message) . '</span>';
 				dol_syslog(__METHOD__ . ' unable to select folder=' . $folderName, LOG_WARNING);
 				continue;
 			}
@@ -565,6 +567,215 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		return $emailEntries;
+	}
+
+	/**
+	 * Fetch DoliStore orders still present in the configured mailbox and not archived yet.
+	 *
+	 * This is a read-only helper for list pages: it must not mark messages as read,
+	 * move messages, create orders or call import business logic.
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	public function fetchPendingDolistoreOrdersFromMailbox(): array
+	{
+		global $langs;
+
+		if (!function_exists('imap_open')) {
+			$this->errors[] = $langs->trans('DolistoreImapExtensionMissing');
+			dol_syslog(__METHOD__.' IMAP extension is missing', LOG_WARNING);
+			return array();
+		}
+
+		if (empty(getDolGlobalString('DOLISTOREXTRACT_IMAP_SERVER')) || empty(getDolGlobalString('DOLISTOREXTRACT_IMAP_USER')) || empty(getDolGlobalString('DOLISTOREXTRACT_IMAP_PWD'))) {
+			$this->errors[] = $langs->trans('DolistoreImapConfigurationMissing');
+			dol_syslog(__METHOD__.' IMAP configuration is incomplete', LOG_WARNING);
+			return array();
+		}
+
+		if (!class_exists('dolistoreMailExtract')) {
+			require_once __DIR__ . '/dolistoreMailExtract.class.php';
+		}
+
+		$imap = $this->openImapClient();
+		if (!$imap) {
+			return array();
+		}
+
+		$emailEntries = $this->fetchDolistoreEmailsFromConfiguredLocation($imap, false);
+		if (empty($emailEntries)) {
+			return array();
+		}
+
+		$orders = array();
+		$messageIdToOrderRefs = array();
+		foreach ($emailEntries as $emailEntry) {
+			$email = $emailEntry['message'];
+			$subject = (string) ($email->header->subject ?? '');
+			$langEmail = dolistoreMailExtract::detectLang($subject);
+			$subjectOrderData = dolistoreMailExtract::extractOrderDatasFromSubject($subject, $langEmail);
+			$messageBody = (string) ($email->message->text ?? $email->message->plain ?? $email->message->html ?? '');
+			$mailExtract = new dolistoreMailExtract($this->db, $messageBody);
+			$extractedData = $mailExtract->extractAllDatas();
+
+			$orderRef = trim((string) ($extractedData['order_ref'] ?? ''));
+			if ($orderRef === '') {
+				$orderRef = trim((string) ($subjectOrderData['ref'] ?? ''));
+			}
+			if ($orderRef === '') {
+				continue;
+			}
+
+			$messageId = $this->getEmailMessageId($email);
+			if ($messageId !== '') {
+				if (empty($messageIdToOrderRefs[$messageId])) {
+					$messageIdToOrderRefs[$messageId] = array();
+				}
+				$messageIdToOrderRefs[$messageId][$orderRef] = true;
+			}
+
+			$messageDate = !empty($email->header->date) ? (int) strtotime((string) $email->header->date) : 0;
+			if ($messageDate < 0) {
+				$messageDate = 0;
+			}
+			$isUnread = (!empty($email->header->details->Unseen) && $email->header->details->Unseen === 'U');
+			if (!$isUnread && isset($email->header->seen)) {
+				$isUnread = empty($email->header->seen);
+			}
+			$folder = (string) ($emailEntry['folder'] ?? '');
+
+			if (empty($orders[$orderRef])) {
+				$orders[$orderRef] = array(
+					'folder' => $folder,
+					'folders' => array($folder => true),
+					'email_date' => $messageDate,
+					'email_date_raw' => (string) ($email->header->date ?? ''),
+					'email_id' => (string) ($subjectOrderData['id'] ?? ''),
+					'order_ref' => $orderRef,
+					'lang' => $langEmail,
+					'customer_name' => trim((string) ($extractedData['buyer_company'] ?? '')),
+					'customer_email' => trim((string) ($extractedData['buyer_email'] ?? '')),
+					'contact_name' => trim((string) ($extractedData['buyer_lastname'] ?? '').' '.(string) ($extractedData['buyer_firstname'] ?? '')),
+					'mail_count' => 0,
+					'unread_count' => 0,
+					'message_id' => $messageId,
+					'msgno' => (int) ($email->header->msgno ?? 0),
+					'uid' => (int) ($email->header->uid ?? 0),
+				);
+			}
+
+			$orders[$orderRef]['mail_count']++;
+			if ($isUnread) {
+				$orders[$orderRef]['unread_count']++;
+			}
+			if ($folder !== '') {
+				$orders[$orderRef]['folders'][$folder] = true;
+			}
+			if ($isUnread && empty($orders[$orderRef]['preferred_unread_message'])) {
+				$orders[$orderRef]['folder'] = $folder;
+				$orders[$orderRef]['message_id'] = $messageId;
+				$orders[$orderRef]['msgno'] = (int) ($email->header->msgno ?? 0);
+				$orders[$orderRef]['uid'] = (int) ($email->header->uid ?? 0);
+				$orders[$orderRef]['preferred_unread_message'] = true;
+			}
+			if ($messageDate > (int) $orders[$orderRef]['email_date']) {
+				$orders[$orderRef]['email_date'] = $messageDate;
+				$orders[$orderRef]['email_date_raw'] = (string) ($email->header->date ?? '');
+			}
+			if ($orders[$orderRef]['customer_name'] === '' && !empty($extractedData['buyer_company'])) {
+				$orders[$orderRef]['customer_name'] = trim((string) $extractedData['buyer_company']);
+			}
+			if ($orders[$orderRef]['customer_email'] === '' && !empty($extractedData['buyer_email'])) {
+				$orders[$orderRef]['customer_email'] = trim((string) $extractedData['buyer_email']);
+			}
+			if ($orders[$orderRef]['contact_name'] === '') {
+				$orders[$orderRef]['contact_name'] = trim((string) ($extractedData['buyer_lastname'] ?? '').' '.(string) ($extractedData['buyer_firstname'] ?? ''));
+			}
+		}
+
+		if (empty($orders)) {
+			return array();
+		}
+
+		$this->removeAlreadyArchivedMailboxOrders($orders, $messageIdToOrderRefs);
+
+		uasort($orders, function ($a, $b) {
+			return ((int) $b['email_date']) <=> ((int) $a['email_date']);
+		});
+
+		return $orders;
+	}
+
+	/**
+	 * Remove mailbox entries that already have a DoliStore archived order.
+	 *
+	 * @param array<string,array<string,mixed>> $orders              Orders indexed by DoliStore reference
+	 * @param array<string,array<string,bool>> $messageIdToOrderRefs Order references indexed by Message-ID
+	 * @return void
+	 */
+	private function removeAlreadyArchivedMailboxOrders(array &$orders, array $messageIdToOrderRefs): void
+	{
+		$orderRefs = array_keys($orders);
+		$messageIds = array_keys($messageIdToOrderRefs);
+		if (empty($orderRefs) && empty($messageIds)) {
+			return;
+		}
+
+		$whereParts = array();
+		if (!empty($orderRefs)) {
+			$whereParts[] = 'dolistore_order_ref IN ('.$this->buildSqlStringList($orderRefs).')';
+		}
+		if (!empty($messageIds)) {
+			$whereParts[] = 'email_message_id IN ('.$this->buildSqlStringList($messageIds).')';
+		}
+		if (empty($whereParts)) {
+			return;
+		}
+
+		$sql = 'SELECT dolistore_order_ref, email_message_id';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'dolistoreextract_order';
+		$sql .= ' WHERE entity IN ('.getEntity('dolistoreextract_order').')';
+		$sql .= ' AND ('.implode(' OR ', $whereParts).')';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			dol_syslog(__METHOD__.' SQL error: '.$this->db->lasterror(), LOG_WARNING);
+			return;
+		}
+
+		while ($obj = $this->db->fetch_object($resql)) {
+			$orderRef = (string) ($obj->dolistore_order_ref ?? '');
+			if ($orderRef !== '' && isset($orders[$orderRef])) {
+				unset($orders[$orderRef]);
+			}
+
+			$messageId = (string) ($obj->email_message_id ?? '');
+			if ($messageId !== '' && !empty($messageIdToOrderRefs[$messageId])) {
+				foreach (array_keys($messageIdToOrderRefs[$messageId]) as $linkedOrderRef) {
+					unset($orders[$linkedOrderRef]);
+				}
+			}
+		}
+		$this->db->free($resql);
+	}
+
+	/**
+	 * Build a SQL string list from scalar values.
+	 *
+	 * @param array<int,string> $values Values
+	 * @return string
+	 */
+	private function buildSqlStringList(array $values): string
+	{
+		$quoted = array();
+		foreach ($values as $value) {
+			$value = trim((string) $value);
+			if ($value === '') {
+				continue;
+			}
+			$quoted[] = "'".$this->db->escape($value)."'";
+		}
+
+		return !empty($quoted) ? implode(',', array_unique($quoted)) : "''";
 	}
 
 	/**

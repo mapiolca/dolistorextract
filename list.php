@@ -19,6 +19,7 @@ if (!$res) {
 }
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
+require_once __DIR__.'/class/actions_dolistorextract.class.php';
 require_once __DIR__.'/class/dolistoreOrder.class.php';
 require_once __DIR__.'/lib/dolistoreextract.lib.php';
 
@@ -33,6 +34,11 @@ if (!dolistoreextractUserHasRight($user, 'order', 'read')) {
 
 $form = new Form($db);
 $objectstatic = new DolistoreOrder($db);
+$pendingOrderReader = new ActionsDolistorextract($db);
+$pendingDolistoreOrders = $pendingOrderReader->fetchPendingDolistoreOrdersFromMailbox();
+if (!empty($pendingOrderReader->errors)) {
+	setEventMessages('', $pendingOrderReader->errors, 'warnings');
+}
 
 $sortfield = GETPOST('sortfield', 'aZ09comma');
 $sortorder = GETPOST('sortorder', 'aZ09comma');
@@ -133,6 +139,74 @@ $sql .= $db->plimit($limit + 1, $offset);
 $resql = $db->query($sql);
 
 llxHeader('', $langs->trans('DolistoreOrders'));
+
+print load_fiche_titre($langs->trans('DolistorePendingOrdersFromMailbox'), '', 'email');
+if (empty($pendingDolistoreOrders)) {
+	print '<div class="opacitymedium">'.$langs->trans('DolistoreNoPendingOrderInMailbox').'</div>';
+} else {
+	print '<div class="div-table-responsive">';
+	print '<table class="liste centpercent">';
+	print '<tr class="liste_titre">';
+	print '<th>'.$langs->trans('DolistoreEmailFolder').'</th>';
+	print '<th>'.$langs->trans('DolistoreEmailDate').'</th>';
+	print '<th>'.$langs->trans('ID').'</th>';
+	print '<th>'.$langs->trans('DolistoreOrderRef').'</th>';
+	print '<th>'.$langs->trans('Language').'</th>';
+	print '<th>'.$langs->trans('DolistoreCustomerFinal').'</th>';
+	print '<th>'.$langs->trans('EMail').'</th>';
+	print '<th>'.$langs->trans('Contact').'</th>';
+	print '<th class="center">'.$langs->trans('DolistorePendingMailCount').'</th>';
+	print '<th class="center">'.$langs->trans('DolistoreMailReadStatus').'</th>';
+	print '<th>'.$langs->trans('Actions').'</th>';
+	print '</tr>';
+
+	foreach ($pendingDolistoreOrders as $pendingOrder) {
+		$folders = array();
+		foreach (array_keys((array) ($pendingOrder['folders'] ?? array())) as $folderName) {
+			if ((string) $folderName !== '') {
+				$folders[] = (string) $folderName;
+			}
+		}
+		$emailDate = '';
+		if (!empty($pendingOrder['email_date'])) {
+			$emailDate = dol_print_date((int) $pendingOrder['email_date'], 'dayhour');
+		} elseif (!empty($pendingOrder['email_date_raw'])) {
+			$emailDate = dol_escape_htmltag((string) $pendingOrder['email_date_raw']);
+		}
+
+		$lang = (string) ($pendingOrder['lang'] ?? '');
+		$langDisplay = $lang !== '' ? picto_from_langcode($lang).' '.dol_escape_htmltag($lang) : '';
+		$unreadCount = (int) ($pendingOrder['unread_count'] ?? 0);
+		$readStatus = $unreadCount > 0 ? $langs->trans('DolistoreMailUnreadCount', $unreadCount) : $langs->trans('DolistoreMailRead');
+		$messageId = (int) ($pendingOrder['msgno'] ?? 0);
+		$messageUid = (int) ($pendingOrder['uid'] ?? 0);
+		$urlView = '';
+		if ($messageId > 0 || $messageUid > 0) {
+			$urlView = dol_buildpath('/dolistorextract/mails.php', 1);
+			$urlView .= '?action=read&id='.$messageId;
+			$urlView .= '&uid='.$messageUid;
+			$urlView .= '&folder='.urlencode((string) ($pendingOrder['folder'] ?? ''));
+		}
+
+		print '<tr class="oddeven">';
+		print '<td>'.dol_escape_htmltag(implode(', ', $folders)).'</td>';
+		print '<td>'.$emailDate.'</td>';
+		print '<td>'.dol_escape_htmltag((string) ($pendingOrder['email_id'] ?? '')).'</td>';
+		print '<td>'.dol_escape_htmltag((string) ($pendingOrder['order_ref'] ?? '')).'</td>';
+		print '<td>'.$langDisplay.'</td>';
+		print '<td>'.dol_escape_htmltag((string) ($pendingOrder['customer_name'] ?? '')).'</td>';
+		print '<td>'.dol_escape_htmltag((string) ($pendingOrder['customer_email'] ?? '')).'</td>';
+		print '<td>'.dol_escape_htmltag((string) ($pendingOrder['contact_name'] ?? '')).'</td>';
+		print '<td class="center">'.(int) ($pendingOrder['mail_count'] ?? 0).'</td>';
+		print '<td class="center">'.dol_escape_htmltag($readStatus).'</td>';
+		print '<td>'.($urlView !== '' ? '<a class="button small" href="'.dol_escape_htmltag($urlView).'">'.$langs->trans('View').'</a>' : '').'</td>';
+		print '</tr>';
+	}
+
+	print '</table>';
+	print '</div>';
+}
+print '<br>';
 
 print_barre_liste($langs->trans('DolistoreOrders'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', $num, $num, 'dolistore@dolistorextract', 0, '', '', $limit);
 
