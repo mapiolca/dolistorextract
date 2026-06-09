@@ -33,6 +33,7 @@ require_once __DIR__ . '/dolistoreOrder.class.php';
 require_once __DIR__ . '/dolistoreOrderLine.class.php';
 require_once __DIR__ . '/dolistoreInvoiceBatch.class.php';
 require_once __DIR__ . '/dolistoreImportLog.class.php';
+require_once __DIR__ . '/../lib/dolistoreextract.lib.php';
 require_once __DIR__ . "/../include/ssilence/php-imap-client/autoload.php";
 use SSilence\ImapClient\ImapClientException;
 use SSilence\ImapClient\ImapConnect;
@@ -1177,15 +1178,7 @@ class ActionsDolistorextract extends CommonHookActions
 			return;
 		}
 
-		$uploadDir = getMultidirOutput($order, 'dolistorextract', 1);
-		if (empty($uploadDir)) {
-			global $conf;
-			$objectEntity = !empty($order->entity) ? (int) $order->entity : (int) $conf->entity;
-			$moduleOutput = !empty($conf->dolistorextract->multidir_output[$objectEntity])
-				? $conf->dolistorextract->multidir_output[$objectEntity]
-				: $conf->dolistorextract->dir_output;
-			$uploadDir = $moduleOutput.'/'.$order->element.'/'.dol_sanitizeFileName($order->ref);
-		}
+		$uploadDir = dolistoreextractGetOrderUploadDir($order);
 		dol_mkdir($uploadDir);
 
 		$index = 0;

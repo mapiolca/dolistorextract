@@ -40,7 +40,9 @@ if ($action === 'confirm_delete' && dolistoreextractUserHasRight($user, 'order',
 	setEventMessages($object->error, $object->errors, 'errors');
 }
 
-$uploadDir = dolistoreextractGetOrderUploadDir($object);
+$documentContext = dolistoreextractGetOrderDocumentContext($object);
+$uploadDir = $documentContext['upload_dir'];
+$upload_dir = $uploadDir;
 $permissiontoadd = dolistoreextractUserHasRight($user, 'order', 'write') || dolistoreextractUserHasRight($user, 'order', 'delete');
 $usercangeneretedoc = dolistoreextractUserHasRight($user, 'order', 'read');
 $usercangeneratedoc = $usercangeneretedoc;
@@ -79,9 +81,14 @@ $head = dolistoreextractOrderPrepareHead($object);
 print dol_get_fiche_head($head, 'card', $langs->trans('DolistoreOrder'), -1, 'dolistore@dolistorextract');
 
 $linkback = '<a href="'.dol_buildpath('/dolistorextract/list.php', 1).'">'.$langs->trans('BackToList').'</a>';
+$entityBadgeHtml = img_picto($langs->trans('Environment'), 'globe', 'class="pictofixedwidth"').' '.dol_escape_htmltag($entityLabel);
+if (function_exists('dolGetBadge')) {
+	$entityBadge = dolGetBadge($entityLabel, $entityBadgeHtml, 'secondary');
+} else {
+	$entityBadge = '<span class="badge badge-secondary">'.$entityBadgeHtml.'</span>';
+}
 $morehtmlref = '<div class="refidno">';
-$morehtmlref .= img_picto($langs->trans('Environment'), 'company', 'class="pictofixedwidth"');
-$morehtmlref .= '<span class="badge badge-status0">'.dol_escape_htmltag($entityLabel).'</span>';
+$morehtmlref .= $entityBadge;
 $morehtmlref .= '</div>';
 dol_banner_tab($object, 'ref', $linkback, 1, 'ref', 'ref', $morehtmlref);
 
@@ -155,8 +162,11 @@ print '<div class="clearboth"></div><br>';
 print '<div class="fichecenter">';
 print '<div class="fichehalfleft">';
 print '<a name="builddoc"></a>';
-$genallowed = dolistoreextractUserHasRight($user, 'order', 'read');
-$formfile->showdocuments('dolistoreextract:DolistoreOrder', $object->ref, $uploadDir, $_SERVER['PHP_SELF'].'?id='.(int) $object->id, $genallowed, dolistoreextractUserHasRight($user, 'order', 'delete'), $modelselected, 1, 0, 0, 0, 0, '', '', '', $langs->defaultlang, '', $object);
+$urlsource = $_SERVER['PHP_SELF'].'?id='.(int) $object->id;
+if (dolistoreextractUserHasRight($user, 'order', 'read')) {
+	dolistoreextractPrintOrderBuildDocForm($form, $documentContext, $modelselected, $urlsource, (int) $object->id);
+}
+$formfile->showdocuments($documentContext['modulepart'], $documentContext['modulesubdir'], $uploadDir, $urlsource, 0, dolistoreextractUserHasRight($user, 'order', 'delete'), $modelselected, 1, 0, 0, 0, 0, '', 'none', '', $langs->defaultlang, '', $object);
 print '<br>';
 $form->showLinkedObjectBlock($object);
 print '</div>';

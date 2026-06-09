@@ -36,11 +36,12 @@ if ($id <= 0 || $object->fetch($id) <= 0) {
 	accessforbidden();
 }
 
-$upload_dir = dolistoreextractGetOrderUploadDir($object);
-$modulepart = 'dolistoreextract';
+$documentContext = dolistoreextractGetOrderDocumentContext($object);
+$upload_dir = $documentContext['upload_dir'];
+$modulepart = $documentContext['modulepart'];
 $permissiontoadd = dolistoreextractUserHasRight($user, 'order', 'write') || dolistoreextractUserHasRight($user, 'order', 'delete');
 $permtoedit = $permissiontoadd;
-$relativepathwithnofile = '';
+$relativepathwithnofile = $documentContext['modulesubdir'];
 $backtopage = $_SERVER['PHP_SELF'].'?id='.(int) $object->id;
 
 $hookmanager->initHooks(array('dolistoreextractdocument', 'globalcard'));

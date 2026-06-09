@@ -145,17 +145,105 @@ function dolistoreextractGetOrderUploadDir($object)
 
 	require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 
-	$uploadDir = getMultidirOutput($object, 'dolistorextract', 1);
-	if (!empty($uploadDir)) {
-		return $uploadDir;
+	$objectEntity = !empty($object->entity) ? (int) $object->entity : (int) $conf->entity;
+	$moduleOutput = getMultidirOutput($object, 'dolistorextract', 0);
+	if (empty($moduleOutput) || strpos($moduleOutput, 'error-') === 0) {
+		$moduleOutput = !empty($conf->dolistorextract->multidir_output[$objectEntity])
+			? $conf->dolistorextract->multidir_output[$objectEntity]
+			: $conf->dolistorextract->dir_output;
 	}
 
-	$objectEntity = !empty($object->entity) ? (int) $object->entity : (int) $conf->entity;
-	$moduleOutput = !empty($conf->dolistorextract->multidir_output[$objectEntity])
-		? $conf->dolistorextract->multidir_output[$objectEntity]
-		: $conf->dolistorextract->dir_output;
+	return rtrim($moduleOutput, '/').'/'.$object->element.'/'.dol_sanitizeFileName($object->ref);
+}
 
-	return $moduleOutput.'/'.$object->element.'/'.dol_sanitizeFileName($object->ref);
+/**
+ * Return native document context for a DoliStore order.
+ *
+ * @param DolistoreOrder $object Order
+ * @return array{modulepart:string,modulesubdir:string,upload_dir:string,modellist:array<string,string>}
+ */
+function dolistoreextractGetOrderDocumentContext($object)
+{
+	global $db;
+
+	require_once __DIR__.'/../core/modules/dolistoreextract/modules_dolistoreorder.php';
+
+	$ref = dol_sanitizeFileName($object->ref);
+	$modulesubdir = $object->element.'/'.$ref;
+	$modellist = ModelePDFDolistoreOrder::liste_modeles($db);
+	if (!is_array($modellist)) {
+		$modellist = array();
+	}
+
+	return array(
+		'modulepart' => 'dolistoreextract',
+		'modulesubdir' => $modulesubdir,
+		'upload_dir' => dolistoreextractGetOrderUploadDir($object),
+		'modellist' => $modellist,
+	);
+}
+
+/**
+ * Print native document generation row for a DoliStore order.
+ *
+ * @param Form                $form            Form helper
+ * @param array<string,mixed> $documentContext Document context
+ * @param string              $modelselected   Selected model
+ * @param string              $urlsource       Source URL
+ * @param int                 $id              Object id
+ * @return void
+ */
+function dolistoreextractPrintOrderBuildDocForm($form, $documentContext, $modelselected, $urlsource, $id)
+{
+	global $conf, $db, $langs;
+
+	$modellist = !empty($documentContext['modellist']) && is_array($documentContext['modellist']) ? $documentContext['modellist'] : array();
+	if (!empty($modellist)) {
+		asort($modellist);
+		if (count($modellist) == 1) {
+			$modelkeys = array_keys($modellist);
+			$modelselected = $modelkeys[0];
+		}
+	}
+
+	print load_fiche_titre($langs->trans('Documents'), '', '');
+	print '<div class="div-table-responsive-no-min">';
+	print '<form action="'.dol_escape_htmltag($urlsource).'#builddoc" method="POST">';
+	print '<input type="hidden" name="token" value="'.newToken().'">';
+	print '<input type="hidden" name="action" value="builddoc">';
+	print '<input type="hidden" name="id" value="'.((int) $id).'">';
+	print '<table class="noborder centpercent">';
+	print '<tr class="liste_titre">';
+	print '<td class="nowrap">';
+	if (!empty($modellist)) {
+		print $langs->trans('Model').' ';
+		print $form->selectarray('model', $modellist, $modelselected, 0, 0, 0, '', 0, 0, 0, '', 'minwidth75 maxwidth200', 1);
+		if (!empty($conf->use_javascript_ajax)) {
+			print ajax_combobox('model');
+		}
+	} else {
+		$langs->load('errors');
+		print '<span class="opacitymedium">'.$langs->trans('WarningNoDocumentModelActivated').'</span>';
+	}
+
+	if (getDolGlobalInt('MAIN_MULTILANGS')) {
+		require_once DOL_DOCUMENT_ROOT.'/core/class/html.formadmin.class.php';
+		$formadmin = new FormAdmin($db);
+		$defaultlang = $langs->getDefaultLang();
+		print ' '.$formadmin->select_language($defaultlang, 'lang_id', 0, array(), 0, 0, 0, 'maxwidth150');
+	}
+	print '</td>';
+	print '<td class="right">';
+	if (!empty($modellist)) {
+		print '<input class="button" type="submit" value="'.$langs->trans('Generate').'">';
+	} else {
+		print img_warning($langs->transnoentitiesnoconv('WarningNoDocumentModelActivated'));
+	}
+	print '</td>';
+	print '</tr>';
+	print '</table>';
+	print '</form>';
+	print '</div>';
 }
 
 /**
