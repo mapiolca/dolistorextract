@@ -235,6 +235,7 @@ DolistoreNoPendingOrderInMailbox=Aucune commande DoliStore non importée trouvé
 DolistorePendingMailCount=Nombre de mails
 DolistoreMailReadStatus=Lu/Non lu
 DolistoreMailRead=Lu
+DolistoreMailUnread=Non lu
 DolistoreMailUnreadCount=%s non lu(s)
 DolistoreImapConfigurationMissing=La configuration IMAP DoliStore est incomplète.
 DolistoreImapExtensionMissing=L'extension PHP IMAP n'est pas disponible.

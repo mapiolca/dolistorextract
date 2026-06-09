@@ -73,6 +73,40 @@ print '</div>';
 print '</div>';
 
 print '<div class="clearboth"></div><br>';
+print '<div id="dolistore-order-lines">';
+print load_fiche_titre($langs->trans('DolistoreOrderLines'), '', 'product');
+print '<div class="div-table-responsive-no-min">';
+print '<table class="noborder noshadow centpercent tablelines">';
+print '<tr class="liste_titre">';
+print '<th>'.$langs->trans('DolistoreProductRef').'</th>';
+print '<th>'.$langs->trans('Label').'</th>';
+print '<th>'.$langs->trans('Product').'</th>';
+print '<th class="right">'.$langs->trans('Qty').'</th>';
+print '<th class="right">'.$langs->trans('UnitPriceHT').'</th>';
+print '<th class="right">'.$langs->trans('AmountHT').'</th>';
+print '<th class="right">'.$langs->trans('DolistoreBillableAmountHT').'</th>';
+print '</tr>';
+$orderLines = $object->getLines();
+if (empty($orderLines)) {
+	dolistoreextractPrintNoRecordLine(7);
+} else {
+	foreach ($orderLines as $line) {
+		print '<tr class="oddeven">';
+		print '<td>'.dol_escape_htmltag($line->product_dolistore_ref).'</td>';
+		print '<td>'.dol_escape_htmltag($line->product_label).'</td>';
+		print '<td>'.(!empty($line->fk_product) ? '<a href="'.DOL_URL_ROOT.'/product/card.php?id='.(int) $line->fk_product.'">'.((int) $line->fk_product).'</a>' : '<span class="warning">'.$langs->trans('DolistoreServiceUnmapped').'</span>').'</td>';
+		print '<td class="right">'.price($line->qty).'</td>';
+		print '<td class="right">'.price($line->unit_price_ht).'</td>';
+		print '<td class="right">'.price($line->total_ht).'</td>';
+		print '<td class="right">'.price($line->billable_total_ht).'</td>';
+		print '</tr>';
+	}
+}
+print '</table>';
+print '</div>';
+print '</div>';
+
+print '<div class="clearboth"></div><br>';
 print '<div class="fichecenter">';
 print '<div class="fichehalfleft">';
 $uploadDir = dolistoreextractGetOrderUploadDir($object);
