@@ -11,6 +11,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/class/html.formfile.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formactions.class.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 require_once __DIR__.'/class/dolistoreOrder.class.php';
+require_once __DIR__.'/core/modules/dolistoreextract/modules_dolistoreorder.php';
 require_once __DIR__.'/lib/dolistoreextract.lib.php';
 
 $langs->loadLangs(array('dolistorextract@dolistorextract', 'agenda', 'bills', 'companies'));
