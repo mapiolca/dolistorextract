@@ -23,7 +23,7 @@ $id = GETPOST('id', 'int');
 $action = GETPOST('action', 'aZ09');
 
 $object = new DolistoreOrder($db);
-if ($id > 0 && $object->fetch($id) <= 0) {
+if ($id <= 0 || $object->fetch($id) <= 0) {
 	accessforbidden();
 }
 
@@ -38,6 +38,13 @@ if ($action === 'confirm_delete' && dolistoreextractUserHasRight($user, 'order',
 	}
 	setEventMessages($object->error, $object->errors, 'errors');
 }
+
+$uploadDir = dolistoreextractGetOrderUploadDir($object);
+$permissiontoadd = dolistoreextractUserHasRight($user, 'order', 'write') || dolistoreextractUserHasRight($user, 'order', 'delete');
+$usercangeneretedoc = dolistoreextractUserHasRight($user, 'order', 'read');
+$usercangeneratedoc = $usercangeneretedoc;
+$modelselected = !empty($object->model_pdf) ? $object->model_pdf : getDolGlobalString('DOLISTOREXTRACT_ORDER_ADDON_PDF', 'standard');
+include DOL_DOCUMENT_ROOT.'/core/actions_builddoc.inc.php';
 
 $form = new Form($db);
 $formfile = new FormFile($db);
@@ -75,8 +82,7 @@ $morehtmlref = '<div class="refidno">';
 $morehtmlref .= img_picto($langs->trans('Environment'), 'company', 'class="pictofixedwidth"');
 $morehtmlref .= '<span class="badge badge-status0">'.dol_escape_htmltag($entityLabel).'</span>';
 $morehtmlref .= '</div>';
-$morehtmlstatus = $object->getLibStatut(5);
-dol_banner_tab($object, 'ref', $linkback, 1, 'ref', 'ref', $morehtmlref, '', 0, '', $morehtmlstatus);
+dol_banner_tab($object, 'ref', $linkback, 1, 'ref', 'ref', $morehtmlref);
 
 print '<div class="fichecenter">';
 print '<div class="fichehalfleft">';
@@ -112,19 +118,23 @@ print '<th class="right">'.$langs->trans('UnitPriceHT').'</th>';
 print '<th class="right">'.$langs->trans('AmountHT').'</th>';
 print '<th class="right">'.$langs->trans('DolistoreBillableAmountHT').'</th>';
 print '</tr>';
-$orderLines = $object->getLines();
+$orderLines = $object->getGroupedLinesForDisplay();
 if (empty($orderLines)) {
 	dolistoreextractPrintNoRecordLine(7);
 } else {
 	foreach ($orderLines as $line) {
+		$productHtml = '<span class="warning">'.$langs->trans('DolistoreServiceUnmapped').'</span>';
+		if (!empty($line['product']) && is_object($line['product'])) {
+			$productHtml = $line['product']->getNomUrl(1);
+		}
 		print '<tr class="oddeven">';
-		print '<td>'.dol_escape_htmltag($line->product_dolistore_ref).'</td>';
-		print '<td>'.dol_escape_htmltag($line->product_label).'</td>';
-		print '<td>'.(!empty($line->fk_product) ? '<a href="'.DOL_URL_ROOT.'/product/card.php?id='.(int) $line->fk_product.'">'.((int) $line->fk_product).'</a>' : '<span class="warning">'.$langs->trans('DolistoreServiceUnmapped').'</span>').'</td>';
-		print '<td class="right">'.price($line->qty).'</td>';
-		print '<td class="right">'.price($line->unit_price_ht).'</td>';
-		print '<td class="right">'.price($line->total_ht).'</td>';
-		print '<td class="right">'.price($line->billable_total_ht).'</td>';
+		print '<td>'.dol_escape_htmltag($line['product_dolistore_ref']).'</td>';
+		print '<td>'.dol_escape_htmltag($line['product_label']).'</td>';
+		print '<td>'.$productHtml.'</td>';
+		print '<td class="right">'.price($line['qty']).'</td>';
+		print '<td class="right">'.price($line['unit_price_ht']).'</td>';
+		print '<td class="right">'.price($line['total_ht']).'</td>';
+		print '<td class="right">'.price($line['billable_total_ht']).'</td>';
 		print '</tr>';
 	}
 }
@@ -144,9 +154,8 @@ print '<div class="clearboth"></div><br>';
 print '<div class="fichecenter">';
 print '<div class="fichehalfleft">';
 print '<a name="builddoc"></a>';
-$uploadDir = dolistoreextractGetOrderUploadDir($object);
-$genallowed = 0; // No DoliStore order PDF model is provided yet; keep native attachments only.
-$formfile->showdocuments('dolistoreextract', $object->ref, $uploadDir, $_SERVER['PHP_SELF'].'?id='.(int) $object->id, $genallowed, dolistoreextractUserHasRight($user, 'order', 'delete'), '', 1, 0, 0, 0, 0, '', '', '', $langs);
+$genallowed = dolistoreextractUserHasRight($user, 'order', 'read');
+$formfile->showdocuments('dolistoreextract', $object->ref, $uploadDir, $_SERVER['PHP_SELF'].'?id='.(int) $object->id, $genallowed, dolistoreextractUserHasRight($user, 'order', 'delete'), $modelselected, 1, 0, 0, 0, 0, '', '', '', $langs->defaultlang, '', $object);
 print '<br>';
 $form->showLinkedObjectBlock($object);
 print '</div>';

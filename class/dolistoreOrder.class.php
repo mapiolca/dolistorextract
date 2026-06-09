@@ -8,6 +8,7 @@
  */
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/commonobject.class.php';
+require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
 require_once __DIR__.'/dolistoreOrderLine.class.php';
 
 /**
@@ -384,6 +385,99 @@ class DolistoreOrder extends CommonObject
 	}
 
 	/**
+	 * Return lines grouped for native card/document rendering.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function getGroupedLinesForDisplay()
+	{
+		$lines = $this->getLines();
+		if (empty($lines)) {
+			return array();
+		}
+
+		$productIdsByDolistoreRef = $this->resolveProductIdsByDolistoreRefs($lines);
+		$productIds = array();
+		foreach ($lines as $line) {
+			$productId = (int) $line->fk_product;
+			$dolistoreRef = trim((string) $line->product_dolistore_ref);
+			if ($productId <= 0 && $dolistoreRef !== '' && !empty($productIdsByDolistoreRef[$dolistoreRef])) {
+				$productId = (int) $productIdsByDolistoreRef[$dolistoreRef];
+			}
+			if ($productId > 0) {
+				$productIds[$productId] = $productId;
+			}
+		}
+		$products = $this->fetchProductsByIds($productIds);
+
+		$groups = array();
+		foreach ($lines as $line) {
+			$dolistoreRef = trim((string) $line->product_dolistore_ref);
+			$productId = (int) $line->fk_product;
+			if ($productId <= 0 && $dolistoreRef !== '' && !empty($productIdsByDolistoreRef[$dolistoreRef])) {
+				$productId = (int) $productIdsByDolistoreRef[$dolistoreRef];
+			}
+
+			$key = strtolower($dolistoreRef).'|'.$productId;
+			if (!isset($groups[$key])) {
+				$groups[$key] = array(
+					'product_dolistore_ref' => $dolistoreRef,
+					'product_label' => (string) $line->product_label,
+					'fk_product' => $productId,
+					'product' => !empty($products[$productId]) ? $products[$productId] : null,
+					'qty' => 0.0,
+					'unit_price_ht' => 0.0,
+					'total_ht' => 0.0,
+					'billable_unit_price_ht' => 0.0,
+					'billable_total_ht' => 0.0,
+				);
+			}
+
+			if ($groups[$key]['product_label'] === '' && !empty($line->product_label)) {
+				$groups[$key]['product_label'] = (string) $line->product_label;
+			}
+			if (empty($groups[$key]['product']) && !empty($products[$productId])) {
+				$groups[$key]['product'] = $products[$productId];
+			}
+
+			$groups[$key]['qty'] += (float) $line->qty;
+			$groups[$key]['total_ht'] += (float) $line->total_ht;
+			$groups[$key]['billable_total_ht'] += (float) $line->billable_total_ht;
+		}
+
+		foreach ($groups as &$group) {
+			$qty = (float) $group['qty'];
+			if (abs($qty) > 0.0000001) {
+				$group['unit_price_ht'] = (float) $group['total_ht'] / $qty;
+				$group['billable_unit_price_ht'] = (float) $group['billable_total_ht'] / $qty;
+			}
+		}
+		unset($group);
+
+		return array_values($groups);
+	}
+
+	/**
+	 * Generate a document for the DoliStore order.
+	 *
+	 * @param string         $modele           Model name
+	 * @param Translate     $outputlangs      Output language
+	 * @param int           $hidedetails      Hide details
+	 * @param int           $hidedesc         Hide description
+	 * @param int           $hideref          Hide reference
+	 * @param array<string,mixed>|null $moreparams More parameters
+	 * @return int
+	 */
+	public function generateDocument($modele, $outputlangs, $hidedetails = 0, $hidedesc = 0, $hideref = 0, $moreparams = null)
+	{
+		if (empty($modele)) {
+			$modele = !empty($this->model_pdf) ? $this->model_pdf : getDolGlobalString('DOLISTOREXTRACT_ORDER_ADDON_PDF', 'standard');
+		}
+
+		return $this->commonGenerateDocument('core/modules/dolistoreextract/doc/', $modele, $outputlangs, $hidedetails, $hidedesc, $hideref, $moreparams);
+	}
+
+	/**
 	 * Recalculate totals from lines and update object.
 	 *
 	 * @param User $user User
@@ -749,6 +843,137 @@ class DolistoreOrder extends CommonObject
 		}
 
 		return (int) $this->db->jdate($value);
+	}
+
+	/**
+	 * Resolve Dolibarr products from DoliStore product references.
+	 *
+	 * @param DolistoreOrderLine[] $lines Lines
+	 * @return array<string,int>
+	 */
+	private function resolveProductIdsByDolistoreRefs($lines)
+	{
+		$refs = array();
+		foreach ($lines as $line) {
+			if (!empty($line->fk_product)) {
+				continue;
+			}
+			$ref = trim((string) $line->product_dolistore_ref);
+			if ($ref !== '') {
+				$refs[$ref] = $ref;
+			}
+		}
+		if (empty($refs)) {
+			return array();
+		}
+
+		$mapping = array();
+		if ($this->productIddolistoreColumnExists()) {
+			$sql = 'SELECT pe.iddolistore, p.rowid';
+			$sql .= ' FROM '.MAIN_DB_PREFIX.'product as p';
+			$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'product_extrafields as pe ON pe.fk_object = p.rowid';
+			$sql .= ' WHERE p.entity IN ('.getEntity('product').')';
+			$sql .= ' AND p.fk_product_type = '.((int) Product::TYPE_SERVICE);
+			$sql .= ' AND pe.iddolistore IN ('.$this->buildSqlStringList($refs).')';
+			$sql .= ' ORDER BY p.rowid ASC';
+
+			$resql = $this->db->query($sql);
+			if ($resql) {
+				while ($obj = $this->db->fetch_object($resql)) {
+					$ref = (string) $obj->iddolistore;
+					if (!isset($mapping[$ref])) {
+						$mapping[$ref] = (int) $obj->rowid;
+					}
+				}
+				$this->db->free($resql);
+			}
+		}
+
+		$remainingRefs = array();
+		foreach ($refs as $ref) {
+			if (empty($mapping[$ref])) {
+				$remainingRefs[$ref] = $ref;
+			}
+		}
+		if (empty($remainingRefs)) {
+			return $mapping;
+		}
+
+		$sql = 'SELECT p.ref, p.rowid';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'product as p';
+		$sql .= ' WHERE p.entity IN ('.getEntity('product').')';
+		$sql .= ' AND p.fk_product_type = '.((int) Product::TYPE_SERVICE);
+		$sql .= ' AND p.ref IN ('.$this->buildSqlStringList($remainingRefs).')';
+		$sql .= ' ORDER BY p.rowid ASC';
+
+		$resql = $this->db->query($sql);
+		if ($resql) {
+			while ($obj = $this->db->fetch_object($resql)) {
+				$ref = (string) $obj->ref;
+				if (!isset($mapping[$ref])) {
+					$mapping[$ref] = (int) $obj->rowid;
+				}
+			}
+			$this->db->free($resql);
+		}
+
+		return $mapping;
+	}
+
+	/**
+	 * Fetch products once per unique id.
+	 *
+	 * @param int[] $productIds Product ids
+	 * @return array<int,Product>
+	 */
+	private function fetchProductsByIds($productIds)
+	{
+		$products = array();
+		foreach (array_unique(array_map('intval', $productIds)) as $productId) {
+			if ($productId <= 0) {
+				continue;
+			}
+			$product = new Product($this->db);
+			if ($product->fetch($productId) > 0) {
+				$products[$productId] = $product;
+			}
+		}
+
+		return $products;
+	}
+
+	/**
+	 * Return true when the DoliStore product extrafield SQL column exists.
+	 *
+	 * @return bool
+	 */
+	private function productIddolistoreColumnExists()
+	{
+		$sql = 'SHOW COLUMNS FROM '.MAIN_DB_PREFIX.'product_extrafields LIKE \'iddolistore\'';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return false;
+		}
+		$exists = $this->db->num_rows($resql) > 0;
+		$this->db->free($resql);
+
+		return $exists;
+	}
+
+	/**
+	 * Build a quoted SQL string list.
+	 *
+	 * @param string[] $values Values
+	 * @return string
+	 */
+	private function buildSqlStringList($values)
+	{
+		$quoted = array();
+		foreach ($values as $value) {
+			$quoted[] = "'".$this->db->escape((string) $value)."'";
+		}
+
+		return implode(',', $quoted);
 	}
 
 	/**

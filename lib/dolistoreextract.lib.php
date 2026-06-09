@@ -65,7 +65,7 @@ function dolistoreextractOrderPrepareHead($object)
 	$id = (int) $object->id;
 
 	$head[$h][0] = dol_buildpath('/dolistorextract/card.php', 1).'?id='.$id;
-	$head[$h][1] = img_picto('', 'bill', 'class="pictofixedwidth"').' '.$langs->trans('DolistoreOrderCard');
+	$head[$h][1] = img_picto('', 'order', 'class="pictofixedwidth"').' '.$langs->trans('DolistoreOrderCard');
 	$head[$h][2] = 'card';
 	$h++;
 
@@ -80,7 +80,11 @@ function dolistoreextractOrderPrepareHead($object)
 	$h++;
 
 	$head[$h][0] = dol_buildpath('/dolistorextract/documents.php', 1).'?id='.$id;
-	$head[$h][1] = $langs->trans('AttachedFiles');
+	$head[$h][1] = $langs->trans('DolistoreAttachedFiles');
+	$documentsCount = dolistoreextractCountOrderAttachedFiles($object);
+	if ($documentsCount > 0) {
+		$head[$h][1] .= ' <span class="badge marginleftonlyshort">'.$documentsCount.'</span>';
+	}
 	$head[$h][2] = 'documents';
 	$h++;
 
@@ -147,6 +151,29 @@ function dolistoreextractGetOrderUploadDir($object)
 		: $conf->dolistorextract->dir_output;
 
 	return $moduleOutput.'/'.$object->element.'/'.dol_sanitizeFileName($object->ref);
+}
+
+/**
+ * Count attached files and links for a DoliStore order.
+ *
+ * @param DolistoreOrder $object Order
+ * @return int
+ */
+function dolistoreextractCountOrderAttachedFiles($object)
+{
+	global $db;
+
+	require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
+	require_once DOL_DOCUMENT_ROOT.'/core/class/link.class.php';
+
+	$uploadDir = dolistoreextractGetOrderUploadDir($object);
+	$filearray = dol_dir_list($uploadDir, 'files', 0, '', '(\.meta|_preview.*\.png)$', 'name', SORT_ASC, 1);
+	$linkCount = Link::count($db, $object->element, (int) $object->id);
+	if ($linkCount < 0) {
+		$linkCount = 0;
+	}
+
+	return count($filearray) + (int) $linkCount;
 }
 
 /**

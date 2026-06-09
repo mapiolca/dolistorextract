@@ -1,6 +1,7 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Align DoliStore order attached files tab, PDF generation block and grouped lines with native Dolibarr rendering.
 - FIX : Move DoliStore order transverse native blocks below lines and action buttons.
 - FIX : Align the DoliStore order card banner and transverse blocks with native Dolibarr rendering.
 - FIX : Replace pending DoliStore mailbox order text action with a native eye icon.
