@@ -14,7 +14,6 @@ if (!isModEnabled('dolistorextract') || !dolistoreextractUserHasRight($user, 'or
 
 $form = new Form($db);
 $contextpage = 'dolistoreextractimportlogslist';
-dolistoreextractSaveSelectedFields($contextpage, 'selectedfields_importlogs');
 
 $arrayfields = array(
 	'datec' => array('label' => 'Date', 'checked' => 1, 'enabled' => 1, 'position' => 10),
@@ -24,7 +23,7 @@ $arrayfields = array(
 	'message' => array('label' => 'Message', 'checked' => 1, 'enabled' => 1, 'position' => 50),
 	'entity' => array('label' => 'Environment', 'checked' => 1, 'enabled' => 1, 'position' => 60),
 );
-$selectedfields = $form->multiSelectArrayWithCheckbox('selectedfields_importlogs', $arrayfields, $contextpage, getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN'));
+$selectedfields = dolistoreextractPrepareSelectedFields($form, $contextpage, 'selectedfields_importlogs', $arrayfields);
 
 $sortfield = GETPOST('sortfield', 'aZ09comma');
 $sortorder = GETPOST('sortorder', 'aZ09comma');
@@ -35,10 +34,8 @@ if ($page < 0) $page = 0;
 $limit = $conf->liste_limit;
 $offset = $limit * $page;
 
-$search_date_start = GETPOST('search_date_start', 'alpha');
-$search_date_end = GETPOST('search_date_end', 'alpha');
-if (!preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/', $search_date_start)) $search_date_start = '';
-if (!preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/', $search_date_end)) $search_date_end = '';
+$search_date_start = dolistoreextractGetDateFilter('search_date_start', 'search_date_start', 0, 0, 0);
+$search_date_end = dolistoreextractGetDateFilter('search_date_end', 'search_date_end', 23, 59, 59);
 $search_source = GETPOST('search_source', 'alphanohtml');
 $search_level = GETPOST('search_level', 'alphanohtml');
 $search_order = GETPOST('search_order', 'alphanohtml');
@@ -57,11 +54,11 @@ if ($resqlEntities) {
 if (empty($entityOptions)) $entityOptions[(int) $conf->entity] = (string) $conf->entity;
 
 $where = array('l.entity IN ('.getEntity('dolistoreextract_order').')');
-if ($search_date_start !== '') {
-	$where[] = "l.datec >= '".$db->escape($search_date_start)." 00:00:00'";
+if (!empty($search_date_start)) {
+	$where[] = "l.datec >= '".$db->escape(dol_print_date($search_date_start, '%Y-%m-%d'))." 00:00:00'";
 }
-if ($search_date_end !== '') {
-	$where[] = "l.datec <= '".$db->escape($search_date_end)." 23:59:59'";
+if (!empty($search_date_end)) {
+	$where[] = "l.datec <= '".$db->escape(dol_print_date($search_date_end, '%Y-%m-%d'))." 23:59:59'";
 }
 if ($search_source !== '') {
 	$where[] = natural_search('l.source', $search_source);
@@ -80,7 +77,9 @@ if (!empty($search_entity)) {
 }
 
 $param = '';
-foreach (array('search_date_start', 'search_date_end', 'search_source', 'search_level', 'search_order', 'search_message') as $key) {
+dolistoreextractAppendDateFilterParam($param, 'search_date_start', $search_date_start);
+dolistoreextractAppendDateFilterParam($param, 'search_date_end', $search_date_end);
+foreach (array('search_source', 'search_level', 'search_order', 'search_message') as $key) {
 	if (GETPOST($key, 'restricthtml') !== '') {
 		$param .= '&'.$key.'='.urlencode(GETPOST($key, 'restricthtml'));
 	}
@@ -114,24 +113,29 @@ print_barre_liste($langs->trans('DolistoreImportLogs'), $page, $_SERVER['PHP_SEL
 
 print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
+print '<input type="hidden" name="action" value="list">';
 print '<input type="hidden" name="formfilteraction" value="">';
 print '<input type="hidden" name="column_contextpage" value="'.dol_escape_htmltag($contextpage).'">';
 print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'">';
 print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'">';
+print '<input type="hidden" name="page" value="'.((int) $page).'">';
 
 print '<div class="div-table-responsive">';
 print '<table class="liste centpercent">';
 print '<tr class="liste_titre_filter">';
-if (dolistoreextractArrayFieldChecked($arrayfields, 'datec')) print '<td><input type="date" class="flat maxwidth100" name="search_date_start" value="'.dol_escape_htmltag($search_date_start).'"> <input type="date" class="flat maxwidth100" name="search_date_end" value="'.dol_escape_htmltag($search_date_end).'"></td>';
+if (dolistoreextractArrayFieldChecked($arrayfields, 'datec')) {
+	print '<td>';
+	print '<div class="nowrap">'.$form->selectDate($search_date_start ?: '', 'search_date_start', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('From')).'</div>';
+	print '<div class="nowrap">'.$form->selectDate($search_date_end ?: '', 'search_date_end', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('to')).'</div>';
+	print '</td>';
+}
 if (dolistoreextractArrayFieldChecked($arrayfields, 'source')) print '<td><input type="text" class="flat maxwidth100" name="search_source" value="'.dol_escape_htmltag($search_source).'"></td>';
 if (dolistoreextractArrayFieldChecked($arrayfields, 'level')) print '<td><input type="text" class="flat maxwidth100" name="search_level" value="'.dol_escape_htmltag($search_level).'"></td>';
 if (dolistoreextractArrayFieldChecked($arrayfields, 'order_ref')) print '<td><input type="text" class="flat maxwidth100" name="search_order" value="'.dol_escape_htmltag($search_order).'"></td>';
 if (dolistoreextractArrayFieldChecked($arrayfields, 'message')) print '<td><input type="text" class="flat maxwidth300" name="search_message" value="'.dol_escape_htmltag($search_message).'"></td>';
 if (dolistoreextractArrayFieldChecked($arrayfields, 'entity')) print '<td>'.$form->multiselectarray('search_entity', $entityOptions, $search_entity, 0, 0, 'minwidth100 maxwidth200').'</td>';
 print '<td class="right">';
-print '<button class="liste_titre button_search" type="submit" name="button_search" value="x">'.img_picto($langs->trans('Search'), 'search').'</button> ';
-print '<a class="button button_search" href="'.$_SERVER['PHP_SELF'].'">'.img_picto($langs->trans('RemoveFilter'), 'searchclear').'</a> ';
-print $selectedfields;
+print $form->showFilterButtons();
 print '</td>';
 print '</tr>';
 
@@ -142,7 +146,7 @@ if (dolistoreextractArrayFieldChecked($arrayfields, 'level')) print_liste_field_
 if (dolistoreextractArrayFieldChecked($arrayfields, 'order_ref')) print_liste_field_titre('DolistoreOrder', $_SERVER['PHP_SELF'], 'o.ref', $param, '', '', $sortfield, $sortorder);
 if (dolistoreextractArrayFieldChecked($arrayfields, 'message')) print_liste_field_titre('Message', $_SERVER['PHP_SELF'], 'l.message', $param, '', '', $sortfield, $sortorder);
 if (dolistoreextractArrayFieldChecked($arrayfields, 'entity')) print_liste_field_titre('Environment', $_SERVER['PHP_SELF'], 'l.entity', $param, '', '', $sortfield, $sortorder);
-print '<td></td>';
+print_liste_field_titre($selectedfields, $_SERVER['PHP_SELF'], '', '', '', '', $sortfield, $sortorder, 'center maxwidthsearch ');
 print '</tr>';
 
 $rowCount = 0;

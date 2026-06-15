@@ -37,8 +37,6 @@ $objectstatic = new DolistoreOrder($db);
 
 $pendingContextPage = 'dolistoreextractpendingorderslist';
 $ordersContextPage = 'dolistoreextractorderslist';
-dolistoreextractSaveSelectedFields($pendingContextPage, 'selectedfields_pendingorders');
-dolistoreextractSaveSelectedFields($ordersContextPage, 'selectedfields_orders');
 
 $pendingArrayFields = array(
 	'folder' => array('label' => 'DolistoreEmailFolder', 'checked' => 1, 'enabled' => 1, 'position' => 10),
@@ -67,8 +65,8 @@ $ordersArrayFields = array(
 	'entity' => array('label' => 'Environment', 'checked' => 1, 'enabled' => 1, 'position' => 110),
 );
 
-$selectedFieldsPending = $form->multiSelectArrayWithCheckbox('selectedfields_pendingorders', $pendingArrayFields, $pendingContextPage, getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN'));
-$selectedFieldsOrders = $form->multiSelectArrayWithCheckbox('selectedfields_orders', $ordersArrayFields, $ordersContextPage, getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN'));
+$selectedFieldsPending = dolistoreextractPrepareSelectedFields($form, $pendingContextPage, 'selectedfields_pendingorders', $pendingArrayFields);
+$selectedFieldsOrders = dolistoreextractPrepareSelectedFields($form, $ordersContextPage, 'selectedfields_orders', $ordersArrayFields);
 $actionColumnLeft = (bool) getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN');
 $filterContextPage = GETPOST('column_contextpage', 'aZ09');
 $buttonSearch = (GETPOSTISSET('button_search_x') || GETPOSTISSET('button_search'));
@@ -251,8 +249,12 @@ llxHeader('', $langs->trans('DolistoreOrders'));
 print load_fiche_titre($langs->trans('DolistorePendingOrdersFromMailbox'), '', 'email');
 print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
+print '<input type="hidden" name="action" value="list">';
 print '<input type="hidden" name="formfilteraction" value="">';
 print '<input type="hidden" name="column_contextpage" value="'.dol_escape_htmltag($pendingContextPage).'">';
+print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'">';
+print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'">';
+print '<input type="hidden" name="page" value="'.((int) $page).'">';
 print '<div class="div-table-responsive">';
 print '<table class="liste centpercent">';
 print '<tr class="liste_titre_filter">';
@@ -344,10 +346,12 @@ print_barre_liste($langs->trans('DolistoreOrders'), $page, $_SERVER['PHP_SELF'],
 
 print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
+print '<input type="hidden" name="action" value="list">';
 print '<input type="hidden" name="formfilteraction" value="">';
 print '<input type="hidden" name="column_contextpage" value="'.dol_escape_htmltag($ordersContextPage).'">';
 print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'">';
 print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'">';
+print '<input type="hidden" name="page" value="'.((int) $page).'">';
 
 print '<div class="div-table-responsive">';
 print '<table class="liste centpercent">';

@@ -205,6 +205,47 @@ class DolistoreInvoiceBatch extends CommonObject
 	}
 
 	/**
+	 * Return status label.
+	 *
+	 * @param int $mode Output mode
+	 * @return string
+	 */
+	public function getLibStatut($mode = 0)
+	{
+		return $this->LibStatut($this->status, $mode);
+	}
+
+	/**
+	 * Return status label.
+	 *
+	 * @param int $status Status
+	 * @param int $mode   Output mode
+	 * @return string
+	 */
+	public function LibStatut($status, $mode = 0)
+	{
+		global $langs;
+
+		$labels = array(
+			self::STATUS_DRAFT => 'Draft',
+			self::STATUS_SUCCESS => 'Success',
+			self::STATUS_ERROR => 'Error',
+		);
+		$classes = array(
+			self::STATUS_DRAFT => 'status0',
+			self::STATUS_SUCCESS => 'status4',
+			self::STATUS_ERROR => 'status9',
+		);
+		$label = $langs->trans($labels[(int) $status] ?? 'Unknown');
+
+		if (function_exists('dolGetStatus')) {
+			return dolGetStatus($label, '', '', $classes[(int) $status] ?? 'status0', $mode);
+		}
+
+		return $label;
+	}
+
+	/**
 	 * Assign SQL row.
 	 *
 	 * @param stdClass $obj SQL result

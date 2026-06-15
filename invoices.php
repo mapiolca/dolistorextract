@@ -15,8 +15,8 @@ $langs->loadLangs(array('dolistorextract@dolistorextract', 'bills'));
 if (!isModEnabled('dolistorextract') || !dolistoreextractUserHasRight($user, 'invoice', 'generate')) accessforbidden();
 
 $form = new Form($db);
+$batchstatic = new DolistoreInvoiceBatch($db);
 $contextpage = 'dolistoreextractinvoiceslist';
-dolistoreextractSaveSelectedFields($contextpage, 'selectedfields_invoices');
 
 $arrayfields = array(
 	'period' => array('label' => 'Period', 'checked' => 1, 'enabled' => 1, 'position' => 10),
@@ -28,7 +28,7 @@ $arrayfields = array(
 	'email_sent' => array('label' => 'DolistoreEmailSent', 'checked' => 1, 'enabled' => 1, 'position' => 70),
 	'entity' => array('label' => 'Environment', 'checked' => 1, 'enabled' => 1, 'position' => 80),
 );
-$selectedfields = $form->multiSelectArrayWithCheckbox('selectedfields_invoices', $arrayfields, $contextpage, getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN'));
+$selectedfields = dolistoreextractPrepareSelectedFields($form, $contextpage, 'selectedfields_invoices', $arrayfields);
 
 $action = GETPOST('action', 'aZ09');
 if ($action === 'generate') {
@@ -127,10 +127,12 @@ print_barre_liste($langs->trans('DolistoreInvoices'), $page, $_SERVER['PHP_SELF'
 
 print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
+print '<input type="hidden" name="action" value="list">';
 print '<input type="hidden" name="formfilteraction" value="">';
 print '<input type="hidden" name="column_contextpage" value="'.dol_escape_htmltag($contextpage).'">';
 print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'">';
 print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'">';
+print '<input type="hidden" name="page" value="'.((int) $page).'">';
 
 print '<div class="div-table-responsive">';
 print '<table class="liste centpercent">';
@@ -144,9 +146,7 @@ if (dolistoreextractArrayFieldChecked($arrayfields, 'status')) print '<td>'.$for
 if (dolistoreextractArrayFieldChecked($arrayfields, 'email_sent')) print '<td>'.$form->selectarray('search_email_sent', array('yes' => $langs->trans('Yes'), 'no' => $langs->trans('No')), $search_email_sent, 1, 0, 0, '', 0, 0, 0, '', 'maxwidth100').'</td>';
 if (dolistoreextractArrayFieldChecked($arrayfields, 'entity')) print '<td>'.$form->multiselectarray('search_entity', $entityOptions, $search_entity, 0, 0, 'minwidth100 maxwidth200').'</td>';
 print '<td class="right">';
-print '<button class="liste_titre button_search" type="submit" name="button_search" value="x">'.img_picto($langs->trans('Search'), 'search').'</button> ';
-print '<a class="button button_search" href="'.$_SERVER['PHP_SELF'].'">'.img_picto($langs->trans('RemoveFilter'), 'searchclear').'</a> ';
-print $selectedfields;
+print $form->showFilterButtons();
 print '</td>';
 print '</tr>';
 
@@ -159,7 +159,7 @@ if (dolistoreextractArrayFieldChecked($arrayfields, 'lines_count')) print_liste_
 if (dolistoreextractArrayFieldChecked($arrayfields, 'status')) print_liste_field_titre('Status', $_SERVER['PHP_SELF'], 'b.status', $param, '', '', $sortfield, $sortorder);
 if (dolistoreextractArrayFieldChecked($arrayfields, 'email_sent')) print_liste_field_titre('DolistoreEmailSent', $_SERVER['PHP_SELF'], 'b.email_sent', $param, '', '', $sortfield, $sortorder);
 if (dolistoreextractArrayFieldChecked($arrayfields, 'entity')) print_liste_field_titre('Environment', $_SERVER['PHP_SELF'], 'b.entity', $param, '', '', $sortfield, $sortorder);
-print '<td></td>';
+print_liste_field_titre($selectedfields, $_SERVER['PHP_SELF'], '', '', '', '', $sortfield, $sortorder, 'center maxwidthsearch ');
 print '</tr>';
 
 $rowCount = 0;
@@ -176,7 +176,7 @@ if ($resql) {
 		$totalOrders += (int) $obj->orders_count;
 		$totalLines += (int) $obj->lines_count;
 		$period = ((int) $obj->period_year).'-'.str_pad((string) $obj->period_month, 2, '0', STR_PAD_LEFT);
-		$statusLabel = $statusOptions[(int) $obj->status] ?? $langs->trans('Draft');
+		$batchstatic->status = (int) $obj->status;
 
 		print '<tr class="oddeven">';
 		if (dolistoreextractArrayFieldChecked($arrayfields, 'period')) print '<td>'.dol_escape_htmltag($period).'</td>';
@@ -184,7 +184,7 @@ if ($resql) {
 		if (dolistoreextractArrayFieldChecked($arrayfields, 'amount_ht')) print '<td class="right">'.price($obj->amount_ht).'</td>';
 		if (dolistoreextractArrayFieldChecked($arrayfields, 'orders_count')) print '<td class="right">'.((int) $obj->orders_count).'</td>';
 		if (dolistoreextractArrayFieldChecked($arrayfields, 'lines_count')) print '<td class="right">'.((int) $obj->lines_count).'</td>';
-		if (dolistoreextractArrayFieldChecked($arrayfields, 'status')) print '<td>'.dol_escape_htmltag($statusLabel).'</td>';
+		if (dolistoreextractArrayFieldChecked($arrayfields, 'status')) print '<td>'.$batchstatic->getLibStatut(5).'</td>';
 		if (dolistoreextractArrayFieldChecked($arrayfields, 'email_sent')) print '<td>'.yn((int) $obj->email_sent).'</td>';
 		if (dolistoreextractArrayFieldChecked($arrayfields, 'entity')) print '<td>'.dol_escape_htmltag($obj->entity_label ?: $obj->entity).'</td>';
 		print '<td></td>';
