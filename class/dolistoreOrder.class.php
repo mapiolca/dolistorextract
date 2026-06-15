@@ -130,7 +130,7 @@ class DolistoreOrder extends CommonObject
 		if ($id > 0) {
 			$sql .= ' AND o.rowid = '.((int) $id);
 		} else {
-			$sql .= ' AND o.ref = '.$this->quote($ref);
+			$sql .= ' AND o.ref = '.$this->quoteNullableValue($ref);
 		}
 		$sql .= ' AND o.entity IN ('.getEntity($this->element).')';
 
@@ -207,37 +207,37 @@ class DolistoreOrder extends CommonObject
 		$sql .= 'entity, ref, dolistore_order_ref, dolistore_order_date, release_date, currency_code, total_ht, total_tva, total_ttc, commission_percent, billable_total_ht, customer_name, customer_email, customer_country, customer_country_code, fk_soc_customer, fk_contact_customer, fk_soc_dolistore, fk_facture, invoice_date, email_message_id, email_subject, email_date, email_uid, email_folder, raw_hash, status, note_public, note_private, model_pdf, last_main_doc, import_key, datec, fk_user_creat';
 		$sql .= ') VALUES (';
 		$sql .= ((int) $this->entity).',';
-		$sql .= $this->quote($this->ref).',';
-		$sql .= $this->quote($this->dolistore_order_ref).',';
+		$sql .= $this->quoteNullableValue($this->ref).',';
+		$sql .= $this->quoteNullableValue($this->dolistore_order_ref).',';
 		$sql .= $this->dateToSql($this->dolistore_order_date, true).',';
 		$sql .= $this->dateToSql($this->release_date, true).',';
-		$sql .= $this->quote($this->currency_code ?: 'EUR').',';
+		$sql .= $this->quoteNullableValue($this->currency_code ?: 'EUR').',';
 		$sql .= price2num($this->total_ht, 'MU').',';
 		$sql .= price2num($this->total_tva, 'MU').',';
 		$sql .= price2num($this->total_ttc, 'MU').',';
 		$sql .= price2num($this->commission_percent, 'MU').',';
 		$sql .= price2num($this->billable_total_ht, 'MU').',';
-		$sql .= $this->quote($this->customer_name).',';
-		$sql .= $this->quote($this->customer_email).',';
-		$sql .= $this->quote($this->customer_country).',';
-		$sql .= $this->quote($this->customer_country_code).',';
+		$sql .= $this->quoteNullableValue($this->customer_name).',';
+		$sql .= $this->quoteNullableValue($this->customer_email).',';
+		$sql .= $this->quoteNullableValue($this->customer_country).',';
+		$sql .= $this->quoteNullableValue($this->customer_country_code).',';
 		$sql .= $this->nullableInt($this->fk_soc_customer).',';
 		$sql .= $this->nullableInt($this->fk_contact_customer).',';
 		$sql .= $this->nullableInt($this->fk_soc_dolistore).',';
 		$sql .= $this->nullableInt($this->fk_facture).',';
 		$sql .= $this->dateToSql($this->invoice_date, true).',';
-		$sql .= $this->quote($this->email_message_id).',';
-		$sql .= $this->quote($this->email_subject).',';
+		$sql .= $this->quoteNullableValue($this->email_message_id).',';
+		$sql .= $this->quoteNullableValue($this->email_subject).',';
 		$sql .= $this->dateToSql($this->email_date, false).',';
 		$sql .= $this->nullableInt($this->email_uid).',';
-		$sql .= $this->quote($this->email_folder).',';
-		$sql .= $this->quote($this->raw_hash).',';
+		$sql .= $this->quoteNullableValue($this->email_folder).',';
+		$sql .= $this->quoteNullableValue($this->raw_hash).',';
 		$sql .= ((int) $this->status).',';
-		$sql .= $this->quote($this->note_public).',';
-		$sql .= $this->quote($this->note_private).',';
-		$sql .= $this->quote($this->model_pdf).',';
-		$sql .= $this->quote($this->last_main_doc).',';
-		$sql .= $this->quote($this->import_key).',';
+		$sql .= $this->quoteNullableValue($this->note_public).',';
+		$sql .= $this->quoteNullableValue($this->note_private).',';
+		$sql .= $this->quoteNullableValue($this->model_pdf).',';
+		$sql .= $this->quoteNullableValue($this->last_main_doc).',';
+		$sql .= $this->quoteNullableValue($this->import_key).',';
 		$sql .= "'".$this->db->idate(dol_now())."',";
 		$sql .= ((int) $user->id);
 		$sql .= ')';
@@ -275,37 +275,37 @@ class DolistoreOrder extends CommonObject
 		}
 
 		$sql = 'UPDATE '.MAIN_DB_PREFIX.$this->table_element.' SET';
-		$sql .= ' ref = '.$this->quote($this->ref);
-		$sql .= ', dolistore_order_ref = '.$this->quote($this->dolistore_order_ref);
+		$sql .= ' ref = '.$this->quoteNullableValue($this->ref);
+		$sql .= ', dolistore_order_ref = '.$this->quoteNullableValue($this->dolistore_order_ref);
 		$sql .= ', dolistore_order_date = '.$this->dateToSql($this->dolistore_order_date, true);
 		$sql .= ', release_date = '.$this->dateToSql($this->release_date, true);
-		$sql .= ', currency_code = '.$this->quote($this->currency_code ?: 'EUR');
+		$sql .= ', currency_code = '.$this->quoteNullableValue($this->currency_code ?: 'EUR');
 		$sql .= ', total_ht = '.price2num($this->total_ht, 'MU');
 		$sql .= ', total_tva = '.price2num($this->total_tva, 'MU');
 		$sql .= ', total_ttc = '.price2num($this->total_ttc, 'MU');
 		$sql .= ', commission_percent = '.price2num($this->commission_percent, 'MU');
 		$sql .= ', billable_total_ht = '.price2num($this->billable_total_ht, 'MU');
-		$sql .= ', customer_name = '.$this->quote($this->customer_name);
-		$sql .= ', customer_email = '.$this->quote($this->customer_email);
-		$sql .= ', customer_country = '.$this->quote($this->customer_country);
-		$sql .= ', customer_country_code = '.$this->quote($this->customer_country_code);
+		$sql .= ', customer_name = '.$this->quoteNullableValue($this->customer_name);
+		$sql .= ', customer_email = '.$this->quoteNullableValue($this->customer_email);
+		$sql .= ', customer_country = '.$this->quoteNullableValue($this->customer_country);
+		$sql .= ', customer_country_code = '.$this->quoteNullableValue($this->customer_country_code);
 		$sql .= ', fk_soc_customer = '.$this->nullableInt($this->fk_soc_customer);
 		$sql .= ', fk_contact_customer = '.$this->nullableInt($this->fk_contact_customer);
 		$sql .= ', fk_soc_dolistore = '.$this->nullableInt($this->fk_soc_dolistore);
 		$sql .= ', fk_facture = '.$this->nullableInt($this->fk_facture);
 		$sql .= ', invoice_date = '.$this->dateToSql($this->invoice_date, true);
-		$sql .= ', email_message_id = '.$this->quote($this->email_message_id);
-		$sql .= ', email_subject = '.$this->quote($this->email_subject);
+		$sql .= ', email_message_id = '.$this->quoteNullableValue($this->email_message_id);
+		$sql .= ', email_subject = '.$this->quoteNullableValue($this->email_subject);
 		$sql .= ', email_date = '.$this->dateToSql($this->email_date, false);
 		$sql .= ', email_uid = '.$this->nullableInt($this->email_uid);
-		$sql .= ', email_folder = '.$this->quote($this->email_folder);
-		$sql .= ', raw_hash = '.$this->quote($this->raw_hash);
+		$sql .= ', email_folder = '.$this->quoteNullableValue($this->email_folder);
+		$sql .= ', raw_hash = '.$this->quoteNullableValue($this->raw_hash);
 		$sql .= ', status = '.((int) $this->status);
-		$sql .= ', note_public = '.$this->quote($this->note_public);
-		$sql .= ', note_private = '.$this->quote($this->note_private);
-		$sql .= ', model_pdf = '.$this->quote($this->model_pdf);
-		$sql .= ', last_main_doc = '.$this->quote($this->last_main_doc);
-		$sql .= ', import_key = '.$this->quote($this->import_key);
+		$sql .= ', note_public = '.$this->quoteNullableValue($this->note_public);
+		$sql .= ', note_private = '.$this->quoteNullableValue($this->note_private);
+		$sql .= ', model_pdf = '.$this->quoteNullableValue($this->model_pdf);
+		$sql .= ', last_main_doc = '.$this->quoteNullableValue($this->last_main_doc);
+		$sql .= ', import_key = '.$this->quoteNullableValue($this->import_key);
 		$sql .= ', fk_user_modif = '.((int) $user->id);
 		$sql .= ' WHERE rowid = '.((int) $this->id);
 		$sql .= ' AND entity IN ('.getEntity($this->element).')';
@@ -631,7 +631,7 @@ class DolistoreOrder extends CommonObject
 		}
 
 		$sql = 'SELECT o.rowid FROM '.MAIN_DB_PREFIX.$this->table_element.' as o';
-		$sql .= ' WHERE o.'.$field.' = '.$this->quote($value);
+		$sql .= ' WHERE o.'.$field.' = '.$this->quoteNullableValue($value);
 		$sql .= ' AND o.entity IN ('.getEntity($this->element).')';
 		$sql .= ' ORDER BY o.rowid DESC LIMIT 1';
 		$resql = $this->db->query($sql);
@@ -728,7 +728,7 @@ class DolistoreOrder extends CommonObject
 	 * @param mixed $value Value
 	 * @return string
 	 */
-	private function quote($value)
+	private function quoteNullableValue($value)
 	{
 		if ($value === null || $value === '') {
 			return 'NULL';

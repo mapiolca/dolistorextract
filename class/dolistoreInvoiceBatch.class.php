@@ -154,7 +154,7 @@ class DolistoreInvoiceBatch extends CommonObject
 		$sql .= ((int) $this->email_sent).',';
 		$sql .= $this->dateToSql($this->email_sent_date).',';
 		$sql .= ((int) $this->status).',';
-		$sql .= $this->quote($this->log).',';
+		$sql .= $this->quoteNullableValue($this->log).',';
 		$sql .= "'".$this->db->idate(dol_now())."',";
 		$sql .= ((int) $user->id);
 		$sql .= ')';
@@ -191,7 +191,7 @@ class DolistoreInvoiceBatch extends CommonObject
 		$sql .= ', email_sent = '.((int) $this->email_sent);
 		$sql .= ', email_sent_date = '.$this->dateToSql($this->email_sent_date);
 		$sql .= ', status = '.((int) $this->status);
-		$sql .= ', log = '.$this->quote($this->log);
+		$sql .= ', log = '.$this->quoteNullableValue($this->log);
 		$sql .= ', fk_user_modif = '.((int) $user->id);
 		$sql .= ' WHERE rowid = '.((int) $this->id);
 		$sql .= ' AND entity IN ('.getEntity('dolistoreextract_order').')';
@@ -227,7 +227,7 @@ class DolistoreInvoiceBatch extends CommonObject
 	 * @param mixed $value Value
 	 * @return string
 	 */
-	private function quote($value)
+	private function quoteNullableValue($value)
 	{
 		if ($value === null || $value === '') {
 			return 'NULL';
