@@ -1,6 +1,22 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Restore the DoliStore order attached files block to native Dolibarr `showdocuments()` rendering.
+- FIX : Align the DoliStore order Multicompany badge and document block with native Dolibarr rendering.
+- FIX : Add native setup management for DoliStore order numbering and document models.
+- FIX : Normalize the DoliStore order PDF model list before adding the standard fallback model.
+- FIX : Load the DoliStore order PDF model parent before rendering the native document block.
+- FIX : Use the DoliStore order document modulepart to load the native PDF model parent in the order card.
+- FIX : Align DoliStore order attached files tab, PDF generation block and grouped lines with native Dolibarr rendering.
+- FIX : Move DoliStore order transverse native blocks below lines and action buttons.
+- FIX : Align the DoliStore order card banner and transverse blocks with native Dolibarr rendering.
+- FIX : Replace pending DoliStore mailbox order text action with a native eye icon.
+- FIX : Align DoliStore order list filter buttons and column selector with native Dolibarr list settings.
+- FIX : Replace monthly dashboard summary tables with native Dolibarr line graphs.
+- FIX : Align DoliStore business list tables and order lines with native Dolibarr table rendering.
+- FIX : Prevent DoliStore order cards from trying to load a missing PDF document model.
+- FIX : Display DoliStore orders still pending in the configured mailbox from the archived order list.
+- FIX : Avoid PHP fatal errors from private SQL quote helpers colliding with Dolibarr `CommonObject::quote()`.
 - NEW : V2 archive workflow for DoliStore orders.
     + Added `Commande DoliStore` business object, lines, invoice batches and import journal tables.
     + IMAP import now archives DoliStore orders instead of creating native customer orders.

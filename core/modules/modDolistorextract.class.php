@@ -502,6 +502,11 @@ class modDolistorextract extends DolibarrModules
 			return 0;
 		}
 
+		$result = $this->initializeOrderDocumentModel();
+		if ($result < 0) {
+			return 0;
+		}
+
 		$result = $this->persistMulticompanySharingDefinition();
 		if ($result < 0) {
 			return 0;
@@ -581,6 +586,7 @@ class modDolistorextract extends DolibarrModules
 
 		$defaults = array(
 			'DOLISTOREXTRACT_ORDER_ADDON' => 'mod_dolistoreextract_order_dse',
+			'DOLISTOREXTRACT_ORDER_ADDON_PDF' => 'standard',
 			'DOLISTOREXTRACT_PAYMENT_RELEASE_DELAY_DAYS' => '30',
 			'DOLISTOREXTRACT_INVOICE_MIN_AMOUNT_HT' => '100.00',
 			'DOLISTOREXTRACT_INVOICE_TVA_RATE' => '0',
@@ -600,6 +606,52 @@ class modDolistorextract extends DolibarrModules
 				$this->error = $this->db->lasterror();
 				return -1;
 			}
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Register the standard DoliStore order document model once per entity.
+	 *
+	 * @return int
+	 */
+	private function initializeOrderDocumentModel()
+	{
+		global $conf;
+
+		if (getDolGlobalString('DOLISTOREXTRACT_ORDER_DOCUMENT_MODEL_INITIALIZED') !== '') {
+			return 1;
+		}
+
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+
+		$type = 'dolistoreextract_order';
+		$model = 'standard';
+		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'document_model';
+		$sql .= " WHERE nom = '".$this->db->escape($model)."'";
+		$sql .= " AND type = '".$this->db->escape($type)."'";
+		$sql .= ' AND entity = '.((int) $conf->entity);
+
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		$exists = (bool) $this->db->fetch_object($resql);
+		$this->db->free($resql);
+
+		if (!$exists) {
+			$result = addDocumentModel($model, $type, 'Standard', 'dolistoreextract/core/modules/dolistoreextract/doc');
+			if ($result <= 0) {
+				return -1;
+			}
+		}
+
+		$result = dolibarr_set_const($this->db, 'DOLISTOREXTRACT_ORDER_DOCUMENT_MODEL_INITIALIZED', '1', 'chaine', 0, '', (int) $conf->entity);
+		if ($result <= 0) {
+			$this->error = $this->db->lasterror();
+			return -1;
 		}
 
 		return 1;

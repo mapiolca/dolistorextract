@@ -80,10 +80,10 @@ class DolistoreImportLog extends CommonObject
 		$sql .= ((int) $conf->entity).',';
 		$sql .= ((int) $fkOrder > 0 ? (int) $fkOrder : 'NULL').',';
 		$sql .= ((int) $fkBatch > 0 ? (int) $fkBatch : 'NULL').',';
-		$sql .= self::quoteNullableValue($db, $source).',';
-		$sql .= self::quoteNullableValue($db, $level).',';
-		$sql .= self::quoteNullableValue($db, $message).',';
-		$sql .= self::quoteNullableValue($db, !empty($context) ? json_encode($context) : '').',';
+		$sql .= self::quoteNullableSqlValue($db, $source).',';
+		$sql .= self::quoteNullableSqlValue($db, $level).',';
+		$sql .= self::quoteNullableSqlValue($db, $message).',';
+		$sql .= self::quoteNullableSqlValue($db, !empty($context) ? json_encode($context) : '').',';
 		$sql .= "'".$db->idate(dol_now())."',";
 		$sql .= (!empty($user->id) ? (int) $user->id : 'NULL');
 		$sql .= ')';
@@ -130,7 +130,7 @@ class DolistoreImportLog extends CommonObject
 	 * @param mixed  $value Value
 	 * @return string
 	 */
-	private static function quoteNullableValue($db, $value)
+	private static function quoteNullableSqlValue($db, $value)
 	{
 		if ($value === null || $value === '') {
 			return 'NULL';

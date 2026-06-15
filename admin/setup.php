@@ -38,6 +38,7 @@ if (file_exists("../../main.inc.php")) {
 // Libraries
 require_once DOL_DOCUMENT_ROOT . "/core/lib/admin.lib.php";
 require_once __DIR__ . '/dolistorextract.lib.php';
+require_once __DIR__ . '/../class/dolistoreOrder.class.php';
 require_once DOL_DOCUMENT_ROOT."/core/class/html.formmail.class.php";
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 dol_include_once("/dolistorextract/include/ssilence/php-imap-client/autoload.php");
@@ -55,8 +56,14 @@ if (empty($user->admin) && !dolistoreextractUserHasRight($user, 'setup', 'write'
 }
 
 // Parameters
-$action = GETPOST('action', 'alpha');
-if (in_array($action, array('update', 'add', 'create_dolistore_order_category', 'create_dolistore_association_thirdparty'), true) && GETPOST('token', 'alphanohtml') === '') {
+$action = GETPOST('action', 'aZ09');
+$value = GETPOST('value', 'aZ09');
+$modulepart = GETPOST('modulepart', 'aZ09');
+$label = GETPOST('label', 'alphanohtml');
+$scandir = GETPOST('scan_dir', 'alphanohtml');
+$type = 'dolistoreextract_order';
+$error = 0;
+if (in_array($action, array('update', 'add', 'setmod', 'set', 'del', 'setdoc', 'create_dolistore_order_category', 'create_dolistore_association_thirdparty'), true) && GETPOST('token', 'alphanohtml') === '') {
 	accessforbidden('Invalid token');
 }
 
@@ -120,6 +127,33 @@ function dolistorextractCaptureFieldHtml($renderer)
 	return '';
 }
 
+/**
+ * Return true if a document model is active for current entity.
+ *
+ * @param DoliDB $db   Database handler
+ * @param string $type Document model type
+ * @param string $name Model name
+ * @return bool
+ */
+function dolistorextractDocumentModelIsActive($db, $type, $name)
+{
+	global $conf;
+
+	$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'document_model';
+	$sql .= " WHERE nom = '".$db->escape($name)."'";
+	$sql .= " AND type = '".$db->escape($type)."'";
+	$sql .= ' AND entity = '.((int) $conf->entity);
+
+	$resql = $db->query($sql);
+	if (!$resql) {
+		return false;
+	}
+	$isActive = (bool) $db->fetch_object($resql);
+	$db->free($resql);
+
+	return $isActive;
+}
+
 /*
  * Actions
  */
@@ -148,6 +182,92 @@ if ($action == 'update' || $action == 'add')
 	else
 	{
 		setEventMessages($langs->trans("Error"), null, 'errors');
+	}
+}
+
+if ($action == 'setmod') {
+	$numberingModule = $value;
+	if (substr($numberingModule, -4) === '.php') {
+		$numberingModule = substr($numberingModule, 0, -4);
+	}
+
+	if (!preg_match('/^mod_dolistoreextract_order_[a-z0-9_]+$/', $numberingModule)) {
+		setEventMessages($langs->trans('Error'), null, 'errors');
+	} else {
+		$file = dol_buildpath('/dolistorextract/core/modules/dolistoreextract/'.$numberingModule.'.php');
+		if (is_readable($file)) {
+			require_once $file;
+		}
+
+		if (!class_exists($numberingModule)) {
+			setEventMessages($langs->trans('ErrorModuleNotFound'), null, 'errors');
+		} else {
+			$module = new $numberingModule($db);
+			if (method_exists($module, 'canBeActivated') && !$module->canBeActivated()) {
+				setEventMessages($langs->trans('Error'), null, 'errors');
+			} else {
+				$res = dolibarr_set_const($db, 'DOLISTOREXTRACT_ORDER_ADDON', $numberingModule, 'chaine', 0, '', (int) $conf->entity);
+				if ($res > 0) {
+					$conf->global->DOLISTOREXTRACT_ORDER_ADDON = $numberingModule;
+					setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
+				} else {
+					setEventMessages($db->lasterror(), null, 'errors');
+				}
+			}
+		}
+	}
+}
+
+if ($action == 'set') {
+	if ($value === '') {
+		setEventMessages($langs->trans('Error'), null, 'errors');
+	} else {
+		$ret = 1;
+		if (!dolistorextractDocumentModelIsActive($db, $type, $value)) {
+			$ret = addDocumentModel($value, $type, $label, $scandir);
+		}
+		if ($ret > 0) {
+			dolibarr_set_const($db, 'DOLISTOREXTRACT_ORDER_DOCUMENT_MODEL_INITIALIZED', '1', 'chaine', 0, '', (int) $conf->entity);
+			setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
+		} else {
+			setEventMessages($langs->trans('Error'), null, 'errors');
+		}
+	}
+}
+
+if ($action == 'del') {
+	if ($value === '') {
+		setEventMessages($langs->trans('Error'), null, 'errors');
+	} else {
+		$ret = delDocumentModel($value, $type);
+		if ($ret > 0) {
+			if (getDolGlobalString('DOLISTOREXTRACT_ORDER_ADDON_PDF') == $value) {
+				dolibarr_del_const($db, 'DOLISTOREXTRACT_ORDER_ADDON_PDF', (int) $conf->entity);
+				$conf->global->DOLISTOREXTRACT_ORDER_ADDON_PDF = '';
+			}
+			dolibarr_set_const($db, 'DOLISTOREXTRACT_ORDER_DOCUMENT_MODEL_INITIALIZED', '1', 'chaine', 0, '', (int) $conf->entity);
+			setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
+		} else {
+			setEventMessages($langs->trans('Error'), null, 'errors');
+		}
+	}
+}
+
+if ($action == 'setdoc') {
+	if ($value === '') {
+		setEventMessages($langs->trans('Error'), null, 'errors');
+	} else {
+		$ret = 1;
+		if (!dolistorextractDocumentModelIsActive($db, $type, $value)) {
+			$ret = addDocumentModel($value, $type, $label, $scandir);
+		}
+		if ($ret > 0 && dolibarr_set_const($db, 'DOLISTOREXTRACT_ORDER_ADDON_PDF', $value, 'chaine', 0, '', (int) $conf->entity) > 0) {
+			$conf->global->DOLISTOREXTRACT_ORDER_ADDON_PDF = $value;
+			dolibarr_set_const($db, 'DOLISTOREXTRACT_ORDER_DOCUMENT_MODEL_INITIALIZED', '1', 'chaine', 0, '', (int) $conf->entity);
+			setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
+		} else {
+			setEventMessages($langs->trans('Error'), null, 'errors');
+		}
 	}
 }
 
@@ -216,17 +336,19 @@ $formmail = new FormMail($db);
 $self = $_SERVER['PHP_SELF'];
 $token = $_SESSION['newtoken'];
 $mode = GETPOST('mode', 'aZ09');
-if (!in_array($mode, array('settings', 'billing', 'emailsimap'), true)) {
+if (!in_array($mode, array('settings', 'orders', 'billing', 'emailsimap'), true)) {
 	$mode = 'settings';
 }
 
 print dol_get_fiche_head($head, $mode, $langs->trans("Module104976Name"), -1, "dolistore@dolistorextract");
-print '<table class="noborder" width="100%">';
-print '<tr class="liste_titre">';
-print '<td>'.$langs->trans("Description").'</td>';
-print '<td>'.$langs->trans("Value").'</td>';
-print '<td align="center">'.$langs->trans("Action").'</td>';
-print "</tr>\n";
+if ($mode !== 'orders') {
+	print '<table class="noborder" width="100%">';
+	print '<tr class="liste_titre">';
+	print '<td>'.$langs->trans("Description").'</td>';
+	print '<td>'.$langs->trans("Value").'</td>';
+	print '<td align="center">'.$langs->trans("Action").'</td>';
+	print "</tr>\n";
+}
 $var = true;
 
 if ($mode === 'settings') {
@@ -348,7 +470,185 @@ if ($mode === 'emailsimap') {
 	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractEmailTemplateEn"), 'DOLISTOREXTRACT_EMAIL_TEMPLATE_EN', $fieldTemplateEn, $self, $token);
 }
 
-print '</table>';
+if ($mode === 'orders') {
+	print load_fiche_titre($langs->trans('DolistoreOrderNumberingModules'), '', '');
+	print '<table class="noborder centpercent">';
+	print '<tr class="liste_titre">';
+	print '<td>'.$langs->trans('Name').'</td>';
+	print '<td>'.$langs->trans('Description').'</td>';
+	print '<td>'.$langs->trans('Example').'</td>';
+	print '<td class="center">'.$langs->trans('Status').'</td>';
+	print '<td class="center">'.$langs->trans('ShortInfo').'</td>';
+	print '</tr>';
+
+	$currentNumberingModule = getDolGlobalString('DOLISTOREXTRACT_ORDER_ADDON', 'mod_dolistoreextract_order_dse');
+	if (substr($currentNumberingModule, -4) === '.php') {
+		$currentNumberingModule = substr($currentNumberingModule, 0, -4);
+	}
+
+	$numberingDir = dol_buildpath('/dolistorextract/core/modules/dolistoreextract/');
+	$numberingFiles = array();
+	if (is_dir($numberingDir)) {
+		$handle = opendir($numberingDir);
+		if (is_resource($handle)) {
+			while (($file = readdir($handle)) !== false) {
+				if (preg_match('/^mod_dolistoreextract_order_.*\.php$/', $file)) {
+					$numberingFiles[] = $file;
+				}
+			}
+			closedir($handle);
+		}
+	}
+	sort($numberingFiles);
+
+	$foundNumberingModule = false;
+	foreach ($numberingFiles as $file) {
+		$classname = substr($file, 0, -4);
+		require_once $numberingDir.$file;
+		if (!class_exists($classname)) {
+			continue;
+		}
+		$module = new $classname($db);
+		if (!empty($module->version) && $module->version == 'development' && getDolGlobalInt('MAIN_FEATURES_LEVEL') < 2) {
+			continue;
+		}
+		if (!empty($module->version) && $module->version == 'experimental' && getDolGlobalInt('MAIN_FEATURES_LEVEL') < 1) {
+			continue;
+		}
+		if (method_exists($module, 'isEnabled') && !$module->isEnabled()) {
+			continue;
+		}
+
+		$foundNumberingModule = true;
+		$specimen = new DolistoreOrder($db);
+		$specimen->initAsSpecimen();
+		$nextValue = $module->getNextValue((int) $conf->entity, $specimen);
+		$htmltooltip = '<b>'.$langs->trans('Version').':</b> '.dol_escape_htmltag($module->getVersion()).'<br>';
+		$htmltooltip .= '<b>'.$langs->trans('NextValue').':</b> '.dol_escape_htmltag($nextValue !== '' ? $nextValue : $module->error).'<br>';
+		if (method_exists($module, 'getToolTip')) {
+			$htmltooltip .= dol_escape_htmltag($module->getToolTip());
+		}
+
+		print '<tr class="oddeven">';
+		print '<td>'.dol_escape_htmltag(!empty($module->name) ? $module->name : $classname).'</td>';
+		print '<td>'.$module->info().'</td>';
+		print '<td>'.dol_escape_htmltag($module->getExample()).'</td>';
+		print '<td class="center">';
+		if ($currentNumberingModule == $classname) {
+			print img_picto($langs->trans('Activated'), 'switch_on');
+		} else {
+			$url = $self.'?mode=orders&action=setmod&value='.urlencode($classname).'&token='.urlencode($token);
+			print '<a href="'.dol_escape_htmltag($url).'">'.img_picto($langs->trans('Disabled'), 'switch_off').'</a>';
+		}
+		print '</td>';
+		print '<td class="center">'.$form->textwithpicto('', $htmltooltip, 1, 0).'</td>';
+		print '</tr>';
+	}
+	if (!$foundNumberingModule) {
+		print '<tr class="oddeven"><td colspan="5"><span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span></td></tr>';
+	}
+	print '</table>';
+	print '<br>';
+
+	print load_fiche_titre($langs->trans('DolistoreOrderDocumentModels'), '', '');
+	$activeDocumentModels = array();
+	$sql = 'SELECT nom FROM '.MAIN_DB_PREFIX.'document_model';
+	$sql .= " WHERE type = '".$db->escape($type)."'";
+	$sql .= ' AND entity = '.((int) $conf->entity);
+	$resql = $db->query($sql);
+	if ($resql) {
+		while ($obj = $db->fetch_object($resql)) {
+			$activeDocumentModels[] = $obj->nom;
+		}
+		$db->free($resql);
+	} else {
+		dol_print_error($db);
+	}
+
+	print '<table class="noborder centpercent">';
+	print '<tr class="liste_titre">';
+	print '<td>'.$langs->trans('Name').'</td>';
+	print '<td>'.$langs->trans('Description').'</td>';
+	print '<td class="center">'.$langs->trans('Status').'</td>';
+	print '<td class="center">'.$langs->trans('Default').'</td>';
+	print '<td class="center">'.$langs->trans('ShortInfo').'</td>';
+	print '</tr>';
+
+	$documentDir = dol_buildpath('/dolistorextract/core/modules/dolistoreextract/doc/');
+	$documentRealPath = 'dolistorextract/core/modules/dolistoreextract/doc';
+	$documentFiles = array();
+	if (is_dir($documentDir)) {
+		$handle = opendir($documentDir);
+		if (is_resource($handle)) {
+			while (($file = readdir($handle)) !== false) {
+				if (preg_match('/^pdf_.*\.modules\.php$/', $file)) {
+					$documentFiles[] = $file;
+				}
+			}
+			closedir($handle);
+		}
+	}
+	sort($documentFiles);
+
+	$foundDocumentModel = false;
+	foreach ($documentFiles as $file) {
+		$name = substr($file, 4, dol_strlen($file) - 16);
+		$classname = substr($file, 0, dol_strlen($file) - 12);
+		require_once $documentDir.$file;
+		if (!class_exists($classname)) {
+			continue;
+		}
+		$module = new $classname($db);
+		if (!empty($module->version) && $module->version == 'development' && getDolGlobalInt('MAIN_FEATURES_LEVEL') < 2) {
+			continue;
+		}
+		if (!empty($module->version) && $module->version == 'experimental' && getDolGlobalInt('MAIN_FEATURES_LEVEL') < 1) {
+			continue;
+		}
+
+		$foundDocumentModel = true;
+		$isActive = in_array($name, $activeDocumentModels, true);
+		$isDefault = getDolGlobalString('DOLISTOREXTRACT_ORDER_ADDON_PDF') == $name;
+		$modelLabel = !empty($module->name) ? $module->name : $name;
+		$htmltooltip = '<b>'.$langs->trans('Name').':</b> '.dol_escape_htmltag($modelLabel).'<br>';
+		$htmltooltip .= '<b>'.$langs->trans('Type').':</b> '.dol_escape_htmltag(!empty($module->type) ? $module->type : $langs->trans('Unknown')).'<br>';
+		if (!empty($module->type) && $module->type == 'pdf' && !empty($module->page_largeur) && !empty($module->page_hauteur)) {
+			$htmltooltip .= '<b>'.$langs->trans('Width').'/'.$langs->trans('Height').':</b> '.dol_escape_htmltag($module->page_largeur.'/'.$module->page_hauteur).'<br>';
+		}
+		$htmltooltip .= '<b>'.$langs->trans('Path').':</b> '.dol_escape_htmltag($documentRealPath.'/'.$file);
+
+		print '<tr class="oddeven">';
+		print '<td>'.dol_escape_htmltag($modelLabel).'</td>';
+		print '<td>'.(!empty($module->description) ? $module->description : '').'</td>';
+		print '<td class="center">';
+		if ($isActive) {
+			$url = $self.'?mode=orders&action=del&value='.urlencode($name).'&token='.urlencode($token);
+			print '<a href="'.dol_escape_htmltag($url).'">'.img_picto($langs->trans('Enabled'), 'switch_on').'</a>';
+		} else {
+			$url = $self.'?mode=orders&action=set&value='.urlencode($name).'&scan_dir='.urlencode($documentRealPath).'&label='.urlencode($modelLabel).'&token='.urlencode($token);
+			print '<a href="'.dol_escape_htmltag($url).'">'.img_picto($langs->trans('Disabled'), 'switch_off').'</a>';
+		}
+		print '</td>';
+		print '<td class="center">';
+		if ($isDefault) {
+			print img_picto($langs->trans('Default'), 'on');
+		} else {
+			$url = $self.'?mode=orders&action=setdoc&value='.urlencode($name).'&scan_dir='.urlencode($documentRealPath).'&label='.urlencode($modelLabel).'&token='.urlencode($token);
+			print '<a href="'.dol_escape_htmltag($url).'">'.img_picto($langs->trans('Disabled'), 'off').'</a>';
+		}
+		print '</td>';
+		print '<td class="center">'.$form->textwithpicto('', $htmltooltip, 1, 0).'</td>';
+		print '</tr>';
+	}
+	if (!$foundDocumentModel) {
+		print '<tr class="oddeven"><td colspan="5"><span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span></td></tr>';
+	}
+	print '</table>';
+}
+
+if ($mode !== 'orders') {
+	print '</table>';
+}
 print '<br>';
 
 print '<script>

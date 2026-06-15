@@ -8,6 +8,7 @@
  */
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/commonobject.class.php';
+require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
 require_once __DIR__.'/dolistoreOrderLine.class.php';
 
 /**
@@ -85,6 +86,7 @@ class DolistoreOrder extends CommonObject
 	public $customer_country;
 	public $customer_country_code;
 	public $fk_soc_customer;
+	public $socid;
 	public $fk_contact_customer;
 	public $fk_soc_dolistore;
 	public $fk_facture;
@@ -130,7 +132,7 @@ class DolistoreOrder extends CommonObject
 		if ($id > 0) {
 			$sql .= ' AND o.rowid = '.((int) $id);
 		} else {
-			$sql .= ' AND o.ref = '.$this->quoteNullableValue($ref);
+			$sql .= ' AND o.ref = '.$this->quoteNullableSqlValue($ref);
 		}
 		$sql .= ' AND o.entity IN ('.getEntity($this->element).')';
 
@@ -207,37 +209,37 @@ class DolistoreOrder extends CommonObject
 		$sql .= 'entity, ref, dolistore_order_ref, dolistore_order_date, release_date, currency_code, total_ht, total_tva, total_ttc, commission_percent, billable_total_ht, customer_name, customer_email, customer_country, customer_country_code, fk_soc_customer, fk_contact_customer, fk_soc_dolistore, fk_facture, invoice_date, email_message_id, email_subject, email_date, email_uid, email_folder, raw_hash, status, note_public, note_private, model_pdf, last_main_doc, import_key, datec, fk_user_creat';
 		$sql .= ') VALUES (';
 		$sql .= ((int) $this->entity).',';
-		$sql .= $this->quoteNullableValue($this->ref).',';
-		$sql .= $this->quoteNullableValue($this->dolistore_order_ref).',';
+		$sql .= $this->quoteNullableSqlValue($this->ref).',';
+		$sql .= $this->quoteNullableSqlValue($this->dolistore_order_ref).',';
 		$sql .= $this->dateToSql($this->dolistore_order_date, true).',';
 		$sql .= $this->dateToSql($this->release_date, true).',';
-		$sql .= $this->quoteNullableValue($this->currency_code ?: 'EUR').',';
+		$sql .= $this->quoteNullableSqlValue($this->currency_code ?: 'EUR').',';
 		$sql .= price2num($this->total_ht, 'MU').',';
 		$sql .= price2num($this->total_tva, 'MU').',';
 		$sql .= price2num($this->total_ttc, 'MU').',';
 		$sql .= price2num($this->commission_percent, 'MU').',';
 		$sql .= price2num($this->billable_total_ht, 'MU').',';
-		$sql .= $this->quoteNullableValue($this->customer_name).',';
-		$sql .= $this->quoteNullableValue($this->customer_email).',';
-		$sql .= $this->quoteNullableValue($this->customer_country).',';
-		$sql .= $this->quoteNullableValue($this->customer_country_code).',';
+		$sql .= $this->quoteNullableSqlValue($this->customer_name).',';
+		$sql .= $this->quoteNullableSqlValue($this->customer_email).',';
+		$sql .= $this->quoteNullableSqlValue($this->customer_country).',';
+		$sql .= $this->quoteNullableSqlValue($this->customer_country_code).',';
 		$sql .= $this->nullableInt($this->fk_soc_customer).',';
 		$sql .= $this->nullableInt($this->fk_contact_customer).',';
 		$sql .= $this->nullableInt($this->fk_soc_dolistore).',';
 		$sql .= $this->nullableInt($this->fk_facture).',';
 		$sql .= $this->dateToSql($this->invoice_date, true).',';
-		$sql .= $this->quoteNullableValue($this->email_message_id).',';
-		$sql .= $this->quoteNullableValue($this->email_subject).',';
+		$sql .= $this->quoteNullableSqlValue($this->email_message_id).',';
+		$sql .= $this->quoteNullableSqlValue($this->email_subject).',';
 		$sql .= $this->dateToSql($this->email_date, false).',';
 		$sql .= $this->nullableInt($this->email_uid).',';
-		$sql .= $this->quoteNullableValue($this->email_folder).',';
-		$sql .= $this->quoteNullableValue($this->raw_hash).',';
+		$sql .= $this->quoteNullableSqlValue($this->email_folder).',';
+		$sql .= $this->quoteNullableSqlValue($this->raw_hash).',';
 		$sql .= ((int) $this->status).',';
-		$sql .= $this->quoteNullableValue($this->note_public).',';
-		$sql .= $this->quoteNullableValue($this->note_private).',';
-		$sql .= $this->quoteNullableValue($this->model_pdf).',';
-		$sql .= $this->quoteNullableValue($this->last_main_doc).',';
-		$sql .= $this->quoteNullableValue($this->import_key).',';
+		$sql .= $this->quoteNullableSqlValue($this->note_public).',';
+		$sql .= $this->quoteNullableSqlValue($this->note_private).',';
+		$sql .= $this->quoteNullableSqlValue($this->model_pdf).',';
+		$sql .= $this->quoteNullableSqlValue($this->last_main_doc).',';
+		$sql .= $this->quoteNullableSqlValue($this->import_key).',';
 		$sql .= "'".$this->db->idate(dol_now())."',";
 		$sql .= ((int) $user->id);
 		$sql .= ')';
@@ -249,6 +251,7 @@ class DolistoreOrder extends CommonObject
 
 		$this->id = $this->db->last_insert_id(MAIN_DB_PREFIX.$this->table_element);
 		$this->rowid = $this->id;
+		$this->socid = (int) $this->fk_soc_customer;
 
 		if (!$notrigger) {
 			$result = $this->call_trigger('DOLISTOREEXTRACT_ORDER_CREATE', $user);
@@ -275,37 +278,37 @@ class DolistoreOrder extends CommonObject
 		}
 
 		$sql = 'UPDATE '.MAIN_DB_PREFIX.$this->table_element.' SET';
-		$sql .= ' ref = '.$this->quoteNullableValue($this->ref);
-		$sql .= ', dolistore_order_ref = '.$this->quoteNullableValue($this->dolistore_order_ref);
+		$sql .= ' ref = '.$this->quoteNullableSqlValue($this->ref);
+		$sql .= ', dolistore_order_ref = '.$this->quoteNullableSqlValue($this->dolistore_order_ref);
 		$sql .= ', dolistore_order_date = '.$this->dateToSql($this->dolistore_order_date, true);
 		$sql .= ', release_date = '.$this->dateToSql($this->release_date, true);
-		$sql .= ', currency_code = '.$this->quoteNullableValue($this->currency_code ?: 'EUR');
+		$sql .= ', currency_code = '.$this->quoteNullableSqlValue($this->currency_code ?: 'EUR');
 		$sql .= ', total_ht = '.price2num($this->total_ht, 'MU');
 		$sql .= ', total_tva = '.price2num($this->total_tva, 'MU');
 		$sql .= ', total_ttc = '.price2num($this->total_ttc, 'MU');
 		$sql .= ', commission_percent = '.price2num($this->commission_percent, 'MU');
 		$sql .= ', billable_total_ht = '.price2num($this->billable_total_ht, 'MU');
-		$sql .= ', customer_name = '.$this->quoteNullableValue($this->customer_name);
-		$sql .= ', customer_email = '.$this->quoteNullableValue($this->customer_email);
-		$sql .= ', customer_country = '.$this->quoteNullableValue($this->customer_country);
-		$sql .= ', customer_country_code = '.$this->quoteNullableValue($this->customer_country_code);
+		$sql .= ', customer_name = '.$this->quoteNullableSqlValue($this->customer_name);
+		$sql .= ', customer_email = '.$this->quoteNullableSqlValue($this->customer_email);
+		$sql .= ', customer_country = '.$this->quoteNullableSqlValue($this->customer_country);
+		$sql .= ', customer_country_code = '.$this->quoteNullableSqlValue($this->customer_country_code);
 		$sql .= ', fk_soc_customer = '.$this->nullableInt($this->fk_soc_customer);
 		$sql .= ', fk_contact_customer = '.$this->nullableInt($this->fk_contact_customer);
 		$sql .= ', fk_soc_dolistore = '.$this->nullableInt($this->fk_soc_dolistore);
 		$sql .= ', fk_facture = '.$this->nullableInt($this->fk_facture);
 		$sql .= ', invoice_date = '.$this->dateToSql($this->invoice_date, true);
-		$sql .= ', email_message_id = '.$this->quoteNullableValue($this->email_message_id);
-		$sql .= ', email_subject = '.$this->quoteNullableValue($this->email_subject);
+		$sql .= ', email_message_id = '.$this->quoteNullableSqlValue($this->email_message_id);
+		$sql .= ', email_subject = '.$this->quoteNullableSqlValue($this->email_subject);
 		$sql .= ', email_date = '.$this->dateToSql($this->email_date, false);
 		$sql .= ', email_uid = '.$this->nullableInt($this->email_uid);
-		$sql .= ', email_folder = '.$this->quoteNullableValue($this->email_folder);
-		$sql .= ', raw_hash = '.$this->quoteNullableValue($this->raw_hash);
+		$sql .= ', email_folder = '.$this->quoteNullableSqlValue($this->email_folder);
+		$sql .= ', raw_hash = '.$this->quoteNullableSqlValue($this->raw_hash);
 		$sql .= ', status = '.((int) $this->status);
-		$sql .= ', note_public = '.$this->quoteNullableValue($this->note_public);
-		$sql .= ', note_private = '.$this->quoteNullableValue($this->note_private);
-		$sql .= ', model_pdf = '.$this->quoteNullableValue($this->model_pdf);
-		$sql .= ', last_main_doc = '.$this->quoteNullableValue($this->last_main_doc);
-		$sql .= ', import_key = '.$this->quoteNullableValue($this->import_key);
+		$sql .= ', note_public = '.$this->quoteNullableSqlValue($this->note_public);
+		$sql .= ', note_private = '.$this->quoteNullableSqlValue($this->note_private);
+		$sql .= ', model_pdf = '.$this->quoteNullableSqlValue($this->model_pdf);
+		$sql .= ', last_main_doc = '.$this->quoteNullableSqlValue($this->last_main_doc);
+		$sql .= ', import_key = '.$this->quoteNullableSqlValue($this->import_key);
 		$sql .= ', fk_user_modif = '.((int) $user->id);
 		$sql .= ' WHERE rowid = '.((int) $this->id);
 		$sql .= ' AND entity IN ('.getEntity($this->element).')';
@@ -314,6 +317,7 @@ class DolistoreOrder extends CommonObject
 			$this->error = $this->db->lasterror();
 			return -1;
 		}
+		$this->socid = (int) $this->fk_soc_customer;
 
 		if (!$notrigger) {
 			$result = $this->call_trigger('DOLISTOREEXTRACT_ORDER_UPDATE', $user);
@@ -378,6 +382,99 @@ class DolistoreOrder extends CommonObject
 	{
 		$line = new DolistoreOrderLine($this->db);
 		return $line->fetchAllByOrder((int) $this->id);
+	}
+
+	/**
+	 * Return lines grouped for native card/document rendering.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function getGroupedLinesForDisplay()
+	{
+		$lines = $this->getLines();
+		if (empty($lines)) {
+			return array();
+		}
+
+		$productIdsByDolistoreRef = $this->resolveProductIdsByDolistoreRefs($lines);
+		$productIds = array();
+		foreach ($lines as $line) {
+			$productId = (int) $line->fk_product;
+			$dolistoreRef = trim((string) $line->product_dolistore_ref);
+			if ($productId <= 0 && $dolistoreRef !== '' && !empty($productIdsByDolistoreRef[$dolistoreRef])) {
+				$productId = (int) $productIdsByDolistoreRef[$dolistoreRef];
+			}
+			if ($productId > 0) {
+				$productIds[$productId] = $productId;
+			}
+		}
+		$products = $this->fetchProductsByIds($productIds);
+
+		$groups = array();
+		foreach ($lines as $line) {
+			$dolistoreRef = trim((string) $line->product_dolistore_ref);
+			$productId = (int) $line->fk_product;
+			if ($productId <= 0 && $dolistoreRef !== '' && !empty($productIdsByDolistoreRef[$dolistoreRef])) {
+				$productId = (int) $productIdsByDolistoreRef[$dolistoreRef];
+			}
+
+			$key = strtolower($dolistoreRef).'|'.$productId;
+			if (!isset($groups[$key])) {
+				$groups[$key] = array(
+					'product_dolistore_ref' => $dolistoreRef,
+					'product_label' => (string) $line->product_label,
+					'fk_product' => $productId,
+					'product' => !empty($products[$productId]) ? $products[$productId] : null,
+					'qty' => 0.0,
+					'unit_price_ht' => 0.0,
+					'total_ht' => 0.0,
+					'billable_unit_price_ht' => 0.0,
+					'billable_total_ht' => 0.0,
+				);
+			}
+
+			if ($groups[$key]['product_label'] === '' && !empty($line->product_label)) {
+				$groups[$key]['product_label'] = (string) $line->product_label;
+			}
+			if (empty($groups[$key]['product']) && !empty($products[$productId])) {
+				$groups[$key]['product'] = $products[$productId];
+			}
+
+			$groups[$key]['qty'] += (float) $line->qty;
+			$groups[$key]['total_ht'] += (float) $line->total_ht;
+			$groups[$key]['billable_total_ht'] += (float) $line->billable_total_ht;
+		}
+
+		foreach ($groups as &$group) {
+			$qty = (float) $group['qty'];
+			if (abs($qty) > 0.0000001) {
+				$group['unit_price_ht'] = (float) $group['total_ht'] / $qty;
+				$group['billable_unit_price_ht'] = (float) $group['billable_total_ht'] / $qty;
+			}
+		}
+		unset($group);
+
+		return array_values($groups);
+	}
+
+	/**
+	 * Generate a document for the DoliStore order.
+	 *
+	 * @param string         $modele           Model name
+	 * @param Translate     $outputlangs      Output language
+	 * @param int           $hidedetails      Hide details
+	 * @param int           $hidedesc         Hide description
+	 * @param int           $hideref          Hide reference
+	 * @param array<string,mixed>|null $moreparams More parameters
+	 * @return int
+	 */
+	public function generateDocument($modele, $outputlangs, $hidedetails = 0, $hidedesc = 0, $hideref = 0, $moreparams = null)
+	{
+		if (empty($modele)) {
+			$modele = !empty($this->model_pdf) ? $this->model_pdf : getDolGlobalString('DOLISTOREXTRACT_ORDER_ADDON_PDF', 'standard');
+		}
+
+		return $this->commonGenerateDocument('core/modules/dolistoreextract/doc/', $modele, $outputlangs, $hidedetails, $hidedesc, $hideref, $moreparams);
 	}
 
 	/**
@@ -512,12 +609,23 @@ class DolistoreOrder extends CommonObject
 		if (substr($module, -4) === '.php') {
 			$module = substr($module, 0, -4);
 		}
+		if (!preg_match('/^mod_dolistoreextract_order_[a-z0-9_]+$/', $module)) {
+			$module = 'mod_dolistoreextract_order_dse';
+		}
 
-		$file = dol_buildpath('/dolistoreextract/core/modules/dolistoreextract/modules_dolistoreorder.php');
-		if (is_readable($file)) {
+		$modules = array($module);
+		if ($module !== 'mod_dolistoreextract_order_dse') {
+			$modules[] = 'mod_dolistoreextract_order_dse';
+		}
+
+		foreach ($modules as $moduleToLoad) {
+			$file = dol_buildpath('/dolistorextract/core/modules/dolistoreextract/'.$moduleToLoad.'.php');
+			if (!is_readable($file)) {
+				continue;
+			}
 			require_once $file;
-			if (class_exists($module)) {
-				$obj = new $module($this->db);
+			if (class_exists($moduleToLoad)) {
+				$obj = new $moduleToLoad($this->db);
 				$next = $obj->getNextValue(!empty($this->entity) ? (int) $this->entity : (int) $conf->entity, $this);
 				if (!empty($next)) {
 					return $next;
@@ -526,6 +634,51 @@ class DolistoreOrder extends CommonObject
 		}
 
 		return 'DSE-'.dol_print_date(dol_now(), '%Y%m').'-'.str_pad((string) mt_rand(1, 9999), 4, '0', STR_PAD_LEFT);
+	}
+
+	/**
+	 * Fetch native linked objects and expose the invoice stored on the archive.
+	 *
+	 * @param int|null     $sourceid        Source object id
+	 * @param string       $sourcetype      Source object type
+	 * @param int|null     $targetid        Target object id
+	 * @param string       $targettype      Target object type
+	 * @param string       $clause          SQL clause between source and target filters
+	 * @param int          $alsosametype    Include links to objects with same type
+	 * @param string       $orderby         SQL order by
+	 * @param int|string   $loadalsoobjects Load linked objects
+	 * @return int
+	 */
+	public function fetchObjectLinked($sourceid = null, $sourcetype = '', $targetid = null, $targettype = '', $clause = 'OR', $alsosametype = 1, $orderby = 'sourcetype', $loadalsoobjects = 1)
+	{
+		$result = parent::fetchObjectLinked($sourceid, $sourcetype, $targetid, $targettype, $clause, $alsosametype, $orderby, $loadalsoobjects);
+		if ($result < 0 || empty($this->fk_facture)) {
+			return $result;
+		}
+		if (function_exists('isModEnabled') && !isModEnabled('invoice')) {
+			return $result;
+		}
+		if (empty($loadalsoobjects) || (!is_numeric($loadalsoobjects) && $loadalsoobjects !== 'facture')) {
+			return $result;
+		}
+
+		$invoiceId = (int) $this->fk_facture;
+		foreach (($this->linkedObjects['facture'] ?? array()) as $linkedObject) {
+			if (!empty($linkedObject->id) && (int) $linkedObject->id === $invoiceId) {
+				return $result;
+			}
+		}
+
+		require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+
+		$invoice = new Facture($this->db);
+		if ($invoice->fetch($invoiceId) > 0) {
+			$linkKey = 'dolistoreextract_fk_facture_'.$invoiceId;
+			$this->linkedObjectsIds['facture'][$linkKey] = $invoiceId;
+			$this->linkedObjects['facture'][$linkKey] = $invoice;
+		}
+
+		return $result;
 	}
 
 	/**
@@ -631,7 +784,7 @@ class DolistoreOrder extends CommonObject
 		}
 
 		$sql = 'SELECT o.rowid FROM '.MAIN_DB_PREFIX.$this->table_element.' as o';
-		$sql .= ' WHERE o.'.$field.' = '.$this->quoteNullableValue($value);
+		$sql .= ' WHERE o.'.$field.' = '.$this->quoteNullableSqlValue($value);
 		$sql .= ' AND o.entity IN ('.getEntity($this->element).')';
 		$sql .= ' ORDER BY o.rowid DESC LIMIT 1';
 		$resql = $this->db->query($sql);
@@ -682,6 +835,7 @@ class DolistoreOrder extends CommonObject
 		$this->invoice_date = $this->normalizeTimestamp($obj->invoice_date);
 		$this->email_date = $this->normalizeTimestamp($obj->email_date);
 		$this->datec = $this->normalizeTimestamp($obj->datec);
+		$this->socid = (int) $this->fk_soc_customer;
 	}
 
 	/**
@@ -700,6 +854,137 @@ class DolistoreOrder extends CommonObject
 		}
 
 		return (int) $this->db->jdate($value);
+	}
+
+	/**
+	 * Resolve Dolibarr products from DoliStore product references.
+	 *
+	 * @param DolistoreOrderLine[] $lines Lines
+	 * @return array<string,int>
+	 */
+	private function resolveProductIdsByDolistoreRefs($lines)
+	{
+		$refs = array();
+		foreach ($lines as $line) {
+			if (!empty($line->fk_product)) {
+				continue;
+			}
+			$ref = trim((string) $line->product_dolistore_ref);
+			if ($ref !== '') {
+				$refs[$ref] = $ref;
+			}
+		}
+		if (empty($refs)) {
+			return array();
+		}
+
+		$mapping = array();
+		if ($this->productIddolistoreColumnExists()) {
+			$sql = 'SELECT pe.iddolistore, p.rowid';
+			$sql .= ' FROM '.MAIN_DB_PREFIX.'product as p';
+			$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'product_extrafields as pe ON pe.fk_object = p.rowid';
+			$sql .= ' WHERE p.entity IN ('.getEntity('product').')';
+			$sql .= ' AND p.fk_product_type = '.((int) Product::TYPE_SERVICE);
+			$sql .= ' AND pe.iddolistore IN ('.$this->buildSqlStringList($refs).')';
+			$sql .= ' ORDER BY p.rowid ASC';
+
+			$resql = $this->db->query($sql);
+			if ($resql) {
+				while ($obj = $this->db->fetch_object($resql)) {
+					$ref = (string) $obj->iddolistore;
+					if (!isset($mapping[$ref])) {
+						$mapping[$ref] = (int) $obj->rowid;
+					}
+				}
+				$this->db->free($resql);
+			}
+		}
+
+		$remainingRefs = array();
+		foreach ($refs as $ref) {
+			if (empty($mapping[$ref])) {
+				$remainingRefs[$ref] = $ref;
+			}
+		}
+		if (empty($remainingRefs)) {
+			return $mapping;
+		}
+
+		$sql = 'SELECT p.ref, p.rowid';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'product as p';
+		$sql .= ' WHERE p.entity IN ('.getEntity('product').')';
+		$sql .= ' AND p.fk_product_type = '.((int) Product::TYPE_SERVICE);
+		$sql .= ' AND p.ref IN ('.$this->buildSqlStringList($remainingRefs).')';
+		$sql .= ' ORDER BY p.rowid ASC';
+
+		$resql = $this->db->query($sql);
+		if ($resql) {
+			while ($obj = $this->db->fetch_object($resql)) {
+				$ref = (string) $obj->ref;
+				if (!isset($mapping[$ref])) {
+					$mapping[$ref] = (int) $obj->rowid;
+				}
+			}
+			$this->db->free($resql);
+		}
+
+		return $mapping;
+	}
+
+	/**
+	 * Fetch products once per unique id.
+	 *
+	 * @param int[] $productIds Product ids
+	 * @return array<int,Product>
+	 */
+	private function fetchProductsByIds($productIds)
+	{
+		$products = array();
+		foreach (array_unique(array_map('intval', $productIds)) as $productId) {
+			if ($productId <= 0) {
+				continue;
+			}
+			$product = new Product($this->db);
+			if ($product->fetch($productId) > 0) {
+				$products[$productId] = $product;
+			}
+		}
+
+		return $products;
+	}
+
+	/**
+	 * Return true when the DoliStore product extrafield SQL column exists.
+	 *
+	 * @return bool
+	 */
+	private function productIddolistoreColumnExists()
+	{
+		$sql = 'SHOW COLUMNS FROM '.MAIN_DB_PREFIX.'product_extrafields LIKE \'iddolistore\'';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return false;
+		}
+		$exists = $this->db->num_rows($resql) > 0;
+		$this->db->free($resql);
+
+		return $exists;
+	}
+
+	/**
+	 * Build a quoted SQL string list.
+	 *
+	 * @param string[] $values Values
+	 * @return string
+	 */
+	private function buildSqlStringList($values)
+	{
+		$quoted = array();
+		foreach ($values as $value) {
+			$quoted[] = "'".$this->db->escape((string) $value)."'";
+		}
+
+		return implode(',', $quoted);
 	}
 
 	/**
@@ -728,7 +1013,7 @@ class DolistoreOrder extends CommonObject
 	 * @param mixed $value Value
 	 * @return string
 	 */
-	private function quoteNullableValue($value)
+	private function quoteNullableSqlValue($value)
 	{
 		if ($value === null || $value === '') {
 			return 'NULL';
