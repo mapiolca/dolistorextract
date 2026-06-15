@@ -1,6 +1,7 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Align DoliStore list column selector dropdown position with native Dolibarr left/right classes.
 - FIX : Restore native selectable columns on DoliStore orders, invoice batches and import logs lists.
 - FIX : Restore the DoliStore order attached files block to native Dolibarr `showdocuments()` rendering.
 - FIX : Align the DoliStore order Multicompany badge and document block with native Dolibarr rendering.

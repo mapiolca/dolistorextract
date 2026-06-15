@@ -209,13 +209,26 @@ function dolistoreextractCountOrderAttachedFiles($object)
  */
 function dolistoreextractPrepareSelectedFields($form, $contextpage, $htmlname, &$arrayfields)
 {
+	global $conf;
+
 	if (function_exists('dol_sort_array')) {
 		$arrayfields = dol_sort_array($arrayfields, 'position');
 	}
 
 	dolistoreextractSaveSelectedFields($contextpage, $htmlname, $arrayfields);
 
-	return $form->multiSelectArrayWithCheckbox($htmlname, $arrayfields, $contextpage, getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN'));
+	$checkboxLeftColumn = !empty($conf->main_checkbox_left_column) ? 1 : (int) getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN');
+	$selectedFields = $form->multiSelectArrayWithCheckbox($htmlname, $arrayfields, $contextpage, $checkboxLeftColumn);
+
+	$nativeClass = $checkboxLeftColumn ? 'selectedfieldsleft' : 'selectedfields';
+	$generatedClass = $htmlname.($checkboxLeftColumn ? 'left' : '');
+	$selectedFields = str_replace(
+		'<ul class="'.$generatedClass.'">',
+		'<ul class="'.$generatedClass.' '.$nativeClass.'">',
+		$selectedFields
+	);
+
+	return $selectedFields;
 }
 
 /**
