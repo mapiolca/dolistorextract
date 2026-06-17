@@ -93,6 +93,11 @@ function dolistoreextractOrderPrepareHead($object)
 	$head[$h][2] = 'documents';
 	$h++;
 
+	$head[$h][0] = dol_buildpath('/dolistorextract/agenda.php', 1).'?id='.$id;
+	$head[$h][1] = $langs->trans('EventsAgenda');
+	$head[$h][2] = 'agenda';
+	$h++;
+
 	$head[$h][0] = dol_buildpath('/dolistorextract/mail.php', 1).'?id='.$id;
 	$head[$h][1] = $langs->trans('DolistoreMailSource');
 	$head[$h][2] = 'mail';

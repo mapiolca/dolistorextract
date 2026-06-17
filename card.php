@@ -44,7 +44,7 @@ $documentContext = dolistoreextractGetOrderDocumentContext($object);
 $uploadDir = $documentContext['upload_dir'];
 $upload_dir = $uploadDir;
 $permissiontoadd = dolistoreextractUserHasRight($user, 'order', 'write') || dolistoreextractUserHasRight($user, 'order', 'delete');
-$usercangeneretedoc = dolistoreextractUserHasRight($user, 'order', 'read');
+$usercangeneretedoc = dolistoreextractUserHasRight($user, 'order', 'write');
 $usercangeneratedoc = $usercangeneretedoc;
 $modelselected = !empty($object->model_pdf) ? $object->model_pdf : getDolGlobalString('DOLISTOREXTRACT_ORDER_ADDON_PDF', 'standard');
 include DOL_DOCUMENT_ROOT.'/core/actions_builddoc.inc.php';
@@ -126,23 +126,26 @@ print '<th class="right">'.$langs->trans('UnitPriceHT').'</th>';
 print '<th class="right">'.$langs->trans('AmountHT').'</th>';
 print '<th class="right">'.$langs->trans('DolistoreBillableAmountHT').'</th>';
 print '</tr>';
-$orderLines = $object->getGroupedLinesForDisplay();
+$orderLines = $object->getLines();
 if (empty($orderLines)) {
 	dolistoreextractPrintNoRecordLine(7);
 } else {
 	foreach ($orderLines as $line) {
 		$productHtml = '<span class="warning">'.$langs->trans('DolistoreServiceUnmapped').'</span>';
-		if (!empty($line['product']) && is_object($line['product'])) {
-			$productHtml = $line['product']->getNomUrl(1);
+		if (!empty($line->fk_product)) {
+			$product = new Product($db);
+			if ($product->fetch((int) $line->fk_product) > 0) {
+				$productHtml = $product->getNomUrl(1);
+			}
 		}
 		print '<tr class="oddeven">';
-		print '<td>'.dol_escape_htmltag($line['product_dolistore_ref']).'</td>';
-		print '<td>'.dol_escape_htmltag($line['product_label']).'</td>';
+		print '<td>'.dol_escape_htmltag($line->product_dolistore_ref).'</td>';
+		print '<td>'.dol_escape_htmltag($line->product_label).'</td>';
 		print '<td>'.$productHtml.'</td>';
-		print '<td class="right">'.price($line['qty']).'</td>';
-		print '<td class="right">'.price($line['unit_price_ht']).'</td>';
-		print '<td class="right">'.price($line['total_ht']).'</td>';
-		print '<td class="right">'.price($line['billable_total_ht']).'</td>';
+		print '<td class="right">'.price($line->qty).'</td>';
+		print '<td class="right">'.price($line->unit_price_ht).'</td>';
+		print '<td class="right">'.price($line->total_ht).'</td>';
+		print '<td class="right">'.price($line->billable_total_ht).'</td>';
 		print '</tr>';
 	}
 }
@@ -171,7 +174,7 @@ print '<div class="fichehalfright">';
 if (isModEnabled('agenda')) {
 	$MAXEVENT = 10;
 	$morehtmlcenter = '';
-	$formactions->showactions($object, $object->element, 0, 1, '', $MAXEVENT, '', $morehtmlcenter);
+	$formactions->showactions($object, 'dolistoreextract_order@dolistorextract', 0, 1, '', $MAXEVENT, '', $morehtmlcenter);
 }
 print '</div>';
 print '</div>';

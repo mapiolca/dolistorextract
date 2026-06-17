@@ -110,11 +110,10 @@ if ($user->societe_id > 0 || !dolistoreextractUserHasRight($user, 'order', 'read
 	accessforbidden();
 }
 
-$mailsContextPage = 'dolistoreextractmailslist';
-dolistoreextractSaveSelectedFields($mailsContextPage, 'selectedfields_mails');
+	$mailsContextPage = 'dolistoreextractmailslist';
 
 
-$extrafields = new ExtraFields($db);
+	$extrafields = new ExtraFields($db);
 
 // fetch optionals attributes and labels
 //$extralabels = $extrafields->fetch_name_optionals_label($object->table_element);
@@ -367,7 +366,7 @@ $mailArrayFields = array(
 	'contact' => array('label' => 'Contact', 'checked' => 1, 'enabled' => 1, 'position' => 80),
 	'read_status' => array('label' => 'DolistoreMailReadStatus', 'checked' => 1, 'enabled' => 1, 'position' => 90, 'align' => 'center'),
 );
-$selectedFieldsMails = $form->multiSelectArrayWithCheckbox('selectedfields_mails', $mailArrayFields, $mailsContextPage, getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN'));
+	$selectedFieldsMails = dolistoreextractPrepareSelectedFields($form, $mailsContextPage, 'selectedfields_mails', $mailArrayFields);
 $searchMailFolder = GETPOST('search_mail_folder', 'alphanohtml');
 $searchMailRef = GETPOST('search_mail_ref', 'alphanohtml');
 $searchMailLang = GETPOST('search_mail_lang', 'alphanohtml');

@@ -22,7 +22,11 @@ print dol_get_fiche_head(dolistoreextractOrderPrepareHead($object), 'logs', $lan
 dol_banner_tab($object, 'ref', '', 1, 'ref', 'ref', '');
 print '<table class="liste centpercent">';
 print '<tr class="liste_titre"><th>'.$langs->trans('Date').'</th><th>'.$langs->trans('Source').'</th><th>'.$langs->trans('Level').'</th><th>'.$langs->trans('Message').'</th></tr>';
-foreach ($log->fetchAllByOrder((int) $object->id) as $entry) {
+$entries = $log->fetchAllByOrder((int) $object->id);
+if (empty($entries)) {
+	dolistoreextractPrintNoRecordLine(4);
+}
+foreach ($entries as $entry) {
 	print '<tr class="oddeven">';
 	print '<td>'.dol_print_date($db->jdate($entry->datec), 'dayhour').'</td>';
 	print '<td>'.dol_escape_htmltag($entry->source).'</td>';

@@ -1,6 +1,10 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Align AGENT.md compliance for API payloads, document generation rights, native dates, notes, Agenda/Notifications declarations and cron metadata.
+- FIX : Stop creating manual Agenda events during IMAP import; DoliStore order events are now exposed through native triggers.
+- FIX : Display DoliStore order lines without grouping to preserve traceability.
+- NEW : Add `README.md`, `modulebuilder.txt` and DoliStore notification substitutions.
 - FIX : Align DoliStore list column selector dropdown position with native Dolibarr left/right classes.
 - FIX : Restore native selectable columns on DoliStore orders, invoice batches and import logs lists.
 - FIX : Restore the DoliStore order attached files block to native Dolibarr `showdocuments()` rendering.

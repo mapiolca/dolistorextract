@@ -15,10 +15,10 @@ $langs->loadLangs(array('dolistorextract@dolistorextract', 'bills'));
 if (!isModEnabled('dolistorextract') || !dolistoreextractUserHasRight($user, 'order', 'read')) accessforbidden();
 
 $form = new Form($db);
-$dateStart = GETPOST('date_start', 'alpha');
-$dateEnd = GETPOST('date_end', 'alpha');
-if (!preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/', $dateStart)) $dateStart = '';
-if (!preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/', $dateEnd)) $dateEnd = '';
+$dateStart = dolistoreextractGetDateFilter('date_start', 'date_start', 0, 0, 0);
+$dateEnd = dolistoreextractGetDateFilter('date_end', 'date_end', 23, 59, 59);
+$dateStartSql = !empty($dateStart) ? dol_print_date($dateStart, '%Y-%m-%d') : '';
+$dateEndSql = !empty($dateEnd) ? dol_print_date($dateEnd, '%Y-%m-%d') : '';
 $searchProduct = GETPOST('search_product', 'alphanohtml');
 $searchStatus = GETPOST('search_status', 'intcomma');
 $searchEntity = GETPOST('search_entity', 'array');
@@ -43,13 +43,13 @@ if (!empty($searchEntity)) {
 	$whereOrder[] = 'entity IN ('.$entityList.')';
 	$whereOrderAlias[] = 'o.entity IN ('.$entityList.')';
 }
-if ($dateStart !== '') {
-	$whereOrder[] = "dolistore_order_date >= '".$db->escape($dateStart)."'";
-	$whereOrderAlias[] = "o.dolistore_order_date >= '".$db->escape($dateStart)."'";
+if ($dateStartSql !== '') {
+	$whereOrder[] = "dolistore_order_date >= '".$db->escape($dateStartSql)."'";
+	$whereOrderAlias[] = "o.dolistore_order_date >= '".$db->escape($dateStartSql)."'";
 }
-if ($dateEnd !== '') {
-	$whereOrder[] = "dolistore_order_date <= '".$db->escape($dateEnd)."'";
-	$whereOrderAlias[] = "o.dolistore_order_date <= '".$db->escape($dateEnd)."'";
+if ($dateEndSql !== '') {
+	$whereOrder[] = "dolistore_order_date <= '".$db->escape($dateEndSql)."'";
+	$whereOrderAlias[] = "o.dolistore_order_date <= '".$db->escape($dateEndSql)."'";
 }
 if ($searchStatus !== '') {
 	$whereOrder[] = 'status IN ('.$db->sanitize($searchStatus).')';
@@ -118,6 +118,30 @@ function dolistoreextractPrintLineGraph($title, $legend, $data, $graphid)
 	print '</table>';
 }
 
+function dolistoreextractPrintPieGraph($title, $data, $graphid)
+{
+	global $langs;
+
+	$dolgraph = new DolGraph();
+	$dolgraph->setWidth('100%');
+	$dolgraph->setHeight('260');
+	$dolgraph->setShowLegend(1);
+
+	print '<table class="noborder nohover centpercent">';
+	print '<tr class="liste_titre"><th>'.$title.'</th></tr>';
+	print '<tr class="oddeven"><td class="center">';
+	if (!empty($data)) {
+		$dolgraph->SetData($data);
+		$dolgraph->SetType(array('pie'));
+		$dolgraph->draw($graphid);
+		print $dolgraph->show();
+	} else {
+		print $dolgraph->show($langs->trans('NoRecordFound'));
+	}
+	print '</td></tr>';
+	print '</table>';
+}
+
 $ordersMonth = dolistoreextractScalar($db, 'SELECT COUNT(rowid) as v FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere." AND dolistore_order_date >= '".$db->escape($monthStart)."'");
 $amountMonth = dolistoreextractScalar($db, 'SELECT SUM(total_ht) as v FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere." AND dolistore_order_date >= '".$db->escape($monthStart)."'");
 $amountInvoiceable = dolistoreextractScalar($db, 'SELECT SUM(billable_total_ht) as v FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere.' AND fk_facture IS NULL AND release_date <= \''.dol_print_date(dol_now(), '%Y-%m-%d').'\'');
@@ -144,8 +168,8 @@ print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<table class="noborder centpercent">';
 print '<tr class="liste_titre"><th colspan="10">'.$langs->trans('Filters').'</th></tr>';
 print '<tr class="oddeven">';
-print '<td>'.$langs->trans('DateStart').'</td><td><input type="date" class="flat" name="date_start" value="'.dol_escape_htmltag($dateStart).'"></td>';
-print '<td>'.$langs->trans('DateEnd').'</td><td><input type="date" class="flat" name="date_end" value="'.dol_escape_htmltag($dateEnd).'"></td>';
+print '<td>'.$langs->trans('DateStart').'</td><td>'.$form->selectDate($dateStart ?: '', 'date_start', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('From')).'</td>';
+print '<td>'.$langs->trans('DateEnd').'</td><td>'.$form->selectDate($dateEnd ?: '', 'date_end', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('to')).'</td>';
 print '<td>'.$langs->trans('Product').'</td><td><input type="text" class="flat maxwidth150" name="search_product" value="'.dol_escape_htmltag($searchProduct).'"></td>';
 print '<td>'.$langs->trans('Status').'</td><td>'.$form->selectarray('search_status', $statusOptions, $searchStatus, 1, 0, 0, '', 0, 0, 0, '', 'maxwidth125').'</td>';
 print '<td>'.$langs->trans('Environment').'</td><td>'.$form->multiselectarray('search_entity', $entityOptions, $searchEntity, 0, 0, 'minwidth100 maxwidth200').'</td>';
@@ -180,7 +204,6 @@ $amountsByMonthData = dolistoreextractMonthlyGraphData($db, $sql, 'amount');
 dolistoreextractPrintLineGraph($langs->trans('DolistoreAmountsByMonth'), $langs->trans('Amount'), $amountsByMonthData, 'dolistoreextract_amounts_by_month');
 print '</div></div><br>';
 
-print '<table class="noborder centpercent"><tr class="liste_titre"><th colspan="3">'.$langs->trans('DolistoreSalesByProduct').'</th></tr>';
 $productOrder = ($splitBy === 'qty') ? 'qty' : 'amount';
 $sql = 'SELECT l.product_label, SUM(l.billable_total_ht) as amount, SUM(l.qty) as qty';
 $sql .= ' FROM '.MAIN_DB_PREFIX.'dolistoreextract_order_line as l';
@@ -191,11 +214,27 @@ if ($searchProduct !== '') {
 }
 $sql .= ' GROUP BY l.product_label ORDER BY '.$productOrder.' DESC LIMIT 20';
 $resql = $db->query($sql);
+$productRows = array();
+$productGraphData = array();
 while ($resql && ($obj = $db->fetch_object($resql))) {
-	print '<tr class="oddeven"><td>'.dol_escape_htmltag($obj->product_label).'</td><td class="right">'.price($obj->amount).'</td><td class="right">'.price($obj->qty).'</td></tr>';
+	$productRows[] = $obj;
+	$productGraphData[] = array((string) $obj->product_label, (float) ($splitBy === 'qty' ? $obj->qty : $obj->amount));
 }
 if ($resql) $db->free($resql);
+
+print '<div class="fichecenter"><div class="fichehalfleft">';
+dolistoreextractPrintPieGraph($langs->trans('DolistoreSalesByProduct'), $productGraphData, 'dolistoreextract_sales_by_product');
+print '</div><div class="fichehalfright">';
+print '<table class="noborder centpercent"><tr class="liste_titre"><th>'.$langs->trans('Product').'</th><th class="right">'.$langs->trans('Amount').'</th><th class="right">'.$langs->trans('Qty').'</th></tr>';
+if (empty($productRows)) {
+	dolistoreextractPrintNoRecordLine(3);
+} else {
+	foreach ($productRows as $obj) {
+		print '<tr class="oddeven"><td>'.dol_escape_htmltag($obj->product_label).'</td><td class="right">'.price($obj->amount).'</td><td class="right">'.price($obj->qty).'</td></tr>';
+	}
+}
 print '</table>';
+print '</div></div>';
 
 llxFooter();
 $db->close();

@@ -1,5 +1,5 @@
 <?php
-/* Copyright (C) 2017      Jean-François Ferry	<jfefe@aternatik.fr>
+/* Copyright (C) 2026      Pierre Ardoin <developpeur@lesmetiersdubatiment.fr>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,8 +16,7 @@
  */
 
 /**
- * Cron class for module dolistorextract
- * @author jfefe <jfefe@example.com>
+ * Cron class for module dolistorextract.
  *
  */
 class dolistorextractCron
@@ -44,6 +43,7 @@ class dolistorextractCron
 
 		global $conf, $langs, $db;
 
+		$langs->loadLangs(array('dolistorextract@dolistorextract'));
 		require_once __DIR__.'/actions_dolistorextract.class.php';
 
 		$dolistorextractActions = new \ActionsDolistorextract($this->db);
@@ -51,7 +51,7 @@ class dolistorextractCron
 
 		$this->output.= '<p>'.$dolistorextractActions->logCat.'</p>';
 		if ($res < 0) {
-			$this->output.= 'erreur import dolistore lié au métadonnées du mail!';
+			$this->output.= $langs->trans('DolistoreCronImportMetadataError');
 
 			if (!empty($dolistorextractActions->error)) {
 				$this->output.= '<br/>'.$dolistorextractActions->error;
@@ -66,9 +66,11 @@ class dolistorextractCron
 
 		if ($res >= 0) {
 			$this->output.= $dolistorextractActions->logOutput;
-			$this->output.= '<br/>' . $res . ' ventes traitée(s)';
+			$this->output.= '<br/>'.$langs->trans('DolistoreCronImportProcessedSales', $res);
 			return 0;
 		}
+
+		return 0;
 	}
 
 	/**
@@ -80,6 +82,7 @@ class dolistorextractCron
 	{
 		global $langs;
 
+		$langs->loadLangs(array('dolistorextract@dolistorextract'));
 		require_once DOL_DOCUMENT_ROOT.'/user/class/user.class.php';
 		require_once __DIR__.'/actions_dolistorextract.class.php';
 
@@ -121,6 +124,7 @@ class dolistorextractCron
 	{
 		global $langs;
 
+		$langs->loadLangs(array('dolistorextract@dolistorextract'));
 		if (!getDolGlobalInt('DOLISTOREXTRACT_DAILY_NOTIFICATION_ENABLED')) {
 			$this->output .= $langs->trans('DolistoreDailyNotificationDisabled');
 			return 0;

@@ -99,10 +99,13 @@ class modDolistorextract extends DolibarrModules
 			'triggers' => 1,
 			'models' => 1,
 			'api' => 1,
+			'substitutions' => 1,
 			'hooks' => array(
 				'data' => array(
 					'admin',
+					'agenda',
 					'emailtemplates',
+					'notification',
 					'multicompanyexternalmodulesharing',
 					'multicompanyexternalmodules',
 					'multicompanysharingoptions',
@@ -195,9 +198,9 @@ class modDolistorextract extends DolibarrModules
 
 		// Cronjobs
 		$this->cronjobs = array(
-			0 => array('label' => 'DolistoreExtract - Import des commandes DoliStore', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runImport', 'parameters' => '', 'comment' => 'Import IMAP des commandes DoliStore', 'frequency' => 1, 'unitfrequency' => 3600, 'test' => 'isModEnabled("dolistorextract")'),
-			1 => array('label' => 'DolistoreExtract - Facturation DoliStore', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runInvoice', 'parameters' => '', 'comment' => 'Facturation mensuelle des commandes DoliStore libérées', 'frequency' => 1, 'unitfrequency' => 86400, 'test' => 'isModEnabled("dolistorextract")'),
-			2 => array('label' => 'DolistoreExtract - Notification quotidienne', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runDailyNotification', 'parameters' => '', 'comment' => 'Notification quotidienne optionnelle DoliStore', 'frequency' => 1, 'unitfrequency' => 86400, 'test' => 'isModEnabled("dolistorextract") && getDolGlobalInt("DOLISTOREXTRACT_DAILY_NOTIFICATION_ENABLED")'),
+			0 => array('label' => 'DolistoreCronImportLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runImport', 'parameters' => '', 'comment' => 'DolistoreCronImportComment', 'frequency' => 1, 'unitfrequency' => 3600, 'status' => 0, 'test' => 'isModEnabled("dolistorextract")', 'priority' => 50),
+			1 => array('label' => 'DolistoreCronInvoiceLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runInvoice', 'parameters' => '', 'comment' => 'DolistoreCronInvoiceComment', 'frequency' => 1, 'unitfrequency' => 86400, 'status' => 0, 'test' => 'isModEnabled("dolistorextract")', 'priority' => 55),
+			2 => array('label' => 'DolistoreCronDailyNotificationLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runDailyNotification', 'parameters' => '', 'comment' => 'DolistoreCronDailyNotificationComment', 'frequency' => 1, 'unitfrequency' => 86400, 'status' => 0, 'test' => 'isModEnabled("dolistorextract") && getDolGlobalInt("DOLISTOREXTRACT_DAILY_NOTIFICATION_ENABLED")', 'priority' => 90),
 		);
 
 		// Permissions
@@ -512,16 +515,21 @@ class modDolistorextract extends DolibarrModules
 			return 0;
 		}
 
-			$result = $this->createDolistoreServiceExtraField();
-			if ($result < 0) {
-				return 0;
+		$result = $this->createDolistoreServiceExtraField();
+		if ($result < 0) {
+			return 0;
+		}
+
+		$result = $this->registerDolistoreActionTriggers();
+		if ($result < 0) {
+			return 0;
 		}
 
 		return 1;
 	}
 
-		/**
-		 * Create product/service extrafield for Dolistore identifier mapping.
+	/**
+	 * Create product/service extrafield for Dolistore identifier mapping.
 	 *
 	 * @return int 1 if OK, -1 if KO
 	 */
@@ -550,6 +558,50 @@ class modDolistorextract extends DolibarrModules
 		if ($res < 0) {
 			$this->error = $extrafields->error;
 			return -1;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Register DoliStore order action triggers for Agenda and Notifications native modules.
+	 *
+	 * @return int 1 if OK, -1 if KO
+	 */
+	private function registerDolistoreActionTriggers()
+	{
+		global $langs;
+
+		$langs->load('dolistorextract@dolistorextract');
+		dol_include_once('/dolistorextract/class/actions_dolistorextract.class.php');
+		if (!class_exists('ActionsDolistorextract')) {
+			$this->error = 'ActionsDolistorextract class not found';
+			return -1;
+		}
+
+		$triggers = ActionsDolistorextract::getBusinessEventsDefinition();
+		foreach ($triggers as $code => $triggerconf) {
+			$label = $this->db->escape($langs->transnoentities($triggerconf['label']));
+			$description = $this->db->escape($langs->transnoentities($triggerconf['description']));
+			$elementtype = $this->db->escape((string) $triggerconf['elementtype']);
+			$rang = (int) $triggerconf['rang'];
+
+			$sql = 'INSERT INTO '.MAIN_DB_PREFIX.'c_action_trigger (code, label, description, elementtype, rang)';
+			$sql .= " SELECT '".$this->db->escape($code)."', '".$label."', '".$description."', '".$elementtype."', ".$rang;
+			$sql .= ' FROM DUAL';
+			$sql .= " WHERE NOT EXISTS (SELECT 1 FROM ".MAIN_DB_PREFIX."c_action_trigger WHERE code = '".$this->db->escape($code)."')";
+			if (!$this->db->query($sql)) {
+				$this->error = $this->db->lasterror();
+				return -1;
+			}
+
+			$sql = 'UPDATE '.MAIN_DB_PREFIX.'c_action_trigger';
+			$sql .= " SET label = '".$label."', description = '".$description."', elementtype = '".$elementtype."', rang = ".$rang;
+			$sql .= " WHERE code = '".$this->db->escape($code)."'";
+			if (!$this->db->query($sql)) {
+				$this->error = $this->db->lasterror();
+				return -1;
+			}
 		}
 
 		return 1;

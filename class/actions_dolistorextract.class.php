@@ -23,7 +23,6 @@
  */
 //require_once "dolistorextract.class.php";
 require_once DOL_DOCUMENT_ROOT . '/core/lib/files.lib.php';
-require_once DOL_DOCUMENT_ROOT . '/comm/action/class/actioncomm.class.php';
 require_once DOL_DOCUMENT_ROOT . '/compta/facture/class/facture.class.php';
 require_once DOL_DOCUMENT_ROOT . '/contact/class/contact.class.php';
 require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
@@ -160,6 +159,33 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
+	 * Return business events exposed to native Agenda and Notifications.
+	 *
+	 * @return array<string,array<string,int|string>>
+	 */
+	public static function getBusinessEventsDefinition(): array
+	{
+		$elementtype = 'dolistoreextract_order@dolistorextract';
+
+		return array(
+			'DOLISTOREEXTRACT_ORDER_CREATE' => array('label' => 'DolistoreOrderTriggerLabelCreate', 'description' => 'DolistoreOrderTriggerDescCreate', 'elementtype' => $elementtype, 'rang' => 2500),
+			'DOLISTOREEXTRACT_ORDER_UPDATE' => array('label' => 'DolistoreOrderTriggerLabelUpdate', 'description' => 'DolistoreOrderTriggerDescUpdate', 'elementtype' => $elementtype, 'rang' => 2501),
+			'DOLISTOREEXTRACT_ORDER_DELETE' => array('label' => 'DolistoreOrderTriggerLabelDelete', 'description' => 'DolistoreOrderTriggerDescDelete', 'elementtype' => $elementtype, 'rang' => 2502),
+			'DOLISTOREEXTRACT_ORDER_INVOICE' => array('label' => 'DolistoreOrderTriggerLabelInvoice', 'description' => 'DolistoreOrderTriggerDescInvoice', 'elementtype' => $elementtype, 'rang' => 2503),
+		);
+	}
+
+	/**
+	 * Return event codes supported by native Notifications.
+	 *
+	 * @return string[]
+	 */
+	public static function getNotificationEventCodes(): array
+	{
+		return array_keys(self::getBusinessEventsDefinition());
+	}
+
+	/**
 	 * Hook for Multicompany external modules sharing.
 	 *
 	 * @param array       $parameters  Parameters
@@ -203,6 +229,63 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->results = array_replace_recursive($this->results, self::getMulticompanySharingDefinition());
 		return 0;
 	}
+
+	/**
+	 * Add DoliStore order events to native Notifications supported events.
+	 *
+	 * @param array       $parameters  Parameters
+	 * @param object|null $object      Object
+	 * @param string      $action      Action
+	 * @param HookManager $hookmanager Hookmanager
+	 * @return int
+	 */
+	public function notifsupported($parameters, &$object, &$action, $hookmanager): int
+	{
+		$events = self::getNotificationEventCodes();
+		if (!empty($hookmanager->resArray['arrayofnotifsupported']) && is_array($hookmanager->resArray['arrayofnotifsupported'])) {
+			$events = array_merge($hookmanager->resArray['arrayofnotifsupported'], $events);
+		}
+
+		$this->results = array('arrayofnotifsupported' => array_values(array_unique($events)));
+		return 0;
+	}
+
+	/**
+	 * Describe the custom object to generic Dolibarr element resolvers.
+	 *
+	 * @param array       $parameters  Parameters
+	 * @param object|null $object      Object
+	 * @param string      $action      Action
+	 * @param HookManager $hookmanager Hookmanager
+	 * @return int
+	 */
+	public function getElementProperties($parameters, &$object, &$action, $hookmanager): int
+	{
+		global $conf;
+
+		$elementtype = !empty($parameters['elementType']) ? (string) $parameters['elementType'] : '';
+		if (!in_array($elementtype, array('dolistoreextract_order', 'dolistoreextract_order@dolistorextract'), true)) {
+			return 0;
+		}
+
+		$diroutput = !empty($conf->dolistorextract->dir_output) ? $conf->dolistorextract->dir_output : '';
+		$this->results = array(
+			'module' => 'dolistorextract',
+			'element' => 'dolistoreextract_order',
+			'table_element' => 'dolistoreextract_order',
+			'subelement' => 'dolistoreextract_order',
+			'classpath' => 'dolistorextract/class',
+			'classfile' => 'dolistoreOrder',
+			'classname' => 'DolistoreOrder',
+			'dir_output' => $diroutput,
+			'dir_temp' => $diroutput !== '' ? $diroutput.'/temp' : '',
+			'parent_element' => '',
+		);
+		$hookmanager->resArray = $this->results;
+
+		return 1;
+	}
+
 	/**
 	 * Hook: Provides additional info to the email element list.
 	 *
@@ -313,74 +396,19 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
-	 * Creates a Dolibarr calendar event (actioncomm) for a sold product extracted from Dolistore mail.
-	 * Detects and avoids duplicate events based on a tag in the event note.
+	 * Legacy compatibility shim for the former manual Agenda event creation.
 	 *
-	 * @param array  $productDatas  Product/item array (extracted from email)
-	 * @param string $orderRef      Dolistore order reference
-	 * @param int    $socid         Thirdparty/Customer rowid
-	 * @return int            New event rowid, 0 if already exists, -1 if error
+	 * DoliStore order events are now exposed through native object triggers and c_action_trigger.
+	 *
+	 * @param array  $productDatas Product/item array
+	 * @param string $orderRef     DoliStore order reference
+	 * @param int    $socid        Thirdparty rowid
+	 * @return int Always 0, manual Agenda creation disabled
 	 */
 	public function createEventFromExtractDatas(array $productDatas, string $orderRef, int $socid) : int
 	{
-		global $conf, $langs;
-
-		// Check value
-		if (empty($orderRef) || empty($productDatas['item_reference'])) {
-			dol_syslog(__METHOD__ . ' Error : params order_name and product_ref missing');
-			return -1;
-		}
-
-		$res = 0;
-
-		$userStatic = new User($this->db);
-		$userStatic->fetch(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'));
-
-		require_once DOL_DOCUMENT_ROOT . '/comm/action/class/actioncomm.class.php';
-		$actionStatic = new ActionComm($this->db);
-
-		$actionStatic->socid = $socid;
-
-		$actionStatic->authorid = getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS');
-		$actionStatic->userownerid = getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS');
-
-		$actionStatic->datec = time();
-		$actionStatic->datem = time();
-		$actionStatic->datep = time();
-		$actionStatic->percentage = 100;
-
-		$actionStatic->type_code = 'AC_STRXTRACT';
-		$actionStatic->label = $langs->trans('DolistorextractLabelActionForSale', $productDatas['item_name'] . ' (' . $productDatas['item_reference'] . ')');
-		// Define a tag which allow to detect twice
-		$actionStatic->note = 'ORDER:' . $orderRef . ':' . $productDatas['item_reference'];
-		// Check if import already done
-		if (! $this->isAlreadyImported($actionStatic->note)) {
-			$res = (int) $actionStatic->create($userStatic);
-		} else {
-			dol_syslog(__METHOD__ . ' event already exists, skip note=' . $actionStatic->note, LOG_INFO);
-		}
-
-		return $res;
-	}
-
-	/**
-	 * Checks if an event has already been imported, by searching for a specific tag in note field.
-	 *
-	 * @param string $noteString Tag/note to search (e.g., 'ORDER:...:...')
-	 * @return int|false Rowid if exists, false if not, -1 if error
-	 */
-	private function isAlreadyImported(string $noteString) : bool
-	{
-		$sql = "SELECT id FROM " . $this->db->prefix() . "actioncomm WHERE note='" . $this->db->escape($noteString) . "'";
-		$sql .= ' AND entity IN (' . getEntity('agenda') . ')';
-
-		$resql = $this->db->query($sql);
-		if ($resql) {
-			$num = $this->db->num_rows($resql);
-			$this->db->free($resql); // Toujours libérer le curseur après usage
-			return ($num > 0);
-		}
-		return false;
+		dol_syslog(__METHOD__.' skipped for order_ref='.$orderRef.'; DoliStore order Agenda events are handled by native triggers.', LOG_INFO);
+		return 0;
 	}
 
 	/**
@@ -2016,7 +2044,6 @@ class ActionsDolistorextract extends CommonHookActions
 				$successList[] = $product['item_name'];
 			}
 
-			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passed empty or to be adapted
 		}
 
 		if (empty($mappedItems)) {
