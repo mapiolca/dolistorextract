@@ -125,17 +125,14 @@ function dolistoreextractOrderPrepareHead($object)
  */
 function dolistoreextractUserHasRight($user, $level1, $level2 = '')
 {
+	if (!is_object($user)) {
+		return false;
+	}
 	if (!empty($user->admin)) {
 		return true;
 	}
-	if (method_exists($user, 'hasRight')) {
-		return $level2 !== '' ? (bool) $user->hasRight('dolistorextract', $level1, $level2) : (bool) $user->hasRight('dolistorextract', $level1);
-	}
-	if ($level2 !== '') {
-		return !empty($user->rights->dolistorextract->{$level1}->{$level2});
-	}
 
-	return !empty($user->rights->dolistorextract->{$level1});
+	return $level2 !== '' ? (bool) $user->hasRight('dolistorextract', $level1, $level2) : (bool) $user->hasRight('dolistorextract', $level1);
 }
 
 /**

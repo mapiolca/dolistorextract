@@ -126,7 +126,7 @@ class ActionsDolistorextract extends CommonHookActions
 						'icon' => 'dolistore@dolistorextract',
 						'lang' => 'dolistorextract@dolistorextract',
 						'tooltip' => 'DolistoreOrderSharingInfo',
-						'enable' => '! empty($conf->dolistorextract->enabled)',
+						'enable' => 'isModEnabled("dolistorextract")',
 						'input' => array(
 							'global' => array(
 								'showhide' => true,
@@ -140,7 +140,7 @@ class ActionsDolistorextract extends CommonHookActions
 						'icon' => 'hashtag',
 						'lang' => 'dolistorextract@dolistorextract',
 						'tooltip' => 'DolistoreOrderNumberSharingInfo',
-						'enable' => '! empty($conf->dolistorextract->enabled)',
+						'enable' => 'isModEnabled("dolistorextract")',
 						'input' => array(
 							'global' => array(
 								'showhide' => true,
@@ -171,7 +171,6 @@ class ActionsDolistorextract extends CommonHookActions
 			'DOLISTOREEXTRACT_ORDER_CREATE' => array('label' => 'DolistoreOrderTriggerLabelCreate', 'description' => 'DolistoreOrderTriggerDescCreate', 'elementtype' => $elementtype, 'rang' => 2500),
 			'DOLISTOREEXTRACT_ORDER_UPDATE' => array('label' => 'DolistoreOrderTriggerLabelUpdate', 'description' => 'DolistoreOrderTriggerDescUpdate', 'elementtype' => $elementtype, 'rang' => 2501),
 			'DOLISTOREEXTRACT_ORDER_DELETE' => array('label' => 'DolistoreOrderTriggerLabelDelete', 'description' => 'DolistoreOrderTriggerDescDelete', 'elementtype' => $elementtype, 'rang' => 2502),
-			'DOLISTOREEXTRACT_ORDER_INVOICE' => array('label' => 'DolistoreOrderTriggerLabelInvoice', 'description' => 'DolistoreOrderTriggerDescInvoice', 'elementtype' => $elementtype, 'rang' => 2503),
 		);
 	}
 

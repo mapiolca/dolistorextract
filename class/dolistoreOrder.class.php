@@ -530,18 +530,30 @@ class DolistoreOrder extends CommonObject
 	 */
 	public function markAsInvoiced($fkFacture, $invoiceDate, $user, $notrigger = 0)
 	{
+		$oldcopy = clone $this;
+
 		$this->fk_facture = (int) $fkFacture;
 		$this->invoice_date = $invoiceDate;
 		$this->status = self::STATUS_INVOICED;
-		$result = $this->update($user, 1);
-		if ($result > 0 && !$notrigger) {
-			$resultTrigger = $this->call_trigger('DOLISTOREEXTRACT_ORDER_INVOICE', $user);
-			if ($resultTrigger < 0) {
-				return -1;
-			}
+
+		if (!$notrigger) {
+			$this->oldcopy = $oldcopy;
+
+			$oldInvoiceDate = $this->normalizeTimestamp($oldcopy->invoice_date);
+			$newInvoiceDate = $this->normalizeTimestamp($this->invoice_date);
+			$context = isset($this->context) && is_array($this->context) ? $this->context : array();
+			$context['trigger_reason'] = 'invoice_link';
+			$context['changed_fields'] = array('fk_facture', 'invoice_date', 'status');
+			$context['old_fk_facture'] = !empty($oldcopy->fk_facture) ? (int) $oldcopy->fk_facture : null;
+			$context['new_fk_facture'] = (int) $this->fk_facture;
+			$context['old_invoice_date'] = $oldInvoiceDate > 0 ? $oldInvoiceDate : null;
+			$context['new_invoice_date'] = $newInvoiceDate > 0 ? $newInvoiceDate : null;
+			$context['old_status'] = isset($oldcopy->status) ? (int) $oldcopy->status : null;
+			$context['new_status'] = (int) $this->status;
+			$this->context = $context;
 		}
 
-		return $result;
+		return $this->update($user, $notrigger);
 	}
 
 	/**

@@ -840,7 +840,7 @@ class ImapClient
      * ```
      * @return array with all email addresses or false on error
      */
-    public function getAllEmailAddresses(array $options = null)
+    public function getAllEmailAddresses(?array $options = null)
     {
         /* Check Options */
         if(!isset($options['getFolders']['separator'])){
@@ -885,7 +885,7 @@ class ImapClient
      * ```
      * @return array addresses
      */
-    public function getEmailAddressesInFolder($folder, array $options = null)
+    public function getEmailAddressesInFolder($folder, ?array $options = null)
     {
         if(!isset($options['mark'])){
             $options['mark'] = 'SEEN';

@@ -224,14 +224,14 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	private function hasModuleRight($user, $object, $action)
 	{
+		if (!is_object($user)) {
+			return false;
+		}
 		if (!empty($user->admin)) {
 			return true;
 		}
-		if (method_exists($user, 'hasRight')) {
-			return (bool) $user->hasRight('dolistorextract', $object, $action);
-		}
 
-		return !empty($user->rights->dolistorextract->{$object}->{$action});
+		return (bool) $user->hasRight('dolistorextract', $object, $action);
 	}
 
 	/**

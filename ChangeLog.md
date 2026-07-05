@@ -1,6 +1,7 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Replace the legacy DoliStore invoice trigger with the CRUD `UPDATE` trigger context, fix menu permission evaluation and migrate legacy permission IDs.
 - FIX : Align AGENT.md compliance for API payloads, document generation rights, native dates, notes, Agenda/Notifications declarations and cron metadata.
 - FIX : Stop creating manual Agenda events during IMAP import; DoliStore order events are now exposed through native triggers.
 - FIX : Display DoliStore order lines without grouping to preserve traceability.

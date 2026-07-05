@@ -207,61 +207,62 @@ class modDolistorextract extends DolibarrModules
 		$this->rights = array();
 		$r = 0;
 
-		$this->rights[$r][0] = $this->numero + 1;
+		$r++;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Read DoliStore orders';
 		$this->rights[$r][3] = 0;
 		$this->rights[$r][4] = 'order';
 		$this->rights[$r][5] = 'read';
 		$r++;
 
-		$this->rights[$r][0] = $this->numero + 2;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Import DoliStore orders';
 		$this->rights[$r][3] = 0;
 		$this->rights[$r][4] = 'order';
 		$this->rights[$r][5] = 'import';
 		$r++;
 
-		$this->rights[$r][0] = $this->numero + 3;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Modify DoliStore orders';
 		$this->rights[$r][3] = 0;
 		$this->rights[$r][4] = 'order';
 		$this->rights[$r][5] = 'write';
 		$r++;
 
-		$this->rights[$r][0] = $this->numero + 4;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Delete DoliStore orders';
 		$this->rights[$r][3] = 0;
 		$this->rights[$r][4] = 'order';
 		$this->rights[$r][5] = 'delete';
 		$r++;
 
-		$this->rights[$r][0] = $this->numero + 5;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Generate DoliStore invoices';
 		$this->rights[$r][3] = 0;
 		$this->rights[$r][4] = 'invoice';
 		$this->rights[$r][5] = 'generate';
 		$r++;
 
-		$this->rights[$r][0] = $this->numero + 6;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Configure DolistoreExtract';
 		$this->rights[$r][3] = 0;
 		$this->rights[$r][4] = 'setup';
 		$this->rights[$r][5] = 'write';
 		$r++;
 
-			$this->rights[$r][0] = $this->numero + 7;
-			$this->rights[$r][1] = 'Use DolistoreExtract API';
-			$this->rights[$r][3] = 0;
-			$this->rights[$r][4] = 'api';
-			$this->rights[$r][5] = 'read';
-			$r++;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
+		$this->rights[$r][1] = 'Use DolistoreExtract API';
+		$this->rights[$r][3] = 0;
+		$this->rights[$r][4] = 'api';
+		$this->rights[$r][5] = 'read';
+		$r++;
 
-			$this->rights[$r][0] = $this->numero + 8;
-			$this->rights[$r][1] = 'Export DoliStore orders';
-			$this->rights[$r][3] = 0;
-			$this->rights[$r][4] = 'order';
-			$this->rights[$r][5] = 'export';
-			$r++;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
+		$this->rights[$r][1] = 'Export DoliStore orders';
+		$this->rights[$r][3] = 0;
+		$this->rights[$r][4] = 'order';
+		$this->rights[$r][5] = 'export';
+		$r++;
 
 		// Main menu entries
 		$this->menu = array();			// List of menus to add
@@ -310,7 +311,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'dolistorextract@dolistorextract',
 			'position' => 100,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => '!empty($user->rights->dolistorextract->order->read)',
+			'perms' => '$user->admin || $user->hasRight("dolistorextract", "order", "read")',
 			'target' => '',
 			'user' => 0
 		);
@@ -326,7 +327,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'dolistorextract@dolistorextract',
 			'position' => 101,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => '!empty($user->rights->dolistorextract->order->read)',
+			'perms' => '$user->admin || $user->hasRight("dolistorextract", "order", "read")',
 			'target' => '',
 			'user' => 0
 		);
@@ -342,7 +343,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'dolistorextract@dolistorextract',
 			'position' => 102,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => '!empty($user->rights->dolistorextract->order->read)',
+			'perms' => '$user->admin || $user->hasRight("dolistorextract", "order", "read")',
 			'target' => '',
 			'user' => 0
 		);
@@ -358,7 +359,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'dolistorextract@dolistorextract',
 			'position' => 103,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => '!empty($user->rights->dolistorextract->invoice->generate)',
+			'perms' => '$user->admin || $user->hasRight("dolistorextract", "invoice", "generate")',
 			'target' => '',
 			'user' => 0
 		);
@@ -374,7 +375,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'dolistorextract@dolistorextract',
 			'position' => 104,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => '!empty($user->rights->dolistorextract->order->read)',
+			'perms' => '$user->admin || $user->hasRight("dolistorextract", "order", "read")',
 			'target' => '',
 			'user' => 0
 		);
@@ -390,7 +391,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'admin',
 			'position' => 105,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => '$user->admin || !empty($user->rights->dolistorextract->setup->write)',
+			'perms' => '$user->admin || $user->hasRight("dolistorextract", "setup", "write")',
 			'target' => '',
 			'user' => 0
 		);
@@ -500,6 +501,11 @@ class modDolistorextract extends DolibarrModules
 			return $result;
 		}
 
+		$result = $this->migrateLegacyPermissionIds();
+		if ($result < 0) {
+			return 0;
+		}
+
 		$result = $this->setDefaultConfigurationConstants();
 		if ($result < 0) {
 			return 0;
@@ -523,6 +529,98 @@ class modDolistorextract extends DolibarrModules
 		$result = $this->registerDolistoreActionTriggers();
 		if ($result < 0) {
 			return 0;
+		}
+
+		$result = $this->cleanupLegacyActionTriggers();
+		if ($result < 0) {
+			return 0;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Migrate old permission identifiers to the module-id based range.
+	 *
+	 * @return int 1 if OK, -1 if KO
+	 */
+	private function migrateLegacyPermissionIds()
+	{
+		$permissionIdMap = array(
+			104977 => $this->numero * 100 + 1,
+			104978 => $this->numero * 100 + 2,
+			104979 => $this->numero * 100 + 3,
+			104980 => $this->numero * 100 + 4,
+			104981 => $this->numero * 100 + 5,
+			104982 => $this->numero * 100 + 6,
+			104983 => $this->numero * 100 + 7,
+			104984 => $this->numero * 100 + 8,
+		);
+
+		foreach ($permissionIdMap as $oldId => $newId) {
+			$result = $this->copyLegacyPermissionRows('user_rights', 'fk_user', (int) $oldId, (int) $newId);
+			if ($result < 0) {
+				return -1;
+			}
+
+			$result = $this->copyLegacyPermissionRows('usergroup_rights', 'fk_usergroup', (int) $oldId, (int) $newId);
+			if ($result < 0) {
+				return -1;
+			}
+		}
+
+		$oldIds = implode(',', array_map('intval', array_keys($permissionIdMap)));
+
+		$sql = 'DELETE FROM '.MAIN_DB_PREFIX.'user_rights WHERE fk_id IN ('.$oldIds.')';
+		if (!$this->db->query($sql)) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+
+		$sql = 'DELETE FROM '.MAIN_DB_PREFIX.'usergroup_rights WHERE fk_id IN ('.$oldIds.')';
+		if (!$this->db->query($sql)) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+
+		$sql = 'DELETE FROM '.MAIN_DB_PREFIX.'rights_def';
+		$sql .= " WHERE module = '".$this->db->escape($this->rights_class)."'";
+		$sql .= ' AND id IN ('.$oldIds.')';
+		if (!$this->db->query($sql)) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Copy legacy permission assignments when the new assignment does not exist yet.
+	 *
+	 * @param string $tableName Table suffix without database prefix
+	 * @param string $ownerField Owner field name
+	 * @param int    $oldId Legacy permission id
+	 * @param int    $newId New permission id
+	 * @return int 1 if OK, -1 if KO
+	 */
+	private function copyLegacyPermissionRows($tableName, $ownerField, $oldId, $newId)
+	{
+		$prefixedTable = MAIN_DB_PREFIX.$tableName;
+
+		$sql = 'INSERT INTO '.$prefixedTable.' ('.$ownerField.', fk_id, entity)';
+		$sql .= ' SELECT source.'.$ownerField.', '.((int) $newId).', source.entity';
+		$sql .= ' FROM '.$prefixedTable.' AS source';
+		$sql .= ' WHERE source.fk_id = '.((int) $oldId);
+		$sql .= ' AND NOT EXISTS (';
+		$sql .= 'SELECT 1 FROM '.$prefixedTable.' AS existing';
+		$sql .= ' WHERE existing.'.$ownerField.' = source.'.$ownerField;
+		$sql .= ' AND existing.fk_id = '.((int) $newId);
+		$sql .= ' AND existing.entity = source.entity';
+		$sql .= ')';
+
+		if (!$this->db->query($sql)) {
+			$this->error = $this->db->lasterror();
+			return -1;
 		}
 
 		return 1;
@@ -602,6 +700,26 @@ class modDolistorextract extends DolibarrModules
 				$this->error = $this->db->lasterror();
 				return -1;
 			}
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Remove legacy non-CRUD action trigger declarations.
+	 *
+	 * @return int 1 if OK, -1 if KO
+	 */
+	private function cleanupLegacyActionTriggers()
+	{
+		$legacyActionCode = 'DOLISTOREEXTRACT_ORDER_'.'INVOICE';
+
+		$sql = 'DELETE FROM '.MAIN_DB_PREFIX.'c_action_trigger';
+		$sql .= " WHERE code = '".$this->db->escape($legacyActionCode)."'";
+
+		if (!$this->db->query($sql)) {
+			$this->error = $this->db->lasterror();
+			return -1;
 		}
 
 		return 1;
