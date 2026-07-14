@@ -3,6 +3,8 @@
 ## Installation
 
 - Activer, désactiver puis réactiver le module.
+- Vérifier que la famille et l'éditeur affichés dans la liste et l'onglet À propos sont `Les Métiers du Bâtiment`, sans ancienne identité éditeur.
+- Vider le cache Dolibarr et celui du navigateur, puis vérifier que le favicon DoliStore est net et suffisamment grand dans la tuile du module, la liste des modules, les fiches et les menus.
 - Vérifier la création des tables `dolistoreextract_order`, `dolistoreextract_order_line`, `dolistoreextract_invoice_batch` et `dolistoreextract_import_log`.
 - Vérifier que les réglages existants sont conservés après désactivation/réactivation.
 - Vérifier que `config_page_url` n’ouvre que `admin/setup.php`.
@@ -75,6 +77,8 @@
 - Tester un lot ambigu ou sans correspondance fiable et vérifier qu'aucune facture supplémentaire n'est créée.
 - Tester les réglages de statut de facture `Brouillon` et `Validée`.
 - Activer l'envoi email en environnement de test et vérifier le destinataire configuré, le sujet `Facture des ventes DoliStore`, le corps HTML et le PDF joint.
+- Activer dans la configuration Agenda native l'événement automatique `BILL_SENTBYMAIL`, envoyer automatiquement une facture DoliStore et vérifier la création d'un unique événement natif lié à la facture, avec expéditeur, destinataire, sujet et pièce jointe.
+- Désactiver `MAIN_AGENDA_ACTIONAUTO_BILL_SENTBYMAIL`, envoyer une autre facture et vérifier que l'email reste envoyé sans création forcée d'événement Agenda par le module.
 - Répéter dans deux entités et vérifier que les modèles créés et les constantes de sélection sont indépendants.
 
 ## Liste des factures

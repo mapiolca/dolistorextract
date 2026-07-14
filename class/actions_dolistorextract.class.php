@@ -2485,6 +2485,10 @@ class ActionsDolistorextract extends CommonHookActions
 			if ($mailResult > 0) {
 				$batch->email_sent = 1;
 				$batch->email_sent_date = dol_now();
+				if ($mailResult > 1 && (string) $this->error !== '') {
+					$batch->log .= "\n".$this->error;
+					DolistoreImportLog::add($this->db, 'warning', $this->error, 0, 'invoice', array('invoice_id' => (int) $invoice->id), $user, (int) $batch->id);
+				}
 				$batch->update($user);
 			} else {
 				$emailError = $langs->transnoentitiesnoconv('DolistoreInvoiceEmailError');
@@ -2686,7 +2690,7 @@ class ActionsDolistorextract extends CommonHookActions
 	 * @param Facture $invoice Invoice
 	 * @param Societe $societe Thirdparty
 	 * @param User    $user    User
-	 * @return int
+	 * @return int 1 when email and native post-send trigger succeed, 2 when email succeeds but trigger fails, -1 on email failure
 	 */
 	private function sendDolistoreInvoiceEmail(Facture $invoice, Societe $societe, User $user): int
 	{
@@ -2786,7 +2790,54 @@ class ActionsDolistorextract extends CommonHookActions
 		$mimefilenameList[] = basename($pdfPath);
 
 		$mail = new CMailFile($subject, $to, $from, $message, $filenameList, $mimetypeList, $mimefilenameList, '', '', 0, -1);
-		return $mail->sendfile() ? 1 : -1;
+		if (!$mail->sendfile()) {
+			$this->error = (string) $mail->error;
+			if ($this->error === '' && !empty($mail->errors) && is_array($mail->errors)) {
+				$this->error = implode(', ', $mail->errors);
+			}
+			return -1;
+		}
+
+		// Reproduce the native invoice email metadata expected by the core BILL_SENTBYMAIL trigger.
+		// The Agenda module remains the only creator of ActionComm records and applies its own
+		// MAIN_AGENDA_ACTIONAUTO_BILL_SENTBYMAIL setting.
+		$invoice->socid = (int) $societe->id;
+		$invoice->sendtoid = array();
+		$invoice->actiontypecode = 'AC_OTH_AUTO';
+		$invoice->actionmsg = $message;
+		$invoice->actionmsg2 = $langs->transnoentities(
+			'MailSentByTo',
+			CMailFile::getValidAddress($from, 4, 0, 1),
+			CMailFile::getValidAddress($to, 4, 0, 1)
+		);
+		if (getDolGlobalString('MAIN_MAIL_REPLACE_EVENT_TITLE_BY_EMAIL_SUBJECT')) {
+			$invoice->actionmsg2 = $subject;
+		}
+		$invoice->trackid = 'inv'.((int) $invoice->id);
+		$invoice->fk_element = (int) $invoice->id;
+		$invoice->elementtype = (string) $invoice->element;
+		$invoice->attachedfiles = $filenameList;
+		$invoice->email_msgid = (string) $mail->msgid;
+		$invoice->email_from = $from;
+		$invoice->email_subject = $subject;
+		$invoice->email_to = $to;
+		$invoice->email_tocc = '';
+		$invoice->email_tobcc = '';
+		$invoiceContext = isset($invoice->context) && is_array($invoice->context) ? $invoice->context : array();
+		$invoiceContext['trigger_reason'] = 'dolistore_invoice_email';
+		$invoice->context = $invoiceContext;
+
+		$triggerResult = $invoice->call_trigger('BILL_SENTBYMAIL', $user);
+		if ($triggerResult < 0) {
+			$triggerError = (string) $invoice->error;
+			if ($triggerError === '' && !empty($invoice->errors) && is_array($invoice->errors)) {
+				$triggerError = implode(', ', $invoice->errors);
+			}
+			$this->error = $langs->transnoentitiesnoconv('DolistoreInvoiceAgendaEventError', $triggerError);
+			return 2;
+		}
+
+		return 1;
 	}
 
 	/**

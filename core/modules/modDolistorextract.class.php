@@ -53,7 +53,7 @@ class modDolistorextract extends DolibarrModules
 
 		// Family can be 'crm','financial','hr','projects','products','ecm','technic','interface','other'
 		// It is used to group modules by family in module setup page
-		$this->family = "ATM Consulting";
+		$this->family = 'Les Métiers du Bâtiment';
 		// Module position in the family
 		$this->module_position = 500;
 		// Gives the possibility to the module, to provide his own family info and position of this family (Overwrite $this->family and $this->module_position. Avoid this)
@@ -64,8 +64,8 @@ class modDolistorextract extends DolibarrModules
 		// Module description, used if translation string 'ModuleXXXDesc' not found (where XXX is value of numeric property 'numero' of module)
 		$this->description = "Module d'archivage et de facturation des commandes DoliStore";
 		$this->descriptionlong = "";
-		$this->editor_name = 'ATM Consulting';
-		$this->editor_url = 'https://www.atm-consulting.fr';
+		$this->editor_name = 'Les Métiers du Bâtiment';
+		$this->editor_url = 'https://www.lesmetiersdubatiment.fr';
 
 		// Possible values for version are: 'development', 'experimental', 'dolibarr', 'dolibarr_deprecated' or a version string like 'x.y.z'
 		$this->version = '2.0.0';

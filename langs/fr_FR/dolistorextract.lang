@@ -330,6 +330,7 @@ DolistoreInvoiceBatchCannotBeReconciled=Le lot de facturation existant ne peut p
 DolistoreInvoiceBatchAmbiguous=Plusieurs factures ou des données incohérentes correspondent à ce lot ; aucune facture n'a été créée afin d'éviter un doublon.
 DolistoreInvoicePdfError=La génération du PDF de facture a échoué.
 DolistoreInvoiceEmailError=L'envoi email de la facture a échoué.
+DolistoreInvoiceAgendaEventError=La facture a bien été envoyée, mais le traitement natif de son événement Agenda a échoué : %s
 DolistoreInvoiceGenerated=Facture DoliStore générée : %s
 DolistoreInvoiceNothingToDo=Aucune facture DoliStore à générer.
 DolistoreInvoiceGenerationDone=Traitement de facturation DoliStore exécuté.

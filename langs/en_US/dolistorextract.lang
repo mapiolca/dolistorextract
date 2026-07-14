@@ -321,6 +321,7 @@ DolistoreInvoiceBatchCannotBeReconciled=The existing invoice batch cannot be rec
 DolistoreInvoiceBatchAmbiguous=Several invoices or inconsistent data match this invoice batch; no invoice was created to avoid a duplicate.
 DolistoreInvoicePdfError=Invoice PDF generation failed.
 DolistoreInvoiceEmailError=Invoice email sending failed.
+DolistoreInvoiceAgendaEventError=The invoice was sent, but native processing of its Agenda event failed: %s
 DolistoreInvoiceGenerated=DoliStore invoice generated: %s
 DolistoreInvoiceNothingToDo=No DoliStore invoice to generate.
 DolistoreInvoiceGenerationDone=DoliStore invoicing process executed.

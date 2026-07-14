@@ -1,6 +1,9 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Route successful automatic invoice emails through the native `BILL_SENTBYMAIL` trigger so Agenda owns the linked `ActionComm` event.
+- CHANGED : Replace the legacy module family and publisher with Les Métiers du Bâtiment.
+- FIX : Provide the official DoliStore module pictogram at a resolution suitable for Dolibarr module tiles.
 - CHANGED : Refresh the module and DoliStore order pictograms from the official dolistore.com favicon.
 - NEW : Create and preselect a per-entity native `facture_send` template for DoliStore invoices, with the generated PDF attached.
 - FIX : Keep the invoice email Select2 empty when no public template is available and remove the implicit global-template fallback.
