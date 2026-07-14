@@ -1,6 +1,7 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- CHANGED : Refresh the module and DoliStore order pictograms from the official dolistore.com favicon.
 - NEW : Create and preselect a per-entity native `facture_send` template for DoliStore invoices, with the generated PDF attached.
 - FIX : Keep the invoice email Select2 empty when no public template is available and remove the implicit global-template fallback.
 - NEW : Add per-entity native French and English email templates in the `Commandes Dolistore` category while keeping automatic customer welcome emails disabled.
