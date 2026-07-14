@@ -2685,9 +2685,10 @@ class ActionsDolistorextract extends CommonHookActions
 	 */
 	private function sendDolistoreInvoiceEmail(Facture $invoice, Societe $societe, User $user): int
 	{
-		global $conf;
+		global $conf, $langs;
 
 		require_once DOL_DOCUMENT_ROOT.'/core/class/CMailFile.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/core/class/html.formmail.class.php';
 		require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 
 		$to = getDolGlobalString('DOLISTOREXTRACT_INVOICE_EMAIL_TO');
@@ -2698,20 +2699,45 @@ class ActionsDolistorextract extends CommonHookActions
 			return -1;
 		}
 
-		$from = getDolGlobalString('MAIN_INFO_SOCIETE_MAIL');
-		if ($from === '') {
-			$from = (string) $user->email;
+		$outputlangs = $langs;
+		if (getDolGlobalInt('MAIN_MULTILANGS') && !empty($societe->default_lang)) {
+			$outputlangs = new Translate('', $conf);
+			$outputlangs->setDefaultLang($societe->default_lang);
 		}
-		$subject = getDolGlobalString('DOLISTOREXTRACT_INVOICE_EMAIL_SUBJECT');
+		$outputlangs->loadLangs(array('bills', 'companies', 'mails', 'main', 'products', 'dolistorextract@dolistorextract'));
+
+		$formmail = new FormMail($this->db);
+		$templateId = getDolGlobalInt('DOLISTOREXTRACT_INVOICE_EMAIL_TEMPLATE_ID');
+		$template = $formmail->getEMailTemplate($this->db, 'facture_send', $user, $outputlangs, $templateId, 1, '', ($templateId > 0 ? -1 : 1));
+		if (!is_object($template) || ($templateId > 0 && (int) $template->id !== $templateId)) {
+			return -1;
+		}
+
+		$invoice->thirdparty = $societe;
+		$substitutionArray = getCommonSubstitutionArray($outputlangs, 0, null, $invoice);
+		$substitutionArray['__INVOICE_REF__'] = (string) $invoice->ref;
+		$substitutionArray['__SENDEREMAIL_SIGNATURE__'] = (string) $user->signature;
+		complete_substitutions_array($substitutionArray, $outputlangs, $invoice, array('context' => 'formemail'));
+
+		$subject = (string) $template->topic;
 		if ($subject === '') {
-			$subject = 'Facture DoliStore '.$invoice->ref;
+			$subject = $outputlangs->transnoentitiesnoconv('SendBillRef', '__REF__');
 		}
-		$message = getDolGlobalString('DOLISTOREXTRACT_INVOICE_EMAIL_BODY');
-		if ($message === '') {
-			$message = 'Bonjour,'."\n\n".'Veuillez trouver la facture DoliStore '.$invoice->ref.'.'."\n";
+		$message = (string) $template->content;
+		$subject = make_substitutions($subject, $substitutionArray);
+		$message = make_substitutions(str_replace('\\n', "\n", $message), $substitutionArray);
+
+		$from = (string) $template->email_from;
+		if ($from !== '') {
+			$from = make_substitutions($from, $substitutionArray);
+		} else {
+			$fromEmail = getDolGlobalString('INVOICE_EMAIL_SENDER', getDolGlobalString('MAIN_INFO_SOCIETE_MAIL'));
+			if ($fromEmail === '') {
+				$fromEmail = (string) $user->email;
+			}
+			$fromName = getDolGlobalString('INVOICE_EMAIL_SENDER_NAME');
+			$from = $fromName !== '' ? $fromName.' <'.$fromEmail.'>' : $fromEmail;
 		}
-		$subject = make_substitutions($subject, array('__INVOICE_REF__' => $invoice->ref));
-		$message = make_substitutions($message, array('__INVOICE_REF__' => $invoice->ref));
 
 		$filenameList = array();
 		$mimetypeList = array();
@@ -2724,7 +2750,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$mimetypeList[] = dol_mimetype($pdfPath);
 		$mimefilenameList[] = basename($pdfPath);
 
-		$mail = new CMailFile($subject, $to, $from, $message, $filenameList, $mimetypeList, $mimefilenameList);
+		$mail = new CMailFile($subject, $to, $from, $message, $filenameList, $mimetypeList, $mimefilenameList, '', '', 0, -1);
 		return $mail->sendfile() ? 1 : -1;
 	}
 

@@ -1,6 +1,8 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Replace the invoice email subject and body settings with native Dolibarr `facture_send` email templates.
+- FIX : Keep the active configuration tab after saving a setting and prevent form resubmission on refresh.
 - FIX : Initialize the DoliStore invoice VAT rate from the current entity and select active sales rates through the native VAT dictionary.
 - FIX : Enable native scheduled jobs on module activation and gate their runtime actions with per-entity settings switches.
 - FIX : Align the monthly invoice action with the native list toolbar and require a linked customer invoice plus a readable PDF before an invoice batch is successful.

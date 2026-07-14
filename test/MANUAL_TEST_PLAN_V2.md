@@ -7,6 +7,16 @@
 - Vérifier que les réglages existants sont conservés après désactivation/réactivation.
 - Vérifier que `config_page_url` n’ouvre que `admin/setup.php`.
 
+## Réglages
+
+- Depuis chacun des onglets `Paramètres`, `Commandes DoliStore`, `Facturation` et `Courriels/IMAP`, enregistrer un réglage et vérifier que l'onglet d'origine reste actif.
+- Dans l'onglet Facturation, tester un champ texte, le Select2 de TVA, une zone de texte, le statut de facture et chaque switch natif.
+- Dans l'onglet Courriels/IMAP, tester un champ texte, un modèle d'email et le switch d'import automatique.
+- Vérifier qu'un message de succès ou d'erreur reste affiché sur l'onglet d'origine après la redirection.
+- Rafraîchir la page après une sauvegarde classique et vérifier que le navigateur ne propose pas de renvoyer le formulaire.
+- Vérifier dans le DOM que les formulaires concernés contiennent le token CSRF et le champ caché `mode`, et que leur URL d'action conserve ce mode.
+- Appeler `admin/setup.php?mode=invalide` et vérifier le retour propre sur l'onglet `Paramètres`.
+
 ## Import IMAP
 
 - Importer un mail DoliStore complet.
@@ -33,6 +43,11 @@
 - Sur une nouvelle entité taxable, vérifier que le taux de TVA de vente par défaut est enregistré et présélectionné dans le Select2 natif.
 - Sur une entité non assujettie, vérifier que le taux initial est `0 %`.
 - Vérifier que le Select2 propose uniquement les taux de vente actifs du dictionnaire de l'entité.
+- Créer plusieurs modèles de courriels natifs Dolibarr actifs et publics de type `facture_send`, puis vérifier qu'ils sont proposés dans le Select2 du module avec leur langue et que les modèles privés ne le sont pas.
+- Sélectionner un modèle, enregistrer le réglage et vérifier que l'onglet Facturation reste actif.
+- Vérifier que le lien de gestion ouvre la page native des modèles de courriels, filtrée sur `facture_send`.
+- Envoyer automatiquement une facture et vérifier l'application du sujet, du contenu HTML ou texte, de la langue, de l'expéditeur et des substitutions natives du modèle sélectionné.
+- Supprimer ou désactiver le modèle sélectionné et vérifier l'avertissement dans les réglages ainsi que l'échec explicite de l'envoi automatique sans utilisation d'un autre modèle.
 - Tester une valeur avec code TVA, par exemple `20 (CODE)`, et vérifier que le code est conservé sur la ligne de facture native.
 - Réactiver le module avec des valeurs existantes `0`, `5.5` et `20 (CODE)` et vérifier qu'elles ne sont pas remplacées.
 - Désactiver dans le dictionnaire un taux déjà configuré et vérifier l'avertissement sans modification automatique de la constante.
