@@ -49,6 +49,7 @@ include_once(DOL_DOCUMENT_ROOT.'/product/class/product.class.php');
 include_once 'class/actions_dolistorextract.class.php';
 include_once 'class/dolistoreMail.class.php';
 include_once 'class/dolistoreMailExtract.class.php';
+include_once 'lib/dolistoreextract.lib.php';
 
 dol_include_once("/dolistorextract/include/ssilence/php-imap-client/autoload.php");
 
@@ -97,18 +98,22 @@ $cancel     = GETPOST('cancel');
 $view       = GETPOST('view');
 $nativeImportLog = '';
 
-
+if (in_array($action, array('manual_create_service', 'manual_link_service', 'import', 'importnative'), true) && GETPOST('token', 'alphanohtml') === '') {
+	accessforbidden('Invalid token');
+}
 
 if (empty($action) && empty($id) && empty($ref)) $action='view';
 
 // Protection if external user
-if ($user->societe_id > 0 || ! $user->hasRight('dolistorextract', 'read'))
+if ($user->societe_id > 0 || !dolistoreextractUserHasRight($user, 'order', 'read'))
 {
 	accessforbidden();
 }
 
+	$mailsContextPage = 'dolistoreextractmailslist';
 
-$extrafields = new ExtraFields($db);
+
+	$extrafields = new ExtraFields($db);
 
 // fetch optionals attributes and labels
 //$extralabels = $extrafields->fetch_name_optionals_label($object->table_element);
@@ -182,6 +187,9 @@ if (!$imap) {
  * Import des données du message
  */
 if ($action == 'import' || $action == 'importnative') {
+	if (!dolistoreextractUserHasRight($user, 'order', 'import')) {
+		accessforbidden();
+	}
 	$imap->selectFolder($mailFolder);
 	$messageId = dolistorextractResolveMessageId($imap, $id, $uid);
 	if ($messageId <= 0) {
@@ -189,9 +197,10 @@ if ($action == 'import' || $action == 'importnative') {
 		$action = 'view';
 	} else {
 		$email = $imap->getMessage($messageId);
+		$email->dolistoreextract_folder = $mailFolder;
 		$res = $dolistorextractActions->launchImportProcess(array($email));
 		$nativeImportLog = $dolistorextractActions->logOutput;
-		setEventMessages($langs->trans("DolistoreNativeImportDone"), null, 'mesgs');
+		setEventMessages($langs->trans("DolistoreArchiveImportDone"), null, 'mesgs');
 		$action = 'read';
 		$id = $messageId;
 	}
@@ -317,25 +326,7 @@ if ($action == 'read') {
 	print '<br />';
 	print 'Langue du mail : '.$langEmail;
 
-	// EN template by default
-	$idTemplate = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_EN');
-	if(preg_match('/fr.*/', $langEmail)) {
-		$idTemplate = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR');
-	}
-	$usedTemplate = $formMail->getEMailTemplate($db, 'dolistore_extract', $user, $langs, $idTemplate);
-	$listProductString = implode(', ', $listProduct);
-	$arraySubstitutionDolistore = [
-			'__DOLISTORE_ORDER_NAME__' => $dolistoreMail->order_name,
-			'__DOLISTORE_INVOICE_FIRSTNAME__' => $dolistoreMail->buyer_firstname,
-			'__DOLISTORE_BUYER_COMPANY__' => $dolistoreMail->buyer_company,
-			'__DOLISTORE_INVOICE_LASTNAME__' => $dolistoreMail->buyer_lastname,
-	        '__DOLISTORE_LIST_PRODUCTS__' => $listProductString
-	];
-
-	$subject=make_substitutions($usedTemplate->topic, $arraySubstitutionDolistore);
-	$message=make_substitutions($usedTemplate->content, $arraySubstitutionDolistore);
-	print '<br />Sujet du mail : '.$subject;
-	print '<br />Texte du mail : '.$message;
+	print '<br /><span class="opacitymedium">'.$langs->trans("DolistoreFinalCustomerEmailObsolete").'</span>';
 
 	print '<strong>Données extraites</strong><br/>';
 	print '<pre>';
@@ -350,10 +341,10 @@ if ($action == 'read') {
 
 	print '<div class="center">';
 	// TODO: check if already imported
-		print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=importnative&id=' . ((int) $id) . '&folder=' . urlencode($mailFolder) . '">'.$langs->trans("DolistoreManualNativeImport").'</a>';
+		print '<a class="button" href="'.$_SERVER['PHP_SELF'].'?action=importnative&id=' . ((int) $id) . '&folder=' . urlencode($mailFolder) . '&token='.newToken().'">'.$langs->trans("DolistoreManualArchiveImport").'</a>';
 
 
-	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'">Fermer</a>';
+	print '<a class="button" href="'.$_SERVER['PHP_SELF'].'">'.$langs->trans("Close").'</a>';
 
 	print '</div>';
 	}
@@ -364,100 +355,146 @@ if (!$id) {
 
 print load_fiche_titre($langs->trans('DolistoreMailsList'));
 
-// Count the messages in current folder
+$mailArrayFields = array(
+	'folder' => array('label' => 'DolistoreEmailFolder', 'checked' => 1, 'enabled' => 1, 'position' => 10),
+	'date' => array('label' => 'Date', 'checked' => 1, 'enabled' => 1, 'position' => 20),
+	'msgno' => array('label' => 'ID', 'checked' => 1, 'enabled' => 1, 'position' => 30),
+	'order_ref' => array('label' => 'DolistoreOrderRef', 'checked' => 1, 'enabled' => 1, 'position' => 40),
+	'lang' => array('label' => 'Language', 'checked' => 1, 'enabled' => 1, 'position' => 50),
+	'company' => array('label' => 'Company', 'checked' => 1, 'enabled' => 1, 'position' => 60),
+	'email' => array('label' => 'EMail', 'checked' => 1, 'enabled' => 1, 'position' => 70),
+	'contact' => array('label' => 'Contact', 'checked' => 1, 'enabled' => 1, 'position' => 80),
+	'read_status' => array('label' => 'DolistoreMailReadStatus', 'checked' => 1, 'enabled' => 1, 'position' => 90, 'align' => 'center'),
+);
+	$selectedFieldsMails = dolistoreextractPrepareSelectedFields($form, $mailsContextPage, 'selectedfields_mails', $mailArrayFields);
+$searchMailFolder = GETPOST('search_mail_folder', 'alphanohtml');
+$searchMailRef = GETPOST('search_mail_ref', 'alphanohtml');
+$searchMailLang = GETPOST('search_mail_lang', 'alphanohtml');
+$searchMailCompany = GETPOST('search_mail_company', 'alphanohtml');
+$searchMailEmail = GETPOST('search_mail_email', 'alphanohtml');
+$searchMailRead = GETPOST('search_mail_read', 'alpha');
+
 $emails = $dolistorextractActions->fetchDolistoreEmailsFromConfiguredLocation($imap, false);
-$overallMessages = count($emails);
+$mailRows = array();
 $unreadMessages = 0;
 foreach ($emails as $emailEntry) {
-	if (empty($emailEntry['message']->header->seen)) {
+	$email = $emailEntry['message'];
+	if (stripos($email->header->subject, 'DoliStore') === false) {
+		continue;
+	}
+
+	$mailExtract = new \dolistoreMailExtract($db, $email->message->html);
+	$langEmail = dolistoreMailExtract::detectLang($email->header->subject);
+	$datasCustomer = $mailExtract->extractOrderDatas();
+	$datasOrder = dolistoreMailExtract::extractOrderDatasFromSubject($email->header->subject, $langEmail);
+	$isUnread = empty($email->header->seen);
+	if (!$isUnread && !empty($email->header->details->Unseen) && $email->header->details->Unseen === 'U') {
+		$isUnread = true;
+	}
+	$row = array(
+		'folder' => (string) $emailEntry['folder'],
+		'date' => (string) $email->header->date,
+		'msgno' => (int) $email->header->msgno,
+		'uid' => (int) $email->header->uid,
+		'order_id' => (string) ($datasOrder['id'] ?? ''),
+		'order_ref' => (string) ($datasOrder['ref'] ?? ''),
+		'lang' => (string) $langEmail,
+		'company' => (string) ($datasCustomer['buyer_company'] ?? ''),
+		'email' => (string) ($datasCustomer['buyer_email'] ?? ''),
+		'contact' => trim((string) ($datasCustomer['buyer_lastname'] ?? '').' '.(string) ($datasCustomer['buyer_firstname'] ?? '')),
+		'is_unread' => $isUnread,
+	);
+
+	if ($searchMailFolder !== '' && stripos($row['folder'], $searchMailFolder) === false) {
+		continue;
+	}
+	if ($searchMailRef !== '' && stripos($row['order_ref'], $searchMailRef) === false && stripos($row['order_id'], $searchMailRef) === false) {
+		continue;
+	}
+	if ($searchMailLang !== '' && stripos($row['lang'], $searchMailLang) === false) {
+		continue;
+	}
+	if ($searchMailCompany !== '' && stripos($row['company'], $searchMailCompany) === false) {
+		continue;
+	}
+	if ($searchMailEmail !== '' && stripos($row['email'], $searchMailEmail) === false) {
+		continue;
+	}
+	if ($searchMailRead === 'unread' && !$row['is_unread']) {
+		continue;
+	}
+	if ($searchMailRead === 'read' && $row['is_unread']) {
+		continue;
+	}
+
+	if ($row['is_unread']) {
 		$unreadMessages++;
 	}
+	$mailRows[] = $row;
 }
+$overallMessages = count($mailRows);
 
 print '<div class="info">'.$overallMessages.' messages / '. $unreadMessages.' non lus</div>';
 
-print '<table class="liste">';
-
-print '<tr class="liste_titre">';
-print '<th>Dossier</th>';
-print '<th>Date</th>';
-print '<th>ID</th>';
-print '<th>Ref</th>';
-print '<th>Lang</th>';
-print '<th>Company</th>';
-print '<th>Mail</th>';
-print '<th>Contact</th>';
-print '<th>Lu/Non Lu</th>';
-print '<th>Actions</th>';
+print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
+print '<input type="hidden" name="token" value="'.newToken().'">';
+print '<input type="hidden" name="formfilteraction" value="">';
+print '<input type="hidden" name="column_contextpage" value="'.dol_escape_htmltag($mailsContextPage).'">';
+print '<div class="div-table-responsive">';
+print '<table class="liste centpercent">';
+print '<tr class="liste_titre_filter">';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'folder')) print '<td><input type="text" class="flat maxwidth100" name="search_mail_folder" value="'.dol_escape_htmltag($searchMailFolder).'"></td>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'date')) print '<td></td>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'msgno')) print '<td></td>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'order_ref')) print '<td><input type="text" class="flat maxwidth100" name="search_mail_ref" value="'.dol_escape_htmltag($searchMailRef).'"></td>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'lang')) print '<td><input type="text" class="flat maxwidth75" name="search_mail_lang" value="'.dol_escape_htmltag($searchMailLang).'"></td>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'company')) print '<td><input type="text" class="flat maxwidth150" name="search_mail_company" value="'.dol_escape_htmltag($searchMailCompany).'"></td>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'email')) print '<td><input type="text" class="flat maxwidth150" name="search_mail_email" value="'.dol_escape_htmltag($searchMailEmail).'"></td>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'contact')) print '<td></td>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'read_status')) print '<td>'.$form->selectarray('search_mail_read', array('read' => $langs->trans('DolistoreMailRead'), 'unread' => $langs->trans('DolistoreMailUnread')), $searchMailRead, 1, 0, 0, '', 0, 0, 0, '', 'maxwidth100').'</td>';
+print '<td class="right">';
+print '<button class="liste_titre button_search" type="submit" name="button_search" value="x">'.img_picto($langs->trans('Search'), 'search').'</button> ';
+print '<a class="button button_search" href="'.$_SERVER['PHP_SELF'].'">'.img_picto($langs->trans('RemoveFilter'), 'searchclear').'</a> ';
+print $selectedFieldsMails;
+print '</td>';
 print '</tr>';
 
-foreach($emails as $emailEntry) {
-	$email = $emailEntry['message'];
+print '<tr class="liste_titre">';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'folder')) print '<th>'.$langs->trans('DolistoreEmailFolder').'</th>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'date')) print '<th>'.$langs->trans('Date').'</th>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'msgno')) print '<th>'.$langs->trans('ID').'</th>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'order_ref')) print '<th>'.$langs->trans('DolistoreOrderRef').'</th>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'lang')) print '<th>'.$langs->trans('Language').'</th>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'company')) print '<th>'.$langs->trans('Company').'</th>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'email')) print '<th>'.$langs->trans('EMail').'</th>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'contact')) print '<th>'.$langs->trans('Contact').'</th>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'read_status')) print '<th class="center">'.$langs->trans('DolistoreMailReadStatus').'</th>';
+print '<th>'.$langs->trans('Actions').'</th>';
+print '</tr>';
 
-	$mailExtract = new \dolistoreMailExtract($db, $email->message->html);
-
-	// Seulement les mails en provenance de dolistore
-	if (strpos($email->header->subject, 'DoliStore') > 0) {
-
-		$langEmail = dolistoreMailExtract::detectLang($email->header->subject);
-		$datasCustomer = $mailExtract->extractOrderDatas();
-		$datasOrder = dolistoreMailExtract::extractOrderDatasFromSubject($email->header->subject, $langEmail);
-
-		print '<tr>';
-
-		print '<td>' . dol_escape_htmltag($emailEntry['folder']) . '</td>';
-
-		// Date
+if (empty($mailRows)) {
+	dolistoreextractPrintNoRecordLine(dolistoreextractVisibleColumnCount($mailArrayFields, 1));
+} else {
+	foreach ($mailRows as $mailRow) {
+		print '<tr class="oddeven">';
+		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'folder')) print '<td>'.dol_escape_htmltag($mailRow['folder']).'</td>';
+		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'date')) print '<td>'.dol_escape_htmltag($mailRow['date']).'</td>';
+		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'msgno')) print '<td>'.dol_escape_htmltag($mailRow['order_id']).'</td>';
+		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'order_ref')) print '<td>'.dol_escape_htmltag($mailRow['order_ref']).'</td>';
+		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'lang')) print '<td>'.picto_from_langcode($mailRow['lang']).' '.dol_escape_htmltag($mailRow['lang']).'</td>';
+		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'company')) print '<td>'.dol_escape_htmltag($mailRow['company']).'</td>';
+		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'email')) print '<td>'.dol_escape_htmltag($mailRow['email']).'</td>';
+		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'contact')) print '<td>'.dol_escape_htmltag($mailRow['contact']).'</td>';
+		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'read_status')) print '<td class="center">'.($mailRow['is_unread'] ? $langs->trans('DolistoreMailUnread') : $langs->trans('DolistoreMailRead')).'</td>';
 		print '<td>';
-		print $email->header->date;
+		print '<a href="'.$_SERVER['PHP_SELF'].'?action=read&view=plain&id=' . ((int) $mailRow['msgno']) . '&uid=' . ((int) $mailRow['uid']) . '&folder=' . urlencode($mailRow['folder']) . '">'.$langs->trans('View').'</a>';
 		print '</td>';
-
-		// ID
-		print '<td>';
-		print $datasOrder['id'];
-		print '</td>';
-
-		// ref
-		print '<td>';
-		print $datasOrder['ref'];
-		print '</td>';
-
-		// Lang
-		print '<td>';
-		print picto_from_langcode($langEmail);
-		print '</td>';
-
-		// Company
-		print '<td>';
-		print $datasCustomer['buyer_company'];
-		print '</td>';
-
-		// Email
-		print '<td>';
-		print $datasCustomer['buyer_email'];
-		print '</td>';
-
-		// Contact name
-		print '<td>';
-		print $datasCustomer['buyer_lastname'].' '.$datasCustomer['buyer_firstname'];
-		print '</td>';
-
-		// Read / unread
-		print '<td>';
-		print $email->header->details->Unseen == "U" ? 'Non lu' : 'Lu';
-		print '</td>';
-
-		// Actions
-		print '<td>';
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=read&view=plain&id=' . ((int) $email->header->msgno) . '&uid=' . ((int) $email->header->uid) . '&folder=' . urlencode($emailEntry['folder']) . '">Voir</a>';
-		//print '<a href="'.$_SERVER['PHP_SELF'].'?action=read&view=html&id='.$email->header->uid.'">HTML</a>';
-		print '</td>';
-
 		print '</tr>';
 	}
-
 }
-print '<table>';
+print '</table>';
+print '</div>';
+print '</form>';
 
 
 }

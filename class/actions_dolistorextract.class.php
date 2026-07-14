@@ -23,8 +23,16 @@
  */
 //require_once "dolistorextract.class.php";
 require_once DOL_DOCUMENT_ROOT . '/core/lib/files.lib.php';
+require_once DOL_DOCUMENT_ROOT . '/compta/facture/class/facture.class.php';
+require_once DOL_DOCUMENT_ROOT . '/contact/class/contact.class.php';
 require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
-require_once DOL_DOCUMENT_ROOT . '/commande/class/commande.class.php';
+require_once DOL_DOCUMENT_ROOT . '/societe/class/societe.class.php';
+require_once DOL_DOCUMENT_ROOT . '/user/class/user.class.php';
+require_once __DIR__ . '/dolistoreOrder.class.php';
+require_once __DIR__ . '/dolistoreOrderLine.class.php';
+require_once __DIR__ . '/dolistoreInvoiceBatch.class.php';
+require_once __DIR__ . '/dolistoreImportLog.class.php';
+require_once __DIR__ . '/../lib/dolistoreextract.lib.php';
 require_once __DIR__ . "/../include/ssilence/php-imap-client/autoload.php";
 use SSilence\ImapClient\ImapClientException;
 use SSilence\ImapClient\ImapConnect;
@@ -54,7 +62,7 @@ if (!class_exists('CommonHookActions')) {
  * Class ActionsDolistorextract
  *
  * Provides hooks and main processing logic for the Dolistore Extract Dolibarr module.
- * Handles automated extraction of orders from Dolistore emails and integration in Dolibarr (thirdparties, contacts, events, customer orders).
+ * Handles automated extraction of orders from Dolistore emails and integration in Dolibarr (thirdparties, contacts, events, archived DoliStore orders).
  */
 class ActionsDolistorextract extends CommonHookActions
 {
@@ -102,6 +110,181 @@ class ActionsDolistorextract extends CommonHookActions
 	{
 		$this->db = $db;
 	}
+
+	/**
+	 * Return Multicompany sharing definition for this external module.
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	public static function getMulticompanySharingDefinition(): array
+	{
+		return array(
+			'dolistoreextract' => array(
+				'sharingelements' => array(
+					'dolistoreextract_order' => array(
+						'type' => 'element',
+						'icon' => 'dolistore@dolistorextract',
+						'lang' => 'dolistorextract@dolistorextract',
+						'tooltip' => 'DolistoreOrderSharingInfo',
+						'enable' => 'isModEnabled("dolistorextract")',
+						'input' => array(
+							'global' => array(
+								'showhide' => true,
+								'hide' => true,
+								'del' => true,
+							),
+						),
+					),
+					'dolistoreextract_ordernumber' => array(
+						'type' => 'objectnumber',
+						'icon' => 'hashtag',
+						'lang' => 'dolistorextract@dolistorextract',
+						'tooltip' => 'DolistoreOrderNumberSharingInfo',
+						'enable' => 'isModEnabled("dolistorextract")',
+						'input' => array(
+							'global' => array(
+								'showhide' => true,
+								'hide' => true,
+								'del' => true,
+							),
+						),
+					),
+				),
+				'sharingmodulename' => array(
+					'dolistoreextract_order' => 'dolistoreextract',
+					'dolistoreextract_ordernumber' => 'dolistoreextract',
+				),
+			),
+		);
+	}
+
+	/**
+	 * Return business events exposed to native Agenda and Notifications.
+	 *
+	 * @return array<string,array<string,int|string>>
+	 */
+	public static function getBusinessEventsDefinition(): array
+	{
+		$elementtype = 'dolistoreextract_order@dolistorextract';
+
+		return array(
+			'DOLISTOREEXTRACT_ORDER_CREATE' => array('label' => 'DolistoreOrderTriggerLabelCreate', 'description' => 'DolistoreOrderTriggerDescCreate', 'elementtype' => $elementtype, 'rang' => 2500),
+			'DOLISTOREEXTRACT_ORDER_UPDATE' => array('label' => 'DolistoreOrderTriggerLabelUpdate', 'description' => 'DolistoreOrderTriggerDescUpdate', 'elementtype' => $elementtype, 'rang' => 2501),
+			'DOLISTOREEXTRACT_ORDER_DELETE' => array('label' => 'DolistoreOrderTriggerLabelDelete', 'description' => 'DolistoreOrderTriggerDescDelete', 'elementtype' => $elementtype, 'rang' => 2502),
+		);
+	}
+
+	/**
+	 * Return event codes supported by native Notifications.
+	 *
+	 * @return string[]
+	 */
+	public static function getNotificationEventCodes(): array
+	{
+		return array_keys(self::getBusinessEventsDefinition());
+	}
+
+	/**
+	 * Hook for Multicompany external modules sharing.
+	 *
+	 * @param array       $parameters  Parameters
+	 * @param object|null $object      Object
+	 * @param string      $action      Action
+	 * @param HookManager $hookmanager Hookmanager
+	 * @return int
+	 */
+	public function multicompanyExternalModulesSharing($parameters, &$object, &$action, $hookmanager): int
+	{
+		$this->results = array_replace_recursive($this->results, self::getMulticompanySharingDefinition());
+		return 0;
+	}
+
+	/**
+	 * Compatibility alias for Multicompany hook naming.
+	 *
+	 * @param array       $parameters  Parameters
+	 * @param object|null $object      Object
+	 * @param string      $action      Action
+	 * @param HookManager $hookmanager Hookmanager
+	 * @return int
+	 */
+	public function multicompanyExternalModuleSharing($parameters, &$object, &$action, $hookmanager): int
+	{
+		$this->results = array_replace_recursive($this->results, self::getMulticompanySharingDefinition());
+		return 0;
+	}
+
+	/**
+	 * Hook for Multicompany sharing options.
+	 *
+	 * @param array       $parameters  Parameters
+	 * @param object|null $object      Object
+	 * @param string      $action      Action
+	 * @param HookManager $hookmanager Hookmanager
+	 * @return int
+	 */
+	public function multicompanySharingOptions($parameters, &$object, &$action, $hookmanager): int
+	{
+		$this->results = array_replace_recursive($this->results, self::getMulticompanySharingDefinition());
+		return 0;
+	}
+
+	/**
+	 * Add DoliStore order events to native Notifications supported events.
+	 *
+	 * @param array       $parameters  Parameters
+	 * @param object|null $object      Object
+	 * @param string      $action      Action
+	 * @param HookManager $hookmanager Hookmanager
+	 * @return int
+	 */
+	public function notifsupported($parameters, &$object, &$action, $hookmanager): int
+	{
+		$events = self::getNotificationEventCodes();
+		if (!empty($hookmanager->resArray['arrayofnotifsupported']) && is_array($hookmanager->resArray['arrayofnotifsupported'])) {
+			$events = array_merge($hookmanager->resArray['arrayofnotifsupported'], $events);
+		}
+
+		$this->results = array('arrayofnotifsupported' => array_values(array_unique($events)));
+		return 0;
+	}
+
+	/**
+	 * Describe the custom object to generic Dolibarr element resolvers.
+	 *
+	 * @param array       $parameters  Parameters
+	 * @param object|null $object      Object
+	 * @param string      $action      Action
+	 * @param HookManager $hookmanager Hookmanager
+	 * @return int
+	 */
+	public function getElementProperties($parameters, &$object, &$action, $hookmanager): int
+	{
+		global $conf;
+
+		$elementtype = !empty($parameters['elementType']) ? (string) $parameters['elementType'] : '';
+		if (!in_array($elementtype, array('dolistoreextract_order', 'dolistoreextract_order@dolistorextract'), true)) {
+			return 0;
+		}
+
+		$diroutput = !empty($conf->dolistorextract->dir_output) ? $conf->dolistorextract->dir_output : '';
+		$this->results = array(
+			'module' => 'dolistorextract',
+			'element' => 'dolistoreextract_order',
+			'table_element' => 'dolistoreextract_order',
+			'subelement' => 'dolistoreextract_order',
+			'classpath' => 'dolistorextract/class',
+			'classfile' => 'dolistoreOrder',
+			'classname' => 'DolistoreOrder',
+			'dir_output' => $diroutput,
+			'dir_temp' => $diroutput !== '' ? $diroutput.'/temp' : '',
+			'parent_element' => '',
+		);
+		$hookmanager->resArray = $this->results;
+
+		return 1;
+	}
+
 	/**
 	 * Hook: Provides additional info to the email element list.
 	 *
@@ -114,6 +297,7 @@ class ActionsDolistorextract extends CommonHookActions
 	public function emailElementlist(array $parameters, ?object &$object, string &$action, HookManager $hookmanager) : int
 	{
 		global $langs;
+		$langs->load('dolistorextract@dolistorextract');
 
 		$error = 0;
 
@@ -212,73 +396,19 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
-	 * Creates a Dolibarr calendar event (actioncomm) for a sold product extracted from Dolistore mail.
-	 * Detects and avoids duplicate events based on a tag in the event note.
+	 * Legacy compatibility shim for the former manual Agenda event creation.
 	 *
-	 * @param array  $productDatas  Product/item array (extracted from email)
-	 * @param string $orderRef      Dolistore order reference
-	 * @param int    $socid         Thirdparty/Customer rowid
-	 * @return int            New event rowid, 0 if already exists, -1 if error
+	 * DoliStore order events are now exposed through native object triggers and c_action_trigger.
+	 *
+	 * @param array  $productDatas Product/item array
+	 * @param string $orderRef     DoliStore order reference
+	 * @param int    $socid        Thirdparty rowid
+	 * @return int Always 0, manual Agenda creation disabled
 	 */
 	public function createEventFromExtractDatas(array $productDatas, string $orderRef, int $socid) : int
 	{
-		global $conf, $langs;
-
-		// Check value
-		if (empty($orderRef) || empty($productDatas['item_reference'])) {
-			dol_syslog(__METHOD__ . ' Error : params order_name and product_ref missing');
-			return -1;
-		}
-
-		$res = 0;
-
-		$userStatic = new User($this->db);
-		$userStatic->fetch(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'));
-
-		require_once DOL_DOCUMENT_ROOT . '/comm/action/class/actioncomm.class.php';
-		$actionStatic = new ActionComm($this->db);
-
-		$actionStatic->socid = $socid;
-
-		$actionStatic->authorid = getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS');
-		$actionStatic->userownerid = getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS');
-
-		$actionStatic->datec = time();
-		$actionStatic->datem = time();
-		$actionStatic->datep = time();
-		$actionStatic->percentage = 100;
-
-		$actionStatic->type_code = 'AC_STRXTRACT';
-		$actionStatic->label = $langs->trans('DolistorextractLabelActionForSale', $productDatas['item_name'] . ' (' . $productDatas['item_reference'] . ')');
-		// Define a tag which allow to detect twice
-		$actionStatic->note = 'ORDER:' . $orderRef . ':' . $productDatas['item_reference'];
-		// Check if import already done
-		if (! $this->isAlreadyImported($actionStatic->note)) {
-			$res = (int) $actionStatic->create($userStatic);
-		} else {
-			dol_syslog(__METHOD__ . ' event already exists, skip note=' . $actionStatic->note, LOG_INFO);
-		}
-
-		return $res;
-	}
-
-	/**
-	 * Checks if an event has already been imported, by searching for a specific tag in note field.
-	 *
-	 * @param string $noteString Tag/note to search (e.g., 'ORDER:...:...')
-	 * @return int|false Rowid if exists, false if not, -1 if error
-	 */
-	private function isAlreadyImported(string $noteString) : bool
-	{
-		$sql = "SELECT id FROM " . $this->db->prefix() . "actioncomm WHERE note='" . $this->db->escape($noteString) . "'";
-
-		$resql = $this->db->query($sql);
-		if ($resql) {
-			$num = $this->db->num_rows($resql);
-			$this->db->free($resql); // Toujours libérer le curseur après usage
-			return ($num > 0);
-		}
-		return false;
+		dol_syslog(__METHOD__.' skipped for order_ref='.$orderRef.'; DoliStore order Agenda events are handled by native triggers.', LOG_INFO);
+		return 0;
 	}
 
 	/**
@@ -294,6 +424,13 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->nbErrors = 0;
 		$langs->load('main');
 
+		$lockName = 'dolistoreextract_import_'.$conf->entity;
+		if (!$this->acquireSqlLock($lockName)) {
+			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreImportLockUnavailable").'</span>';
+			return 0;
+		}
+
+		try {
 		$imap = $this->openImapClient();
 		if (!$imap) {
 			return -1;
@@ -301,10 +438,6 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$emailEntries = $this->fetchDolistoreEmailsFromConfiguredLocation($imap, true);
 		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreMailsToProcess", count($emailEntries)) . '</strong>';
-
-		if (getDolGlobalString('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU')) {
-			$this->logOutput .= '<br/><strong class="error">' . $langs->trans("DolistoreMailSendDisabled") . '</strong>';
-		}
 
 		if (empty($emailEntries)) {
 			$this->logOutput .= '<br/>' . $langs->trans("DolistoreNoUnreadMailFound");
@@ -315,6 +448,7 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$dolistoreEmails = array();
 		foreach ($emailEntries as $emailEntry) {
+			$emailEntry['message']->dolistoreextract_folder = (string) $emailEntry['folder'];
 			$dolistoreEmails[] = $emailEntry['message'];
 		}
 
@@ -327,6 +461,7 @@ class ActionsDolistorextract extends CommonHookActions
 			$emailsByOrderRef = [];
 			foreach ($emailEntries as $emailEntry) {
 				$email = $emailEntry['message'];
+				$email->dolistoreextract_folder = (string) $emailEntry['folder'];
 				$dolistoreMailExtract = new \dolistoreMailExtract($this->db, $email->message->text);
 				$data = $dolistoreMailExtract->extractAllDatas();
 
@@ -381,13 +516,16 @@ class ActionsDolistorextract extends CommonHookActions
 					$this->moveEmailEntryToErrorFolder($imap, $emailEntry);
 				}
 				return $result;
-			} else {
-				// Mark all emails as read and archive them
-				foreach ($emailEntries as $emailEntry) {
-					$this->markEmailEntryAsProcessed($imap, $emailEntry);
+				} else {
+					// Mark all emails as read and archive them
+					foreach ($emailEntries as $emailEntry) {
+						$this->markEmailEntryAsProcessed($imap, $emailEntry);
+					}
+					return $result;
 				}
-				return $result;
 			}
+		} finally {
+			$this->releaseSqlLock($lockName);
 		}
 	}
 
@@ -433,7 +571,9 @@ class ActionsDolistorextract extends CommonHookActions
 
 		foreach ($folders as $folderName) {
 			if (!$imap->selectFolder($folderName)) {
-				$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreImapFolderSelectFailed", dol_escape_htmltag($folderName)) . '</span>';
+				$message = $langs->trans("DolistoreImapFolderSelectFailed", $folderName);
+				$this->errors[] = $message;
+				$this->logOutput .= '<br/><span class="warning">' . dol_escape_htmltag($message) . '</span>';
 				dol_syslog(__METHOD__ . ' unable to select folder=' . $folderName, LOG_WARNING);
 				continue;
 			}
@@ -456,6 +596,215 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		return $emailEntries;
+	}
+
+	/**
+	 * Fetch DoliStore orders still present in the configured mailbox and not archived yet.
+	 *
+	 * This is a read-only helper for list pages: it must not mark messages as read,
+	 * move messages, create orders or call import business logic.
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	public function fetchPendingDolistoreOrdersFromMailbox(): array
+	{
+		global $langs;
+
+		if (!function_exists('imap_open')) {
+			$this->errors[] = $langs->trans('DolistoreImapExtensionMissing');
+			dol_syslog(__METHOD__.' IMAP extension is missing', LOG_WARNING);
+			return array();
+		}
+
+		if (empty(getDolGlobalString('DOLISTOREXTRACT_IMAP_SERVER')) || empty(getDolGlobalString('DOLISTOREXTRACT_IMAP_USER')) || empty(getDolGlobalString('DOLISTOREXTRACT_IMAP_PWD'))) {
+			$this->errors[] = $langs->trans('DolistoreImapConfigurationMissing');
+			dol_syslog(__METHOD__.' IMAP configuration is incomplete', LOG_WARNING);
+			return array();
+		}
+
+		if (!class_exists('dolistoreMailExtract')) {
+			require_once __DIR__ . '/dolistoreMailExtract.class.php';
+		}
+
+		$imap = $this->openImapClient();
+		if (!$imap) {
+			return array();
+		}
+
+		$emailEntries = $this->fetchDolistoreEmailsFromConfiguredLocation($imap, false);
+		if (empty($emailEntries)) {
+			return array();
+		}
+
+		$orders = array();
+		$messageIdToOrderRefs = array();
+		foreach ($emailEntries as $emailEntry) {
+			$email = $emailEntry['message'];
+			$subject = (string) ($email->header->subject ?? '');
+			$langEmail = dolistoreMailExtract::detectLang($subject);
+			$subjectOrderData = dolistoreMailExtract::extractOrderDatasFromSubject($subject, $langEmail);
+			$messageBody = (string) ($email->message->text ?? $email->message->plain ?? $email->message->html ?? '');
+			$mailExtract = new dolistoreMailExtract($this->db, $messageBody);
+			$extractedData = $mailExtract->extractAllDatas();
+
+			$orderRef = trim((string) ($extractedData['order_ref'] ?? ''));
+			if ($orderRef === '') {
+				$orderRef = trim((string) ($subjectOrderData['ref'] ?? ''));
+			}
+			if ($orderRef === '') {
+				continue;
+			}
+
+			$messageId = $this->getEmailMessageId($email);
+			if ($messageId !== '') {
+				if (empty($messageIdToOrderRefs[$messageId])) {
+					$messageIdToOrderRefs[$messageId] = array();
+				}
+				$messageIdToOrderRefs[$messageId][$orderRef] = true;
+			}
+
+			$messageDate = !empty($email->header->date) ? (int) strtotime((string) $email->header->date) : 0;
+			if ($messageDate < 0) {
+				$messageDate = 0;
+			}
+			$isUnread = (!empty($email->header->details->Unseen) && $email->header->details->Unseen === 'U');
+			if (!$isUnread && isset($email->header->seen)) {
+				$isUnread = empty($email->header->seen);
+			}
+			$folder = (string) ($emailEntry['folder'] ?? '');
+
+			if (empty($orders[$orderRef])) {
+				$orders[$orderRef] = array(
+					'folder' => $folder,
+					'folders' => array($folder => true),
+					'email_date' => $messageDate,
+					'email_date_raw' => (string) ($email->header->date ?? ''),
+					'email_id' => (string) ($subjectOrderData['id'] ?? ''),
+					'order_ref' => $orderRef,
+					'lang' => $langEmail,
+					'customer_name' => trim((string) ($extractedData['buyer_company'] ?? '')),
+					'customer_email' => trim((string) ($extractedData['buyer_email'] ?? '')),
+					'contact_name' => trim((string) ($extractedData['buyer_lastname'] ?? '').' '.(string) ($extractedData['buyer_firstname'] ?? '')),
+					'mail_count' => 0,
+					'unread_count' => 0,
+					'message_id' => $messageId,
+					'msgno' => (int) ($email->header->msgno ?? 0),
+					'uid' => (int) ($email->header->uid ?? 0),
+				);
+			}
+
+			$orders[$orderRef]['mail_count']++;
+			if ($isUnread) {
+				$orders[$orderRef]['unread_count']++;
+			}
+			if ($folder !== '') {
+				$orders[$orderRef]['folders'][$folder] = true;
+			}
+			if ($isUnread && empty($orders[$orderRef]['preferred_unread_message'])) {
+				$orders[$orderRef]['folder'] = $folder;
+				$orders[$orderRef]['message_id'] = $messageId;
+				$orders[$orderRef]['msgno'] = (int) ($email->header->msgno ?? 0);
+				$orders[$orderRef]['uid'] = (int) ($email->header->uid ?? 0);
+				$orders[$orderRef]['preferred_unread_message'] = true;
+			}
+			if ($messageDate > (int) $orders[$orderRef]['email_date']) {
+				$orders[$orderRef]['email_date'] = $messageDate;
+				$orders[$orderRef]['email_date_raw'] = (string) ($email->header->date ?? '');
+			}
+			if ($orders[$orderRef]['customer_name'] === '' && !empty($extractedData['buyer_company'])) {
+				$orders[$orderRef]['customer_name'] = trim((string) $extractedData['buyer_company']);
+			}
+			if ($orders[$orderRef]['customer_email'] === '' && !empty($extractedData['buyer_email'])) {
+				$orders[$orderRef]['customer_email'] = trim((string) $extractedData['buyer_email']);
+			}
+			if ($orders[$orderRef]['contact_name'] === '') {
+				$orders[$orderRef]['contact_name'] = trim((string) ($extractedData['buyer_lastname'] ?? '').' '.(string) ($extractedData['buyer_firstname'] ?? ''));
+			}
+		}
+
+		if (empty($orders)) {
+			return array();
+		}
+
+		$this->removeAlreadyArchivedMailboxOrders($orders, $messageIdToOrderRefs);
+
+		uasort($orders, function ($a, $b) {
+			return ((int) $b['email_date']) <=> ((int) $a['email_date']);
+		});
+
+		return $orders;
+	}
+
+	/**
+	 * Remove mailbox entries that already have a DoliStore archived order.
+	 *
+	 * @param array<string,array<string,mixed>> $orders              Orders indexed by DoliStore reference
+	 * @param array<string,array<string,bool>> $messageIdToOrderRefs Order references indexed by Message-ID
+	 * @return void
+	 */
+	private function removeAlreadyArchivedMailboxOrders(array &$orders, array $messageIdToOrderRefs): void
+	{
+		$orderRefs = array_keys($orders);
+		$messageIds = array_keys($messageIdToOrderRefs);
+		if (empty($orderRefs) && empty($messageIds)) {
+			return;
+		}
+
+		$whereParts = array();
+		if (!empty($orderRefs)) {
+			$whereParts[] = 'dolistore_order_ref IN ('.$this->buildSqlStringList($orderRefs).')';
+		}
+		if (!empty($messageIds)) {
+			$whereParts[] = 'email_message_id IN ('.$this->buildSqlStringList($messageIds).')';
+		}
+		if (empty($whereParts)) {
+			return;
+		}
+
+		$sql = 'SELECT dolistore_order_ref, email_message_id';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'dolistoreextract_order';
+		$sql .= ' WHERE entity IN ('.getEntity('dolistoreextract_order').')';
+		$sql .= ' AND ('.implode(' OR ', $whereParts).')';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			dol_syslog(__METHOD__.' SQL error: '.$this->db->lasterror(), LOG_WARNING);
+			return;
+		}
+
+		while ($obj = $this->db->fetch_object($resql)) {
+			$orderRef = (string) ($obj->dolistore_order_ref ?? '');
+			if ($orderRef !== '' && isset($orders[$orderRef])) {
+				unset($orders[$orderRef]);
+			}
+
+			$messageId = (string) ($obj->email_message_id ?? '');
+			if ($messageId !== '' && !empty($messageIdToOrderRefs[$messageId])) {
+				foreach (array_keys($messageIdToOrderRefs[$messageId]) as $linkedOrderRef) {
+					unset($orders[$linkedOrderRef]);
+				}
+			}
+		}
+		$this->db->free($resql);
+	}
+
+	/**
+	 * Build a SQL string list from scalar values.
+	 *
+	 * @param array<int,string> $values Values
+	 * @return string
+	 */
+	private function buildSqlStringList(array $values): string
+	{
+		$quoted = array();
+		foreach ($values as $value) {
+			$value = trim((string) $value);
+			if ($value === '') {
+				continue;
+			}
+			$quoted[] = "'".$this->db->escape($value)."'";
+		}
+
+		return !empty($quoted) ? implode(',', array_unique($quoted)) : "''";
 	}
 
 	/**
@@ -610,56 +959,322 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$this->db->begin();
 
-		$existingOrderId = $this->isOrderAlreadyImported($orderRef);
-		if ($existingOrderId > 0) {
+		$existingDolistoreOrder = $this->findExistingDolistoreOrder($orderRef, $orderDetails);
+		if ($existingDolistoreOrder > 0) {
 			$this->db->rollback();
-			$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreOrderAlreadyImportedSkip", $orderRef, $existingOrderId) . '</span>';
-			dol_syslog(__METHOD__ . ' skip import for already imported order_ref=' . $orderRef . ' existing_order_id=' . $existingOrderId, LOG_WARNING);
+			$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreOrderAlreadyImportedSkip", $orderRef, $existingDolistoreOrder) . '</span>';
+			DolistoreImportLog::add($this->db, 'warning', $langs->transnoentitiesnoconv("DolistoreOrderAlreadyImportedSkip", $orderRef, $existingDolistoreOrder), $existingDolistoreOrder, 'import', array('order_ref' => $orderRef), $user);
+			dol_syslog(__METHOD__ . ' skip import for already imported DoliStore order_ref=' . $orderRef . ' existing_order_id=' . $existingDolistoreOrder, LOG_WARNING);
 			return true;
 		}
 
-		// A. Customer Management
 		$companyId = $this->getOrCreateCustomer($user, $orderDetails['buyer_data']);
-
 		if ($companyId <= 0) {
+			$this->logOutput .= '<br/>-> <span class="warning">'.$langs->trans("DolistoreCustomerMgmtFailed").'</span>';
+			DolistoreImportLog::add($this->db, 'warning', $langs->transnoentitiesnoconv("DolistoreCustomerMgmtFailed"), 0, 'import', array('order_ref' => $orderRef), $user);
+		}
+		dol_syslog(__METHOD__ . ' customer/contact management kept for DoliStore archive order_ref=' . $orderRef . ' socid=' . $companyId, LOG_INFO);
+
+		$dolistoreOrder = $this->createDolistoreOrderArchive($user, $orderRef, $orderDetails, $companyId);
+		if ($dolistoreOrder <= 0) {
 			$this->db->rollback();
-			$this->logOutput .= '<br/>-> <span class="error">'.$langs->trans("DolistoreCustomerMgmtFailed").'</span>';
-			$this->nbErrors++;
-			return false;
-		}
-		dol_syslog(__METHOD__ . ' customer/contact management kept and compatible with native order flow for order_ref=' . $orderRef . ' socid=' . $companyId, LOG_INFO);
-
-		// B. Product Management (Sales & Events)
-		$processedItems = $this->processOrderItems($user, $companyId, $orderRef, $orderDetails['items']); // Add $orderRef
-
-		if ($processedItems === null) {
-			$this->db->rollback(); // Technical error during insertion
 			$this->nbErrors++;
 			return false;
 		}
 
-		// C. Email dispatch (only if database successful)
-		if (!empty($processedItems)) {
-			$this->sendThankYouEmail($user, $orderDetails, $processedItems);
-		}
-
-		// TOTAL SUCCESS
 		$this->db->commit();
-		// D. Feedback Log intelligent
-		if (empty($processedItems)) {
-			if ($this->lastOrderImportStatus === 'manual_pending') {
-				$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreOrderPendingManualMapping", $orderRef) . '</span>';
-			} elseif ($this->lastOrderImportStatus === 'skipped_unmapped') {
-				$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreOrderImportedWithSkippedLines", $orderRef) . '</span>';
-			} else {
-				// Case of complete duplicate: The order has been processed, but nothing has been inserted.
-				$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreOrderAlreadyExists", $orderRef).'</span>';
-			}
-		} else {
-			// Normal case: Sales have been entered.
-			$this->logOutput .= '<br/><span class="ok">'.$langs->trans("DolistoreOrderImported", $orderRef).'</span>';
-		}
+		$this->logOutput .= '<br/><span class="ok">'.$langs->trans("DolistoreOrderImported", $orderRef).'</span>';
+		DolistoreImportLog::add($this->db, 'success', $langs->transnoentitiesnoconv("DolistoreOrderImported", $orderRef), $dolistoreOrder, 'import', array('order_ref' => $orderRef), $user);
+
 		return true;
+	}
+
+	/**
+	 * Find an existing archived DoliStore order using the V2 duplicate rules.
+	 *
+	 * @param string $orderRef     DoliStore order reference
+	 * @param array  $orderDetails Extracted order details
+	 * @return int Existing order id, 0 if none
+	 */
+	private function findExistingDolistoreOrder(string $orderRef, array $orderDetails): int
+	{
+		$order = new DolistoreOrder($this->db);
+		if ($orderRef !== '' && $order->fetchByDolistoreRef($orderRef) > 0) {
+			return (int) $order->id;
+		}
+
+		$messageId = (string) ($orderDetails['email_metadata']['message_id'] ?? '');
+		if ($messageId !== '') {
+			$order = new DolistoreOrder($this->db);
+			if ($order->fetchByEmailMessageId($messageId) > 0) {
+				return (int) $order->id;
+			}
+		}
+
+		$rawHash = (string) ($orderDetails['raw_hash'] ?? '');
+		if ($rawHash !== '') {
+			$order = new DolistoreOrder($this->db);
+			if ($order->fetchByRawHash($rawHash) > 0) {
+				return (int) $order->id;
+			}
+		}
+
+		return 0;
+	}
+
+	/**
+	 * Create the archived DoliStore order and lines.
+	 *
+	 * @param User   $user         User
+	 * @param string $orderRef     DoliStore order reference
+	 * @param array  $orderDetails Extracted details
+	 * @param int    $companyId    Customer thirdparty id
+	 * @return int Order id, -1 on error
+	 */
+	private function createDolistoreOrderArchive(User $user, string $orderRef, array $orderDetails, int $companyId): int
+	{
+		global $langs;
+
+		$buyerData = (array) ($orderDetails['buyer_data'] ?? array());
+		$items = (array) ($orderDetails['items'] ?? array());
+		$emailMetadata = (array) ($orderDetails['email_metadata'] ?? array());
+		$orderDate = !empty($orderDetails['order_date']) ? (int) $orderDetails['order_date'] : dol_now();
+		$releaseDelayDays = (int) getDolGlobalInt('DOLISTOREXTRACT_PAYMENT_RELEASE_DELAY_DAYS');
+		if ($releaseDelayDays <= 0) {
+			$releaseDelayDays = 30;
+		}
+		$releaseDate = dol_time_plus_duree($orderDate, $releaseDelayDays, 'd');
+		$commissionRate = $this->getDolistoreCommissionRate();
+
+		$order = new DolistoreOrder($this->db);
+		$order->dolistore_order_ref = $orderRef;
+		$order->dolistore_order_date = $orderDate;
+		$order->release_date = $releaseDate;
+		$order->currency_code = strtoupper((string) ($buyerData['order_currency'] ?? $buyerData['currency'] ?? 'EUR'));
+		if ($order->currency_code === '') {
+			$order->currency_code = 'EUR';
+		}
+		$order->commission_percent = $commissionRate;
+		$order->customer_name = trim((string) ($buyerData['buyer_company'] ?? ''));
+		$order->customer_email = trim((string) ($buyerData['buyer_email'] ?? ''));
+		$order->customer_country = trim((string) ($buyerData['buyer_country'] ?? ''));
+		$order->customer_country_code = trim((string) ($buyerData['buyer_country_code'] ?? ''));
+		$order->fk_soc_customer = $companyId > 0 ? $companyId : 0;
+		$order->fk_contact_customer = $this->findContactIdByEmail($companyId, $order->customer_email);
+		$order->fk_soc_dolistore = getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID');
+		$order->email_message_id = (string) ($emailMetadata['message_id'] ?? '');
+		$order->email_subject = (string) ($emailMetadata['subject'] ?? '');
+		$order->email_date = !empty($emailMetadata['date']) ? (int) $emailMetadata['date'] : $orderDate;
+		$order->email_uid = !empty($emailMetadata['uid']) ? (int) $emailMetadata['uid'] : 0;
+		$order->email_folder = (string) ($emailMetadata['folder'] ?? '');
+		$order->raw_hash = (string) ($orderDetails['raw_hash'] ?? '');
+		$order->status = empty($items) ? DolistoreOrder::STATUS_DRAFT : ($releaseDate <= dol_now() ? DolistoreOrder::STATUS_INVOICEABLE : DolistoreOrder::STATUS_WAITING_RELEASE);
+		$order->note_private = $this->buildDolistoreImportPrivateNote(array(
+			'lang' => (string) ($orderDetails['lang'] ?? ''),
+			'import_hash' => (string) ($orderDetails['raw_hash'] ?? ''),
+			'order_ref' => $orderRef,
+			'buyer_email' => $order->customer_email,
+		));
+
+		$orderId = $order->create($user);
+		if ($orderId <= 0) {
+			$this->logOutput .= '<br/>-> <span class="error">'.$langs->trans("DolistoreArchiveOrderCreateError", dol_escape_htmltag($orderRef), dol_escape_htmltag($order->error)).'</span>';
+			DolistoreImportLog::add($this->db, 'error', $langs->transnoentitiesnoconv("DolistoreArchiveOrderCreateError", $orderRef, $order->error), 0, 'import', array('order_ref' => $orderRef), $user);
+			return -1;
+		}
+
+		$createdLines = 0;
+		foreach ($items as $item) {
+			$resultLine = $this->createDolistoreOrderArchiveLine($user, $order, (array) $item);
+			if ($resultLine < 0) {
+				return -1;
+			}
+			$createdLines++;
+		}
+
+		$order->fetch($orderId);
+		$order->updateTotalsFromLines($user);
+		$this->storeOrderSourceEmails($order, $orderDetails);
+
+		if ($createdLines === 0) {
+			DolistoreImportLog::add($this->db, 'warning', $langs->transnoentitiesnoconv("DolistoreNoItemsFound"), $orderId, 'import', array('order_ref' => $orderRef), $user);
+		}
+
+		return $orderId;
+	}
+
+	/**
+	 * Create one archived DoliStore order line.
+	 *
+	 * @param User           $user  User
+	 * @param DolistoreOrder $order Parent order
+	 * @param array          $item  Extracted item
+	 * @return int Line id, -1 on error
+	 */
+	private function createDolistoreOrderArchiveLine(User $user, DolistoreOrder $order, array $item): int
+	{
+		global $langs;
+
+		$item = $this->enforceDolistoreServiceBusinessRule($item);
+		$itemReference = (string) ($item['item_reference'] ?? '');
+		$itemName = (string) ($item['item_name'] ?? '');
+		$itemQty = !empty($item['item_quantity']) ? (float) $item['item_quantity'] : 1;
+		$itemQty = abs($itemQty) > 0 ? abs($itemQty) : 1;
+		$itemTotal = !empty($item['item_price_total']) ? $this->convertToFloat((string) $item['item_price_total']) : $this->convertToFloat((string) ($item['item_price'] ?? '0'));
+		$itemUnitPrice = ($itemQty != 0) ? ($itemTotal / $itemQty) : $itemTotal;
+		$isRefunded = !empty($item['item_refunded']);
+		if ($isRefunded) {
+			$itemUnitPrice = -1 * abs($itemUnitPrice);
+			$itemTotal = -1 * abs($itemTotal);
+		}
+
+		$serviceId = $this->getServiceIdByDolistoreId($itemReference);
+		if ($serviceId <= 0) {
+			DolistoreImportLog::add($this->db, 'warning', $langs->transnoentitiesnoconv("DolistoreServiceMappingNotFound", $itemReference, $itemName), (int) $order->id, 'import', array('item_reference' => $itemReference, 'item_name' => $itemName), $user);
+			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreServiceMappingNotFound", dol_escape_htmltag($itemReference), dol_escape_htmltag($itemName)) . '</span>';
+		}
+
+		$commissionFactor = 1 - ((float) $order->commission_percent / 100);
+		$line = new DolistoreOrderLine($this->db);
+		$line->entity = (int) $order->entity;
+		$line->fk_order = (int) $order->id;
+		$line->product_dolistore_ref = $itemReference;
+		$line->product_label = $itemName;
+		$line->fk_product = $serviceId > 0 ? $serviceId : 0;
+		$line->qty = $itemQty;
+		$line->unit_price_ht = $itemUnitPrice;
+		$line->total_ht = $itemTotal;
+		$line->tax_rate = (float) $this->getDolistoreInvoiceVatRate();
+		$line->total_tva = 0;
+		$line->total_ttc = $itemTotal;
+		$line->billable_unit_price_ht = $itemUnitPrice * $commissionFactor;
+		$line->billable_total_ht = $itemTotal * $commissionFactor;
+		$line->description = $this->buildDolistoreOrderLineDescription($item, $isRefunded);
+		$line->raw_hash = hash('sha256', implode('|', array((int) $order->id, $itemReference, $itemName, price2num($itemTotal, 'MU'), price2num($itemQty, 'MU'))));
+
+		$lineId = $line->create($user);
+		if ($lineId <= 0) {
+			$this->logOutput .= '<br/>-> <span class="error">'.$langs->trans("DolistoreArchiveLineCreateError", dol_escape_htmltag($itemReference), dol_escape_htmltag($line->error)).'</span>';
+			DolistoreImportLog::add($this->db, 'error', $langs->transnoentitiesnoconv("DolistoreArchiveLineCreateError", $itemReference, $line->error), (int) $order->id, 'import', array('item_reference' => $itemReference), $user);
+			return -1;
+		}
+
+		return $lineId;
+	}
+
+	/**
+	 * Find customer contact by email.
+	 *
+	 * @param int    $companyId Thirdparty id
+	 * @param string $email     Email
+	 * @return int
+	 */
+	private function findContactIdByEmail(int $companyId, string $email): int
+	{
+		$email = trim($email);
+		if ($companyId <= 0 || $email === '') {
+			return 0;
+		}
+
+		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'socpeople';
+		$sql .= ' WHERE fk_soc = '.((int) $companyId);
+		$sql .= " AND email = '".$this->db->escape($email)."'";
+		$sql .= ' AND entity IN ('.getEntity('contact').')';
+		$sql .= ' ORDER BY rowid ASC LIMIT 1';
+
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return 0;
+		}
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+
+		return !empty($obj->rowid) ? (int) $obj->rowid : 0;
+	}
+
+	/**
+	 * Store source emails as native attached documents.
+	 *
+	 * @param DolistoreOrder $order        Order
+	 * @param array          $orderDetails Extracted order details
+	 * @return void
+	 */
+	private function storeOrderSourceEmails(DolistoreOrder $order, array $orderDetails): void
+	{
+		$emails = (array) ($orderDetails['source_emails'] ?? array());
+		if (empty($emails) || empty($order->id) || empty($order->ref)) {
+			return;
+		}
+
+		$uploadDir = dolistoreextractGetOrderUploadDir($order);
+		dol_mkdir($uploadDir);
+
+		$index = 0;
+		foreach ($emails as $sourceEmail) {
+			$index++;
+			$filename = dol_sanitizeFileName($order->ref.'-source-'.$index.'.eml');
+			$filepath = $uploadDir.'/'.$filename;
+			if (is_file($filepath)) {
+				continue;
+			}
+			$content = (string) $sourceEmail;
+			if ($content === '') {
+				continue;
+			}
+			file_put_contents($filepath, $content);
+		}
+	}
+
+	/**
+	 * Build an auditable EML-like source from the IMAP object.
+	 *
+	 * @param object $email IMAP message
+	 * @return string
+	 */
+	private function buildEmailSourceContent($email): string
+	{
+		$subject = (string) ($email->header->subject ?? '');
+		$date = (string) ($email->header->date ?? '');
+		$messageId = $this->getEmailMessageId($email);
+		$from = (string) ($email->header->from ?? '');
+		$to = (string) ($email->header->to ?? '');
+		$text = (string) ($email->message->text ?? $email->message->plain ?? '');
+		$html = (string) ($email->message->html ?? '');
+
+		$body = $text !== '' ? $text : $html;
+
+		return "Subject: ".$subject."\r\n"
+			."Date: ".$date."\r\n"
+			."Message-ID: ".$messageId."\r\n"
+			."From: ".$from."\r\n"
+			."To: ".$to."\r\n"
+			."Content-Type: text/plain; charset=UTF-8\r\n\r\n"
+			.$body;
+	}
+
+	/**
+	 * Return stable message id from IMAP object.
+	 *
+	 * @param object $email IMAP message
+	 * @return string
+	 */
+	private function getEmailMessageId($email): string
+	{
+		$candidates = array(
+			$email->header->message_id ?? '',
+			$email->header->messageid ?? '',
+			$email->header->details->message_id ?? '',
+			$email->header->details->messageid ?? '',
+			$email->header->details->MessageID ?? '',
+		);
+		foreach ($candidates as $candidate) {
+			$candidate = trim((string) $candidate);
+			if ($candidate !== '') {
+				return $candidate;
+			}
+		}
+
+		return '';
 	}
 	/**
 	 * Retrieves a Dolibarr service rowid from a Dolistore identifier.
@@ -1040,7 +1655,9 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
-	 * Manually creates a native Dolibarr customer order from Dolistore extracted data.
+	 * Legacy V1 entry point kept for compatibility.
+	 *
+	 * V2 no longer creates native Dolibarr customer orders from DoliStore mails.
 	 *
 	 * @param User  $user      User performing manual action
 	 * @param int   $socid     Thirdparty id
@@ -1052,224 +1669,16 @@ class ActionsDolistorextract extends CommonHookActions
 	{
 		global $langs;
 
-		$result = array(
+		$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreNativeOrderImportObsolete") . '</span>';
+		dol_syslog(__METHOD__ . ' blocked obsolete native customer order creation in DoliStore Extract V2', LOG_WARNING);
+
+		return array(
 			'success' => false,
-			'code' => 'error',
+			'code' => 'obsolete',
 			'order_id' => 0,
 			'order_ref' => '',
-			'message_key' => 'DolistoreOrderManualCreateError'
+			'message_key' => 'DolistoreNativeOrderImportObsolete'
 		);
-
-		if (!$this->hasOrderCreatePermission($user)) {
-			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", '', '') . '</span>';
-			dol_syslog(__METHOD__ . ' permission denied for user=' . ((int) $user->id), LOG_WARNING);
-			return $result;
-		}
-
-		$orderRefClient = !empty($orderData['order_ref']) ? (string) $orderData['order_ref'] : '';
-		$dateOrder = !empty($orderData['date_order']) ? (int) $orderData['date_order'] : dol_now();
-
-		$existingOrderId = $this->isOrderAlreadyImported($orderRefClient);
-		if ($existingOrderId > 0) {
-			$existingOrder = new Commande($this->db);
-			$existingOrder->fetch($existingOrderId);
-			$result['success'] = true;
-			$result['code'] = 'already_exists';
-			$result['order_id'] = (int) $existingOrderId;
-			$result['order_ref'] = (string) $existingOrder->ref;
-			$result['message_key'] = 'DolistoreOrderManualAlreadyExists';
-			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreOrderManualAlreadyExists", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($existingOrder->ref)) . '</span>';
-			return $result;
-		}
-
-		$order = new Commande($this->db);
-		$order->socid = (int) $socid;
-		$order->date = $dateOrder;
-		$order->ref_client = $orderRefClient;
-		$order->note_private = $this->buildDolistoreImportPrivateNote($orderData);
-		$this->applyConfiguredOrderDefaults($order);
-
-		$this->db->begin();
-		$orderCreateResult = $order->create($user);
-		if ($orderCreateResult <= 0) {
-			$this->db->rollback();
-			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->error)) . '</span>';
-			dol_syslog(__METHOD__ . ' failed to create order for socid=' . ((int) $socid) . ' ref_client=' . $orderRefClient . ' error=' . $order->error, LOG_ERR);
-			return $result;
-		}
-
-		$lineResult = $this->createCustomerOrderLinesFromDolistoreItems($order, $items);
-		if ($lineResult < 0) {
-			$this->db->rollback();
-			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->error)) . '</span>';
-			dol_syslog(__METHOD__ . ' failed to create lines on order_id=' . ((int) $order->id) . ' error=' . $order->error, LOG_ERR);
-			return $result;
-		}
-
-		if (getDolGlobalInt('DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER')) {
-			$orderValidateResult = $order->valid($user);
-			if ($orderValidateResult <= 0) {
-				$validationError = $this->getOrderValidationErrorDetails($order);
-				$this->db->rollback();
-				$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreOrderManualCreateError", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($validationError)) . '</span>';
-				dol_syslog(__METHOD__ . ' failed to validate order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' error=' . $validationError, LOG_ERR);
-				return $result;
-			}
-		}
-
-		$this->db->commit();
-		$this->assignConfiguredOrderCategories($order, $user);
-
-		$result['success'] = true;
-		$result['code'] = 'created';
-		$result['order_id'] = (int) $order->id;
-		$result['order_ref'] = (string) $order->ref;
-		$result['message_key'] = 'DolistoreOrderManualCreated';
-
-		$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreOrderManualCreated", dol_escape_htmltag($orderRefClient), dol_escape_htmltag($order->ref)) . '</span>';
-		dol_syslog(__METHOD__ . ' order created order_id=' . ((int) $order->id) . ' ref=' . $order->ref . ' ref_client=' . $orderRefClient, LOG_INFO);
-
-		return $result;
-	}
-
-	/**
-	 * Applies configured default values on order object before create.
-	 *
-	 * @param Commande $order Customer order object
-	 * @return void
-	 */
-	private function applyConfiguredOrderDefaults(Commande $order): void
-	{
-		$order->availability_id = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_AVAILABILITY_ID');
-		$order->shipping_method_id = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_SHIPPING_METHOD_ID');
-		$order->demand_reason_id = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_INPUT_REASON_ID');
-		$order->cond_reglement_id = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_COND_REGLEMENT_ID');
-		$order->mode_reglement_id = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_MODE_REGLEMENT_ID');
-		$order->fk_account = getDolGlobalInt('DOLISTOREXTRACT_DEFAULT_BANK_ACCOUNT_ID');
-	}
-
-	/**
-	 * Assigns configured categories on imported order.
-	 *
-	 * @param Commande $order Customer order object
-	 * @param User     $user  User context
-	 * @return void
-	 */
-	private function assignConfiguredOrderCategories(Commande $order, User $user): void
-	{
-		$categoriesRaw = trim((string) getDolGlobalString('DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES'));
-		if ($categoriesRaw === '' || empty($order->id)) {
-			return;
-		}
-
-		$categoryIds = preg_split('/[,; ]+/', $categoriesRaw);
-		$categoryIds = array_filter(array_map('intval', (array) $categoryIds));
-		if (empty($categoryIds)) {
-			return;
-		}
-
-		if (method_exists($order, 'setCategoriesCommon')) {
-			$order->setCategoriesCommon($categoryIds, Categorie::TYPE_CUSTOMER_ORDER);
-			return;
-		}
-		if (method_exists($order, 'setCategories')) {
-			$order->setCategories($categoryIds);
-			return;
-		}
-
-		foreach ($categoryIds as $categoryId) {
-			if ((int) $categoryId > 0) {
-				$sql = "INSERT IGNORE INTO " . MAIN_DB_PREFIX . "categorie_object (fk_categorie, fk_object)";
-				$sql .= " VALUES (" . ((int) $categoryId) . ", " . ((int) $order->id) . ")";
-				$this->db->query($sql);
-			}
-		}
-	}
-
-	/**
-	 * Checks if a customer order was already imported using Dolistore reference in ref_client.
-	 *
-	 * @param string $dolistoreRef Dolistore order reference
-	 * @return int                 Existing order id, or 0 if none
-	 */
-	public function isOrderAlreadyImported(string $dolistoreRef): int
-	{
-		$dolistoreRef = trim($dolistoreRef);
-		if ($dolistoreRef === '') {
-			return 0;
-		}
-
-		$sql = 'SELECT c.rowid';
-		$sql .= ' FROM ' . $this->db->prefix() . 'commande as c';
-		$sql .= ' WHERE c.ref_client = "' . $this->db->escape($dolistoreRef) . '"';
-		$sql .= ' AND c.entity IN (' . getEntity('commande') . ')';
-		$sql .= ' ORDER BY c.rowid DESC';
-		$sql .= ' LIMIT 1';
-
-		$resql = $this->db->query($sql);
-		if (! $resql) {
-			return 0;
-		}
-
-		$obj = $this->db->fetch_object($resql);
-		$this->db->free($resql);
-		if (!empty($obj->rowid)) {
-			dol_syslog(__METHOD__ . ' duplicate order detected for ref_client=' . $dolistoreRef . ' order_id=' . ((int) $obj->rowid), LOG_WARNING);
-			return (int) $obj->rowid;
-		}
-
-		return 0;
-	}
-
-	/**
-	 * Creates native customer order lines from Dolistore extracted items.
-	 *
-	 * @param Commande $order Customer order object
-	 * @param array    $items Extracted items
-	 * @return int            Number of created lines, -1 on error
-	 */
-	private function createCustomerOrderLinesFromDolistoreItems(Commande $order, array $items): int
-	{
-		global $langs;
-
-		$createdLines = 0;
-		$commissionRate = $this->getDolistoreCommissionRate();
-		$commissionFactor = 1 - ($commissionRate / 100);
-		dol_syslog(__METHOD__ . ' applying commission rate=' . $commissionRate . '%', LOG_DEBUG);
-		foreach ($items as $item) {
-			$itemReference = (string) ($item['item_reference'] ?? '');
-			$itemQty = !empty($item['item_quantity']) ? (float) $item['item_quantity'] : 1;
-			$itemQty = abs($itemQty) > 0 ? abs($itemQty) : 1;
-			$itemTotal = !empty($item['item_price_total']) ? $this->convertToFloat((string) $item['item_price_total']) : $this->convertToFloat((string) ($item['item_price'] ?? '0'));
-			$itemUnitPrice = $itemTotal;
-			if (!empty($item['item_price_total']) && $itemQty > 0) {
-				$itemUnitPrice = $itemTotal / $itemQty;
-			}
-			$itemUnitPrice = $itemUnitPrice * $commissionFactor;
-			$isRefunded = !empty($item['item_refunded']);
-			if ($isRefunded) {
-				$itemUnitPrice = -1 * abs($itemUnitPrice);
-				dol_syslog(__METHOD__ . ' refund line normalized for item_reference=' . $itemReference . ' qty=' . $itemQty . ' unit_price=' . $itemUnitPrice, LOG_INFO);
-			}
-			$serviceId = $this->getServiceIdByDolistoreId($itemReference);
-			$itemDesc = $this->buildDolistoreOrderLineDescription($item, $isRefunded);
-			$lineId = $order->addline($itemDesc, $itemUnitPrice, $itemQty, 0, 0, 0, $serviceId);
-			if ($lineId <= 0) {
-				dol_syslog(__METHOD__ . ' failed addline for order_id=' . ((int) $order->id) . ' item_reference=' . $itemReference . ' error=' . $order->error, LOG_ERR);
-				return -1;
-			}
-
-			$lineExtraResult = $this->setOrderLineDolistoreItemRef((int) $lineId, $itemReference);
-			if ($lineExtraResult < 0) {
-				dol_syslog(__METHOD__ . ' failed set line extrafield on line_id=' . ((int) $lineId), LOG_ERR);
-				return -1;
-			}
-
-			dol_syslog(__METHOD__ . ' created order line line_id=' . ((int) $lineId) . ' service_id=' . ((int) $serviceId) . ' dolistore_item_ref=' . $itemReference, LOG_INFO);
-			$createdLines++;
-		}
-
-		return $createdLines;
 	}
 
 	/**
@@ -1297,68 +1706,7 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
-	 * Builds a readable validation error string from order object and database state.
-	 *
-	 * @param Commande $order Customer order object
-	 * @return string         Validation error details
-	 */
-	private function getOrderValidationErrorDetails(Commande $order): string
-	{
-		$error = trim((string) $order->error);
-		if ($error === '' && !empty($order->errors) && is_array($order->errors)) {
-			$error = trim(implode(' | ', $order->errors));
-		}
-		if ($error === '') {
-			$error = trim((string) $this->db->lasterror());
-		}
-		if ($error === '') {
-			$error = 'unknown_validation_error';
-		}
-
-		return $error;
-	}
-
-	/**
-	 * Persists Dolistore item reference on order line extrafields.
-	 * This avoids CommonObjectLine::insertExtraFields() which can update
-	 * fk_user_modif on llx_commandedet on some versions where the field does not exist.
-	 *
-	 * @param int    $lineId        Order line id
-	 * @param string $itemReference Dolistore item reference
-	 * @return int                  1 on success, 0 if no data, -1 on error
-	 */
-	private function setOrderLineDolistoreItemRef(int $lineId, string $itemReference): int
-	{
-		$itemReference = trim($itemReference);
-		if ($lineId <= 0 || $itemReference === '') {
-			return 0;
-		}
-
-		$sqlCheck = "SELECT COUNT(rowid) as nb";
-		$sqlCheck .= " FROM ".MAIN_DB_PREFIX."commandedet_extrafields";
-		$sqlCheck .= " WHERE fk_object = ".((int) $lineId);
-		$resCheck = $this->db->query($sqlCheck);
-		if (!$resCheck) {
-			return -1;
-		}
-		$objCheck = $this->db->fetch_object($resCheck);
-		$this->db->free($resCheck);
-		$exists = !empty($objCheck) ? (int) $objCheck->nb : 0;
-
-		if ($exists > 0) {
-			$sql = "UPDATE ".MAIN_DB_PREFIX."commandedet_extrafields";
-			$sql .= " SET dolistore_item_ref = '".$this->db->escape($itemReference)."'";
-			$sql .= " WHERE fk_object = ".((int) $lineId);
-		} else {
-			$sql = "INSERT INTO ".MAIN_DB_PREFIX."commandedet_extrafields (fk_object, dolistore_item_ref)";
-			$sql .= " VALUES (".((int) $lineId).", '".$this->db->escape($itemReference)."')";
-		}
-
-		return $this->db->query($sql) ? 1 : -1;
-	}
-
-	/**
-	 * Builds customer order line description from Dolistore item data.
+	 * Builds archived DoliStore order line description from Dolistore item data.
 	 *
 	 * @param array $item       Dolistore extracted item
 	 * @param bool  $isRefunded Refund flag
@@ -1455,25 +1803,6 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
-	 * Checks if user can create customer orders.
-	 *
-	 * @param User $user User context
-	 * @return bool      True when permission is granted
-	 */
-	private function hasOrderCreatePermission(User $user): bool
-	{
-		if (!empty($user->admin)) {
-			return true;
-		}
-
-		if (method_exists($user, 'hasRight')) {
-			return (bool) $user->hasRight('commande', 'creer');
-		}
-
-		return !empty($user->rights->commande->creer);
-	}
-
-	/**
 	 * Checks if user can create/manage services.
 	 *
 	 * @param User $user User context
@@ -1551,20 +1880,24 @@ class ActionsDolistorextract extends CommonHookActions
 			} elseif (strlen($buyerData['buyer_idprof2']) == 9) {
 				$sql = 'SELECT rowid FROM ' . $this->db->prefix() . 'societe WHERE siren = "' . $this->db->escape($buyerData['buyer_idprof2']) . '"';
 			}
-
 			if ($sql) {
-				$resql = $this->db->query($sql);
-				if ($resql) {
-					$obj = $this->db->fetch_object($resql);
-					if ($obj && $obj->rowid > 0) {
-						$companyId = (int) $obj->rowid;
-						$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreCompanyFoundBySiret", $companyId) . '</span>';
+				$sql .= ' AND entity IN (' . getEntity('societe') . ')';
+			}
+
+				if ($sql) {
+					$resql = $this->db->query($sql);
+					if ($resql) {
+						$obj = $this->db->fetch_object($resql);
+						if ($obj && $obj->rowid > 0) {
+							$companyId = (int) $obj->rowid;
+							$this->logOutput .= '<br/>-> <span class="ok">' . $langs->trans("DolistoreCompanyFoundBySiret", $companyId) . '</span>';
+						}
+						$this->db->free($resql);
 					}
 				}
 			}
-		}
 
-		// 4. Search via Contact Email (if still not found)
+			// 4. Search via Contact Email (if still not found)
 		if (!$companyId) {
 			$contact = new \Contact($this->db);
 			$fetchResult = $contact->fetch('', '', '', trim($buyerData['buyer_email']));
@@ -1575,6 +1908,8 @@ class ActionsDolistorextract extends CommonHookActions
 						$q .= ' FROM ' . $this->db->prefix() . 'societe s';
 						$q .= ' INNER JOIN ' . $this->db->prefix() . 'socpeople sp ON (sp.fk_soc = s.rowid)';
 						$q .= ' WHERE sp.email = "' . $this->db->escape($buyerData['buyer_email']) . '"';
+						$q .= ' AND s.entity IN (' . getEntity('societe') . ')';
+						$q .= ' AND sp.entity IN (' . getEntity('contact') . ')';
 						$q .= ' ORDER BY s.rowid ASC';
 						$q .= ' LIMIT 1';
 					$queryResult = $this->db->query($q);
@@ -1606,6 +1941,7 @@ class ActionsDolistorextract extends CommonHookActions
 			$sql = "SELECT rowid FROM " . $this->db->prefix() . "socpeople";
 			$sql .= " WHERE fk_soc = " . $companyId;
 			$sql .= " AND email = '" . $this->db->escape($buyerData['buyer_email']) . "'";
+			$sql .= " AND entity IN (" . getEntity('contact') . ")";
 			$resql = $this->db->query($sql);
 
 			// If no contact exists, create one
@@ -1708,26 +2044,12 @@ class ActionsDolistorextract extends CommonHookActions
 				$successList[] = $product['item_name'];
 			}
 
-			$this->createEventFromExtractDatas($product, $orderRef, $companyId); // Ref passed empty or to be adapted
 		}
 
 		if (empty($mappedItems)) {
 			$this->lastOrderImportStatus = ($hasUnmappedItems ? 'skipped_unmapped' : '');
 			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreNoServiceCandidate") . '</span>';
 			return array();
-		}
-
-		$orderMetadata = array(
-			'order_ref' => $orderRef,
-			'date_order' => !empty($mappedItems[0]['date_sale']) ? (int) $mappedItems[0]['date_sale'] : dol_now()
-		);
-		$resOrder = $this->createCustomerOrderFromDolistoreData($user, $companyId, $orderMetadata, $mappedItems);
-		if (empty($resOrder['success'])) {
-			return null;
-		}
-
-		if (!empty($resOrder['code']) && $resOrder['code'] === 'already_exists') {
-			$this->logOutput .= '<br/>-> <span class="warning">' . $langs->trans("DolistoreOrderAlreadyExists", $orderRef) . '</span>';
 		}
 
 		return $successList;
@@ -1759,6 +2081,828 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
+	 * Return the configured invoice VAT rate or the native entity default.
+	 *
+	 * The string format is preserved so Dolibarr can keep an optional VAT code.
+	 *
+	 * @return string VAT rate such as "20", "5.5" or "20 (CODE)"
+	 */
+	private function getDolistoreInvoiceVatRate(): string
+	{
+		global $mysoc;
+
+		$invoiceVatRate = trim(getDolGlobalString('DOLISTOREXTRACT_INVOICE_TVA_RATE'));
+		if ($invoiceVatRate !== '') {
+			return $invoiceVatRate;
+		}
+
+		if (is_object($mysoc)) {
+			$defaultInvoiceVatRate = get_default_tva($mysoc, $mysoc);
+			if ($defaultInvoiceVatRate !== -1 && $defaultInvoiceVatRate !== '-1' && trim((string) $defaultInvoiceVatRate) !== '') {
+				return (string) $defaultInvoiceVatRate;
+			}
+		}
+
+		return '0';
+	}
+
+	/**
+	 * Generate the monthly DoliStore invoice.
+	 *
+	 * @param User $user  User
+	 * @param bool $force Run even when automatic generation is disabled
+	 * @return int 0 if nothing to do, invoice id if generated, <0 on error
+	 */
+	public function generateMonthlyDolistoreInvoice(User $user, bool $force = false): int
+	{
+		global $conf, $langs;
+
+		$langs->loadLangs(array('dolistorextract@dolistorextract', 'bills'));
+
+		if (!$force && !getDolGlobalInt('DOLISTOREXTRACT_AUTO_CREATE_INVOICE')) {
+			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreInvoiceAutoDisabled").'</span>';
+			return 0;
+		}
+
+		$socid = getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID');
+		if ($socid <= 0) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceThirdpartyMissing'), $user);
+		}
+
+		$year = (int) dol_print_date(dol_now(), '%Y');
+		$month = (int) dol_print_date(dol_now(), '%m');
+		$lockName = 'dolistoreextract_invoice_'.$conf->entity;
+		if (!$this->acquireSqlLock($lockName)) {
+			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreInvoiceLockUnavailable").'</span>';
+			return 0;
+		}
+
+		try {
+			$repairedInvoiceId = $this->reconcileHistoricalOrphanInvoiceBatches($user, $socid, $year, $month);
+			$batch = new DolistoreInvoiceBatch($this->db);
+			$batchResult = $batch->fetchByPeriod($year, $month, (int) $conf->entity);
+			if ($batchResult < 0) {
+				$result = $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchFetchError', $batch->error), $user);
+			} elseif ($batchResult > 0) {
+				$result = $this->reconcileExistingInvoiceBatch($batch, $user, $socid, $year, $month);
+			} else {
+				$result = $this->doGenerateMonthlyDolistoreInvoice($user, $socid, $year, $month);
+			}
+			if ($result === 0 && $repairedInvoiceId > 0) {
+				$result = $repairedInvoiceId;
+			}
+		} finally {
+			$this->releaseSqlLock($lockName);
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Internal invoice generation once lock is acquired.
+	 *
+	 * @param User $user User
+	 * @param int  $socid Billing thirdparty id
+	 * @param int  $year Period year
+	 * @param int  $month Period month
+	 * @return int
+	 */
+	private function doGenerateMonthlyDolistoreInvoice(User $user, int $socid, int $year, int $month, ?DolistoreInvoiceBatch $existingBatch = null): int
+	{
+		global $conf, $langs;
+
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+
+		$orderStatic = new DolistoreOrder($this->db);
+		$orders = $orderStatic->fetchInvoiceableOrders(dol_now(), (int) $conf->entity);
+		if (empty($orders)) {
+			if ($existingBatch !== null) {
+				return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchCannotBeReconciled'), $user, $existingBatch);
+			}
+			$this->logOutput .= '<br/>'.$langs->trans("DolistoreInvoiceNoInvoiceableOrder");
+			return 0;
+		}
+
+		$amountHt = 0;
+		$linesCount = 0;
+		foreach ($orders as $order) {
+			$amountHt += (float) $order->billable_total_ht;
+			$linesCount += count($order->getLines());
+		}
+		$amountHt = (float) price2num($amountHt, 'MT');
+
+		if ($existingBatch !== null && !$this->invoiceableOrdersMatchBatch($orders, $amountHt, $linesCount, $existingBatch)) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchCannotBeReconciled'), $user, $existingBatch);
+		}
+
+		if ($existingBatch === null) {
+			$thresholdRaw = getDolGlobalString('DOLISTOREXTRACT_INVOICE_MIN_AMOUNT_HT');
+			if ($thresholdRaw === '') {
+				$thresholdRaw = '100.00';
+			}
+			$threshold = (float) str_replace(',', '.', $thresholdRaw);
+			if ($amountHt < $threshold) {
+				$this->logOutput .= '<br/>'.$langs->trans("DolistoreInvoiceThresholdNotReached", price($amountHt), price($threshold));
+				return 0;
+			}
+		}
+
+		$societe = new Societe($this->db);
+		if ($societe->fetch($socid) <= 0) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceThirdpartyMissing'), $user, $existingBatch);
+		}
+
+		$this->db->begin();
+		$invoice = new Facture($this->db);
+		$invoice->entity = (int) $conf->entity;
+		$invoice->socid = $socid;
+		$invoice->date = dol_now();
+		$invoice->datef = dol_now();
+		$invoice->type = Facture::TYPE_STANDARD;
+		$invoice->ref_client = $this->getMonthlyInvoiceCustomerReference($year, $month);
+		$invoice->note_private = $this->buildDolistoreInvoicePrivateNote($year, $month, count($orders), $amountHt);
+		$invoiceVatRate = $this->getDolistoreInvoiceVatRate();
+
+		$invoiceId = $invoice->create($user);
+		if ($invoiceId <= 0) {
+			$this->db->rollback();
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceCreateError', $invoice->error), $user, $existingBatch);
+		}
+
+		foreach ($orders as $order) {
+			foreach ($order->getLines() as $line) {
+				$desc = $this->buildDolistoreInvoiceLineDescription($order, $line);
+				$unitPrice = (float) price2num($line->billable_unit_price_ht, 'MU');
+				$lineId = $invoice->addline($desc, $unitPrice, (float) $line->qty, $invoiceVatRate, 0, 0, (int) $line->fk_product);
+				if ($lineId <= 0) {
+					$this->db->rollback();
+					return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceLineCreateError', $invoice->error), $user, $existingBatch);
+				}
+			}
+		}
+
+		foreach ($orders as $order) {
+			if ($order->markAsInvoiced($invoiceId, dol_now(), $user) <= 0) {
+				$this->db->rollback();
+				return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreOrderMarkInvoicedError', $order->ref), $user, $existingBatch);
+			}
+		}
+
+		$invoiceStatus = getDolGlobalString('DOLISTOREXTRACT_INVOICE_STATUS');
+		if ($invoiceStatus === '') {
+			$invoiceStatus = 'draft';
+		}
+		if ($invoiceStatus === 'validated') {
+			if ($invoice->fetch($invoiceId) <= 0 || $invoice->fetch_lines() < 0) {
+				$this->db->rollback();
+				return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceReloadError'), $user, $existingBatch);
+			}
+			$validateResult = $invoice->validate($user);
+			if ($validateResult < 0) {
+				$this->db->rollback();
+				return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceValidateError', $invoice->error), $user, $existingBatch);
+			}
+		}
+
+		$batch = $existingBatch !== null ? $existingBatch : new DolistoreInvoiceBatch($this->db);
+		$batch->entity = (int) $conf->entity;
+		$batch->fk_facture = $invoiceId;
+		$batch->period_year = $year;
+		$batch->period_month = $month;
+		$batch->amount_ht = $amountHt;
+		$batch->orders_count = count($orders);
+		$batch->lines_count = $linesCount;
+		$batch->status = DolistoreInvoiceBatch::STATUS_DRAFT;
+		$batch->log = $langs->transnoentitiesnoconv('DolistoreInvoiceBatchPendingLog', $invoiceId, count($orders), price($amountHt));
+		$batchResult = $existingBatch !== null ? $batch->update($user) : $batch->create($user);
+		if ($batchResult <= 0) {
+			$this->db->rollback();
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchCreateError', $batch->error), $user, $existingBatch);
+		}
+		$batchId = (int) $batch->id;
+
+		$this->db->commit();
+
+		if ($invoice->fetch($invoiceId) <= 0) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceReloadError'), $user, $batch, $batchId);
+		}
+
+		return $this->completeInvoiceBatch($invoice, $batch, $societe, $user);
+	}
+
+	/**
+	 * Relink historical orphan batches only when one existing invoice matches exactly.
+	 *
+	 * Historical batches are never regenerated because their original order selection
+	 * cannot be reconstructed safely after the billing period has passed.
+	 *
+	 * @param User $user User
+	 * @param int  $socid Billing thirdparty id
+	 * @param int  $currentYear Current year
+	 * @param int  $currentMonth Current month
+	 * @return int Last repaired invoice id, 0 when no batch was repaired
+	 */
+	private function reconcileHistoricalOrphanInvoiceBatches(User $user, int $socid, int $currentYear, int $currentMonth): int
+	{
+		global $conf;
+
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+
+		$societe = new Societe($this->db);
+		if ($societe->fetch($socid) <= 0) {
+			return 0;
+		}
+
+		$sql = 'SELECT b.rowid FROM '.MAIN_DB_PREFIX.'dolistoreextract_invoice_batch as b';
+		$sql .= ' LEFT JOIN '.MAIN_DB_PREFIX.'facture as linked_invoice ON linked_invoice.rowid = b.fk_facture AND linked_invoice.entity = b.entity';
+		$sql .= ' WHERE b.entity = '.((int) $conf->entity);
+		$sql .= ' AND (b.fk_facture IS NULL OR linked_invoice.rowid IS NULL)';
+		$sql .= ' AND NOT (b.period_year = '.$currentYear.' AND b.period_month = '.$currentMonth.')';
+		$sql .= ' ORDER BY b.period_year ASC, b.period_month ASC, b.rowid ASC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return 0;
+		}
+
+		$batchIds = array();
+		while (is_object($obj = $this->db->fetch_object($resql))) {
+			$batchIds[] = (int) $obj->rowid;
+		}
+		$this->db->free($resql);
+
+		$lastRepairedInvoiceId = 0;
+		foreach ($batchIds as $batchId) {
+			$batch = new DolistoreInvoiceBatch($this->db);
+			if ($batch->fetch($batchId) <= 0 || (int) $batch->entity !== (int) $conf->entity) {
+				continue;
+			}
+
+			$refClient = $this->getMonthlyInvoiceCustomerReference((int) $batch->period_year, (int) $batch->period_month);
+			$sql = 'SELECT f.rowid FROM '.MAIN_DB_PREFIX.'facture as f';
+			$sql .= ' WHERE f.entity = '.((int) $batch->entity);
+			$sql .= ' AND f.fk_soc = '.$socid;
+			$sql .= " AND f.ref_client = '".$this->db->escape($refClient)."'";
+			$sql .= ' ORDER BY f.rowid ASC';
+			$resql = $this->db->query($sql);
+			if (!$resql) {
+				continue;
+			}
+
+			$candidateIds = array();
+			while (is_object($obj = $this->db->fetch_object($resql))) {
+				$candidateIds[] = (int) $obj->rowid;
+			}
+			$this->db->free($resql);
+
+			$matchingInvoices = array();
+			foreach ($candidateIds as $candidateId) {
+				$invoice = new Facture($this->db);
+				if ($invoice->fetch($candidateId) > 0 && $this->invoiceMatchesBatch($invoice, $batch, $socid, (int) $batch->period_year, (int) $batch->period_month)) {
+					$matchingInvoices[] = $invoice;
+				}
+			}
+
+			if (count($candidateIds) !== 1 || count($matchingInvoices) !== 1) {
+				continue;
+			}
+
+			$invoice = $matchingInvoices[0];
+			$batch->fk_facture = (int) $invoice->id;
+			$batch->status = DolistoreInvoiceBatch::STATUS_DRAFT;
+			if ($batch->update($user) <= 0) {
+				continue;
+			}
+			$repairResult = $this->completeInvoiceBatch($invoice, $batch, $societe, $user, false);
+			if ($repairResult > 0) {
+				$lastRepairedInvoiceId = $repairResult;
+			}
+		}
+
+		return $lastRepairedInvoiceId;
+	}
+
+	/**
+	 * Reconcile a batch already registered for the current period.
+	 *
+	 * @param DolistoreInvoiceBatch $batch Existing batch
+	 * @param User                  $user User
+	 * @param int                   $socid Billing thirdparty id
+	 * @param int                   $year Period year
+	 * @param int                   $month Period month
+	 * @return int
+	 */
+	private function reconcileExistingInvoiceBatch(DolistoreInvoiceBatch $batch, User $user, int $socid, int $year, int $month): int
+	{
+		global $langs;
+
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+
+		$societe = new Societe($this->db);
+		if ($societe->fetch($socid) <= 0) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceThirdpartyMissing'), $user, $batch);
+		}
+
+		if ((int) $batch->fk_facture > 0) {
+			$invoice = new Facture($this->db);
+			if ($invoice->fetch((int) $batch->fk_facture) > 0 && $this->invoiceMatchesBatch($invoice, $batch, $socid, $year, $month)) {
+				return $this->completeInvoiceBatch($invoice, $batch, $societe, $user);
+			}
+		}
+
+		$refClient = $this->getMonthlyInvoiceCustomerReference($year, $month);
+		$sql = 'SELECT f.rowid FROM '.MAIN_DB_PREFIX.'facture as f';
+		$sql .= ' WHERE f.entity = '.((int) $batch->entity);
+		$sql .= ' AND f.fk_soc = '.$socid;
+		$sql .= " AND f.ref_client = '".$this->db->escape($refClient)."'";
+		$sql .= ' ORDER BY f.rowid ASC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchFetchError', $this->db->lasterror()), $user, $batch);
+		}
+
+		$candidateIds = array();
+		while (is_object($obj = $this->db->fetch_object($resql))) {
+			$candidateIds[] = (int) $obj->rowid;
+		}
+		$this->db->free($resql);
+
+		$matchingInvoices = array();
+		foreach ($candidateIds as $candidateId) {
+			$invoice = new Facture($this->db);
+			if ($invoice->fetch($candidateId) > 0 && $this->invoiceMatchesBatch($invoice, $batch, $socid, $year, $month)) {
+				$matchingInvoices[] = $invoice;
+			}
+		}
+
+		if (count($candidateIds) === 1 && count($matchingInvoices) === 1) {
+			$invoice = $matchingInvoices[0];
+			$batch->fk_facture = (int) $invoice->id;
+			$batch->status = DolistoreInvoiceBatch::STATUS_DRAFT;
+			if ($batch->update($user) <= 0) {
+				return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchCreateError', $batch->error), $user, $batch);
+			}
+
+			return $this->completeInvoiceBatch($invoice, $batch, $societe, $user);
+		}
+
+		if (!empty($candidateIds)) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchAmbiguous'), $user, $batch);
+		}
+
+		return $this->doGenerateMonthlyDolistoreInvoice($user, $socid, $year, $month, $batch);
+	}
+
+	/**
+	 * Complete a batch only after the native PDF exists and is readable.
+	 *
+	 * @param Facture               $invoice Native invoice
+	 * @param DolistoreInvoiceBatch $batch Invoice batch
+	 * @param Societe               $societe Billing thirdparty
+	 * @param User                  $user User
+	 * @param bool                  $allowEmail Allow optional email sending
+	 * @return int
+	 */
+	private function completeInvoiceBatch(Facture $invoice, DolistoreInvoiceBatch $batch, Societe $societe, User $user, bool $allowEmail = true): int
+	{
+		global $langs;
+
+		$pdfResult = $this->generateInvoicePdf($invoice, $langs);
+		if ($pdfResult < 0) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoicePdfError'), $user, $batch, (int) $batch->id, (int) $invoice->id);
+		}
+
+		$batch->status = DolistoreInvoiceBatch::STATUS_SUCCESS;
+		$batch->log = $langs->transnoentitiesnoconv('DolistoreInvoiceBatchCreatedLog', $invoice->ref, $batch->orders_count, price($batch->amount_ht));
+		if ($batch->update($user) <= 0) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchCreateError', $batch->error), $user, $batch, (int) $batch->id, (int) $invoice->id);
+		}
+
+		if ($allowEmail && getDolGlobalInt('DOLISTOREXTRACT_AUTO_SEND_INVOICE') && empty($batch->email_sent)) {
+			$mailResult = $this->sendDolistoreInvoiceEmail($invoice, $societe, $user);
+			if ($mailResult > 0) {
+				$batch->email_sent = 1;
+				$batch->email_sent_date = dol_now();
+				if ($mailResult > 1 && (string) $this->error !== '') {
+					$batch->log .= "\n".$this->error;
+					DolistoreImportLog::add($this->db, 'warning', $this->error, 0, 'invoice', array('invoice_id' => (int) $invoice->id), $user, (int) $batch->id);
+				}
+				$batch->update($user);
+			} else {
+				$emailError = $langs->transnoentitiesnoconv('DolistoreInvoiceEmailError');
+				if ((string) $this->error !== '') {
+					$emailError .= ' '.$this->error;
+				}
+				$batch->status = DolistoreInvoiceBatch::STATUS_ERROR;
+				$batch->log .= "\n".$emailError;
+				$batch->update($user);
+				DolistoreImportLog::add($this->db, 'error', $emailError, 0, 'invoice', array('invoice_id' => (int) $invoice->id), $user, (int) $batch->id);
+			}
+		}
+
+		DolistoreImportLog::add($this->db, 'success', $langs->transnoentitiesnoconv('DolistoreInvoiceGenerated', $invoice->ref), 0, 'invoice', array('invoice_id' => (int) $invoice->id), $user, (int) $batch->id);
+		$this->logOutput .= '<br/><span class="ok">'.$langs->trans('DolistoreInvoiceGenerated', $invoice->ref).'</span>';
+
+		return (int) $invoice->id;
+	}
+
+	/**
+	 * Check that a native invoice unambiguously represents a stored batch.
+	 *
+	 * @param Facture               $invoice Native invoice
+	 * @param DolistoreInvoiceBatch $batch Batch
+	 * @param int                   $socid Billing thirdparty id
+	 * @param int                   $year Period year
+	 * @param int                   $month Period month
+	 * @return bool
+	 */
+	private function invoiceMatchesBatch(Facture $invoice, DolistoreInvoiceBatch $batch, int $socid, int $year, int $month): bool
+	{
+		if ((int) $invoice->entity !== (int) $batch->entity || (int) $invoice->socid !== $socid) {
+			return false;
+		}
+		if ((string) $invoice->ref_client !== $this->getMonthlyInvoiceCustomerReference($year, $month)) {
+			return false;
+		}
+		if ((float) price2num($invoice->total_ht, 'MT') !== (float) price2num($batch->amount_ht, 'MT')) {
+			return false;
+		}
+
+		$sql = 'SELECT COUNT(o.rowid) as orders_count, COALESCE(SUM(o.billable_total_ht), 0) as amount_ht';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'dolistoreextract_order as o';
+		$sql .= ' WHERE o.entity = '.((int) $batch->entity);
+		$sql .= ' AND o.fk_facture = '.((int) $invoice->id);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return false;
+		}
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+		if (!is_object($obj) || (int) $obj->orders_count !== (int) $batch->orders_count) {
+			return false;
+		}
+		if ((float) price2num($obj->amount_ht, 'MT') !== (float) price2num($batch->amount_ht, 'MT')) {
+			return false;
+		}
+
+		$sql = 'SELECT COUNT(l.rowid) as lines_count';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'dolistoreextract_order_line as l';
+		$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'dolistoreextract_order as o ON o.rowid = l.fk_order AND o.entity = l.entity';
+		$sql .= ' WHERE o.entity = '.((int) $batch->entity);
+		$sql .= ' AND o.fk_facture = '.((int) $invoice->id);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return false;
+		}
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+
+		return is_object($obj) && (int) $obj->lines_count === (int) $batch->lines_count;
+	}
+
+	/**
+	 * Check whether current invoiceable orders exactly match an orphan batch.
+	 *
+	 * @param DolistoreOrder[]      $orders Orders
+	 * @param float                 $amountHt Total excl. tax
+	 * @param int                   $linesCount Lines count
+	 * @param DolistoreInvoiceBatch $batch Batch
+	 * @return bool
+	 */
+	private function invoiceableOrdersMatchBatch(array $orders, float $amountHt, int $linesCount, DolistoreInvoiceBatch $batch): bool
+	{
+		return count($orders) === (int) $batch->orders_count
+			&& $linesCount === (int) $batch->lines_count
+			&& (float) price2num($amountHt, 'MT') === (float) price2num($batch->amount_ht, 'MT');
+	}
+
+	/**
+	 * Return the stable customer reference used to identify a monthly invoice.
+	 *
+	 * @param int $year Year
+	 * @param int $month Month
+	 * @return string
+	 */
+	private function getMonthlyInvoiceCustomerReference(int $year, int $month): string
+	{
+		return 'DOLISTORE-'.$year.'-'.str_pad((string) $month, 2, '0', STR_PAD_LEFT);
+	}
+
+	/**
+	 * Record a generation failure and keep a batch retryable.
+	 *
+	 * @param string                     $message Error message
+	 * @param User                       $user User
+	 * @param DolistoreInvoiceBatch|null $batch Batch
+	 * @param int                        $batchId Batch id
+	 * @param int                        $invoiceId Invoice id
+	 * @return int Always -1
+	 */
+	private function recordInvoiceFailure(string $message, User $user, ?DolistoreInvoiceBatch $batch = null, int $batchId = 0, int $invoiceId = 0): int
+	{
+		$this->error = $message;
+		$this->errors = array($message);
+		$this->logOutput .= '<br/><span class="error">'.dol_escape_htmltag($message).'</span>';
+
+		if ($batch !== null && !empty($batch->id)) {
+			$batch->status = DolistoreInvoiceBatch::STATUS_ERROR;
+			$batch->log = trim((string) $batch->log."\n".$message);
+			$batch->update($user);
+			$batchId = (int) $batch->id;
+		}
+
+		DolistoreImportLog::add($this->db, 'error', $message, 0, 'invoice', array('invoice_id' => $invoiceId), $user, $batchId);
+
+		return -1;
+	}
+
+	/**
+	 * Build invoice private note.
+	 *
+	 * @param int   $year Year
+	 * @param int   $month Month
+	 * @param int   $ordersCount Orders count
+	 * @param float $amountHt Amount
+	 * @return string
+	 */
+	private function buildDolistoreInvoicePrivateNote(int $year, int $month, int $ordersCount, float $amountHt): string
+	{
+		global $langs;
+
+		return $langs->transnoentitiesnoconv("DolistoreInvoicePrivateNoteHeader")."\n"
+			.$langs->transnoentitiesnoconv("DolistoreInvoicePrivateNotePeriod").': '.$year.'-'.str_pad((string) $month, 2, '0', STR_PAD_LEFT)."\n"
+			.$langs->transnoentitiesnoconv("DolistoreInvoicePrivateNoteOrdersCount").': '.$ordersCount."\n"
+			.$langs->transnoentitiesnoconv("DolistoreInvoicePrivateNoteAmountHt").': '.price($amountHt);
+	}
+
+	/**
+	 * Build invoice line description.
+	 *
+	 * @param DolistoreOrder     $order Order
+	 * @param DolistoreOrderLine $line  Line
+	 * @return string
+	 */
+	private function buildDolistoreInvoiceLineDescription(DolistoreOrder $order, DolistoreOrderLine $line): string
+	{
+		global $langs;
+
+		return trim((string) $line->product_label)."\n"
+			.$langs->transnoentitiesnoconv("DolistoreInvoiceLineOrderRef").': '.(string) $order->dolistore_order_ref."\n"
+			.$langs->transnoentitiesnoconv("DolistoreInvoiceLineOrderDate").': '.dol_print_date((int) $order->dolistore_order_date, 'day')."\n"
+			.$langs->transnoentitiesnoconv("DolistoreInvoiceLineCustomer").': '.(string) $order->customer_name."\n"
+			.$langs->transnoentitiesnoconv("DolistoreInvoiceLineCustomerEmail").': '.(string) $order->customer_email."\n"
+			.$langs->transnoentitiesnoconv("DolistoreInvoiceLineProduct").': '.(string) $line->product_label."\n"
+			.$langs->transnoentitiesnoconv("DolistoreInvoiceLineProductRef").': '.(string) $line->product_dolistore_ref."\n"
+			.$langs->transnoentitiesnoconv("DolistoreInvoiceLineReleaseDate").': '.dol_print_date((int) $order->release_date, 'day');
+	}
+
+	/**
+	 * Generate invoice PDF with the native model.
+	 *
+	 * @param Facture   $invoice Invoice
+	 * @param Translate $langs   Langs
+	 * @return int
+	 */
+	private function generateInvoicePdf(Facture $invoice, Translate $langs): int
+	{
+		if (!method_exists($invoice, 'generateDocument')) {
+			return -1;
+		}
+
+		$model = getDolGlobalString('FACTURE_ADDON_PDF');
+		if ($model === '') {
+			$model = getDolGlobalString('INVOICE_ADDON_PDF');
+		}
+
+		$result = $invoice->generateDocument($model, $langs);
+		if ($result <= 0 || $invoice->fetch((int) $invoice->id) <= 0) {
+			return -1;
+		}
+
+		return $this->findInvoiceMainDocumentPath($invoice) !== '' ? 1 : -1;
+	}
+
+	/**
+	 * Send invoice email to configured DoliStore address.
+	 *
+	 * @param Facture $invoice Invoice
+	 * @param Societe $societe Thirdparty
+	 * @param User    $user    User
+	 * @return int 1 when email and native post-send trigger succeed, 2 when email succeeds but trigger fails, -1 on email failure
+	 */
+	private function sendDolistoreInvoiceEmail(Facture $invoice, Societe $societe, User $user): int
+	{
+		global $conf, $langs;
+		$this->error = '';
+
+		require_once DOL_DOCUMENT_ROOT.'/core/class/CMailFile.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/core/class/html.formmail.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
+
+		$to = getDolGlobalString('DOLISTOREXTRACT_INVOICE_EMAIL_TO');
+		if ($to === '') {
+			$to = (string) $societe->email;
+		}
+		if ($to === '') {
+			return -1;
+		}
+
+		$outputlangs = $langs;
+		if (getDolGlobalInt('MAIN_MULTILANGS') && !empty($societe->default_lang)) {
+			$outputlangs = new Translate('', $conf);
+			$outputlangs->setDefaultLang($societe->default_lang);
+		}
+		$outputlangs->loadLangs(array('bills', 'companies', 'mails', 'main', 'products', 'dolistorextract@dolistorextract'));
+
+		$formmail = new FormMail($this->db);
+		$templateId = getDolGlobalInt('DOLISTOREXTRACT_INVOICE_EMAIL_TEMPLATE_ID');
+		if ($templateId <= 0) {
+			$this->error = $langs->transnoentitiesnoconv('DolistoreInvoiceEmailTemplateRequired');
+			return -1;
+		}
+
+		$sql = 'SELECT rowid, module FROM '.MAIN_DB_PREFIX.'c_email_templates';
+		$sql .= ' WHERE rowid = '.((int) $templateId);
+		$sql .= " AND type_template = 'facture_send'";
+		$sql .= ' AND active = 1';
+		$sql .= ' AND private = 0';
+		$sql .= ' AND entity IN ('.getEntity('c_email_templates').')';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		$templateRecord = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+		if (!is_object($templateRecord)) {
+			$this->error = $langs->transnoentitiesnoconv('DolistoreInvoiceEmailTemplateUnavailable', $templateId);
+			return -1;
+		}
+		$templateModule = (string) $templateRecord->module;
+		if ($templateModule !== '' && !isModEnabled($templateModule)) {
+			$this->error = $langs->transnoentitiesnoconv('DolistoreInvoiceEmailTemplateUnavailable', $templateId);
+			return -1;
+		}
+
+		$template = $formmail->getEMailTemplate($this->db, 'facture_send', $user, $outputlangs, $templateId, 1, '', -1);
+		if (!is_object($template) || (int) $template->id !== $templateId) {
+			$this->error = $langs->transnoentitiesnoconv('DolistoreInvoiceEmailTemplateUnavailable', $templateId);
+			return -1;
+		}
+
+		$invoice->thirdparty = $societe;
+		$substitutionArray = getCommonSubstitutionArray($outputlangs, 0, null, $invoice);
+		$substitutionArray['__INVOICE_REF__'] = (string) $invoice->ref;
+		$substitutionArray['__SENDEREMAIL_SIGNATURE__'] = (string) $user->signature;
+		complete_substitutions_array($substitutionArray, $outputlangs, $invoice, array('context' => 'formemail'));
+
+		$subject = (string) $template->topic;
+		if ($subject === '') {
+			$subject = $outputlangs->transnoentitiesnoconv('SendBillRef', '__REF__');
+		}
+		$message = (string) $template->content;
+		$subject = make_substitutions($subject, $substitutionArray);
+		$message = make_substitutions(str_replace('\\n', "\n", $message), $substitutionArray);
+
+		$from = (string) $template->email_from;
+		if ($from !== '') {
+			$from = make_substitutions($from, $substitutionArray);
+		} else {
+			$fromEmail = getDolGlobalString('INVOICE_EMAIL_SENDER', getDolGlobalString('MAIN_INFO_SOCIETE_MAIL'));
+			if ($fromEmail === '') {
+				$fromEmail = (string) $user->email;
+			}
+			$fromName = getDolGlobalString('INVOICE_EMAIL_SENDER_NAME');
+			$from = $fromName !== '' ? $fromName.' <'.$fromEmail.'>' : $fromEmail;
+		}
+
+		$filenameList = array();
+		$mimetypeList = array();
+		$mimefilenameList = array();
+		$pdfPath = $this->findInvoiceMainDocumentPath($invoice);
+		if ($pdfPath === '' || !is_readable($pdfPath)) {
+			return -1;
+		}
+		$filenameList[] = $pdfPath;
+		$mimetypeList[] = dol_mimetype($pdfPath);
+		$mimefilenameList[] = basename($pdfPath);
+
+		$mail = new CMailFile($subject, $to, $from, $message, $filenameList, $mimetypeList, $mimefilenameList, '', '', 0, -1);
+		if (!$mail->sendfile()) {
+			$this->error = (string) $mail->error;
+			if ($this->error === '' && !empty($mail->errors) && is_array($mail->errors)) {
+				$this->error = implode(', ', $mail->errors);
+			}
+			return -1;
+		}
+
+		// Reproduce the native invoice email metadata expected by the core BILL_SENTBYMAIL trigger.
+		// The Agenda module remains the only creator of ActionComm records and applies its own
+		// MAIN_AGENDA_ACTIONAUTO_BILL_SENTBYMAIL setting.
+		$invoice->socid = (int) $societe->id;
+		$invoice->sendtoid = array();
+		$invoice->actiontypecode = 'AC_OTH_AUTO';
+		$invoice->actionmsg = $message;
+		$invoice->actionmsg2 = $langs->transnoentities(
+			'MailSentByTo',
+			CMailFile::getValidAddress($from, 4, 0, 1),
+			CMailFile::getValidAddress($to, 4, 0, 1)
+		);
+		if (getDolGlobalString('MAIN_MAIL_REPLACE_EVENT_TITLE_BY_EMAIL_SUBJECT')) {
+			$invoice->actionmsg2 = $subject;
+		}
+		$invoice->trackid = 'inv'.((int) $invoice->id);
+		$invoice->fk_element = (int) $invoice->id;
+		$invoice->elementtype = (string) $invoice->element;
+		$invoice->attachedfiles = $filenameList;
+		$invoice->email_msgid = (string) $mail->msgid;
+		$invoice->email_from = $from;
+		$invoice->email_subject = $subject;
+		$invoice->email_to = $to;
+		$invoice->email_tocc = '';
+		$invoice->email_tobcc = '';
+		$invoiceContext = isset($invoice->context) && is_array($invoice->context) ? $invoice->context : array();
+		$invoiceContext['trigger_reason'] = 'dolistore_invoice_email';
+		$invoice->context = $invoiceContext;
+
+		$triggerResult = $invoice->call_trigger('BILL_SENTBYMAIL', $user);
+		if ($triggerResult < 0) {
+			$triggerError = (string) $invoice->error;
+			if ($triggerError === '' && !empty($invoice->errors) && is_array($invoice->errors)) {
+				$triggerError = implode(', ', $invoice->errors);
+			}
+			$this->error = $langs->transnoentitiesnoconv('DolistoreInvoiceAgendaEventError', $triggerError);
+			return 2;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Find generated invoice main document.
+	 *
+	 * @param Facture $invoice Invoice
+	 * @return string
+	 */
+	private function findInvoiceMainDocumentPath(Facture $invoice): string
+	{
+		global $conf;
+
+		if (empty($invoice->last_main_doc)) {
+			return '';
+		}
+
+		$entity = !empty($invoice->entity) ? (int) $invoice->entity : (int) $conf->entity;
+		$baseDir = !empty($conf->facture->multidir_output[$entity]) ? $conf->facture->multidir_output[$entity] : $conf->facture->dir_output;
+		$invoiceRef = dol_sanitizeFileName($invoice->ref);
+		$candidates = array(
+			$baseDir.'/'.$invoice->last_main_doc,
+			$baseDir.'/'.$invoiceRef.'/'.$invoice->last_main_doc,
+			$baseDir.'/'.$invoiceRef.'/'.basename($invoice->last_main_doc),
+		);
+
+		foreach ($candidates as $candidate) {
+			if (is_readable($candidate)) {
+				return $candidate;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Acquire SQL lock.
+	 *
+	 * @param string $lockName Lock name
+	 * @return bool
+	 */
+	private function acquireSqlLock(string $lockName): bool
+	{
+			$resql = $this->db->query("SELECT GET_LOCK('".$this->db->escape($lockName)."', 0) as locked");
+			if (!$resql) {
+				dol_syslog(__METHOD__.' unable to acquire SQL lock '.$lockName.': '.$this->db->lasterror(), LOG_WARNING);
+				return false;
+			}
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+
+		return !empty($obj->locked);
+	}
+
+	/**
+	 * Release SQL lock.
+	 *
+	 * @param string $lockName Lock name
+	 * @return void
+	 */
+	private function releaseSqlLock(string $lockName): void
+	{
+		$this->db->query("SELECT RELEASE_LOCK('".$this->db->escape($lockName)."')");
+	}
+
+	/**
 	 * Enforces the Dolistore business rule for service-only items.
 	 * This central guard must be reused by any future service creation flow.
 	 *
@@ -1780,8 +2924,7 @@ class ActionsDolistorextract extends CommonHookActions
 		return $itemData;
 	}
 	/**
-	 * Sends a thank you email to the customer using a template based on their language.
-	 * Checks configuration to ensure sending is enabled.
+	 * Legacy V1 thank-you email entry point kept disabled in V2.
 	 *
 	 * @param User  $user         Dolibarr user object.
 	 * @param array  $orderDetails Array containing buyer data and language.
@@ -1790,59 +2933,7 @@ class ActionsDolistorextract extends CommonHookActions
 	 */
 	private function sendThankYouEmail(User $user, array $orderDetails, array $productList): void
 	{
-		global $langs;
-		// 1. Check configuration
-		if (getDolGlobalString('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU')) {
-			// Logically skipped
-			return;
-		}
-
-		// 2. Prepare dependencies
-		require_once DOL_DOCUMENT_ROOT . '/core/class/CMailFile.class.php';
-		require_once DOL_DOCUMENT_ROOT . '/core/class/html.formmail.class.php';
-
-		$formMail = new \FormMail($this->db);
-		// We use the helper class to format data (names, etc.) cleanly
-		$dolistoreMail = new \dolistoreMail();
-		$dolistoreMail->setDatas($orderDetails['buyer_data']);
-
-		$from = getDolGlobalString('MAIN_INFO_SOCIETE_NOM') . ' <dolistore@atm-consulting.fr>';
-		$sendTo = $dolistoreMail->buyer_email;
-
-		// 3. Select Template (EN or FR)
-		$templateId = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_EN');
-		if (preg_match('/fr.*/', $orderDetails['lang'])) {
-			$templateId = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR');
-		}
-
-		$usedTemplate = $formMail->getEMailTemplate($this->db, 'dolistore_extract', $user, $langs, $templateId);
-
-		// 4. Substitutions
-		$productListString = implode(', ', $productList);
-		$arraySubstitution = [
-			'__DOLISTORE_ORDER_NAME__'        => $dolistoreMail->order_name,
-			'__DOLISTORE_INVOICE_FIRSTNAME__' => $dolistoreMail->buyer_firstname,
-			'__DOLISTORE_INVOICE_COMPANY__'   => $dolistoreMail->buyer_company,
-			'__DOLISTORE_INVOICE_LASTNAME__'  => $dolistoreMail->buyer_lastname,
-			'__DOLISTORE_LIST_PRODUCTS__'     => $productListString
-		];
-
-		$subject = make_substitutions($usedTemplate->topic, $arraySubstitution);
-		$message = make_substitutions($usedTemplate->content, $arraySubstitution);
-
-		// 5. Send Email
-		$emailFile = new \CMailFile($subject, $sendTo, $from, $message, [], [], [], '', '', 0, -1);
-
-		if ($emailFile->error) {
-			dol_syslog(__METHOD__ . ' Error creating email: ' . $emailFile->error, LOG_ERR);
-			$this->logOutput .= '<br/><span class="error">' . $langs->trans("DolistoreEmailCreationError", dol_escape_htmltag($emailFile->error)) . '</span>';
-		} else {
-			if ($emailFile->sendfile()) {
-				$this->logOutput .= '<br/><span class="ok">' . $langs->trans("DolistoreEmailSentTo", dol_escape_htmltag($sendTo)) . '</span>';
-			} else {
-				$this->logOutput .= '<br/><span class="error">' . $langs->trans("DolistoreEmailSentFailed", dol_escape_htmltag($sendTo)) . '</span>';
-			}
-		}
+		dol_syslog(__METHOD__ . ' skipped obsolete final customer thank-you email in DoliStore Extract V2', LOG_INFO);
 	}
 
 	/**
@@ -1917,9 +3008,21 @@ class ActionsDolistorextract extends CommonHookActions
 				$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreProcessingEmail", dol_escape_htmltag($email->header->subject)) . '</strong>';
 
 				// Data extraction
-				$dolistoreMailExtract = new \dolistoreMailExtract($this->db, $email->message->text);
+				$messageBody = (string) ($email->message->text ?? $email->message->plain ?? $email->message->html ?? '');
+				$dolistoreMailExtract = new \dolistoreMailExtract($this->db, $messageBody);
 				$emailLanguage = $dolistoreMailExtract->detectLang($email->header->subject);
 				$data = $dolistoreMailExtract->extractAllDatas();
+				$messageDate = !empty($email->header->date) ? (int) strtotime((string) $email->header->date) : dol_now();
+				if ($messageDate <= 0) {
+					$messageDate = dol_now();
+				}
+				$emailMetadata = array(
+					'message_id' => $this->getEmailMessageId($email),
+					'subject' => (string) ($email->header->subject ?? ''),
+					'date' => $messageDate,
+					'uid' => (int) ($email->header->uid ?? 0),
+					'folder' => (string) ($email->dolistoreextract_folder ?? ''),
+				);
 
 				// Validation
 				if (!empty($data) && !empty($data['order_ref']) && !empty($data['buyer_email'])) {
@@ -1931,16 +3034,21 @@ class ActionsDolistorextract extends CommonHookActions
 						$orderData[$orderRef] = [
 							'buyer_data' => $data,
 							'items' => [],
-							'lang' => $emailLanguage
+							'lang' => $emailLanguage,
+							'email_metadata' => $emailMetadata,
+							'order_date' => $messageDate,
+							'source_emails' => array(),
+							'raw_hash_parts' => array(),
 						];
 					}
+					$orderData[$orderRef]['source_emails'][] = $this->buildEmailSourceContent($email);
+					$orderData[$orderRef]['raw_hash_parts'][] = $emailMetadata['message_id'].'|'.$emailMetadata['subject'].'|'.$messageBody;
 
 					// Loop through each item in the order
 					if (!empty($data['items']) && is_array($data['items'])) {
 						foreach ($data['items'] as $item) {
 							if (!empty($item['item_reference']) && !empty($item['item_name'])) {
-								$dateRaw = $email->header->date;
-								$dateSale = strtotime($dateRaw); // IMPORTANT: Date conversion for database and duplicate check
+								$dateSale = $messageDate; // IMPORTANT: Date conversion for database and duplicate check
 
 								$itemData = [
 									'item_reference'   => $item['item_reference'],
@@ -1954,6 +3062,7 @@ class ActionsDolistorextract extends CommonHookActions
 
 								// Keep service typing logic centralized for all current and future service creations.
 								$orderData[$orderRef]['items'][] = $this->enforceDolistoreServiceBusinessRule($itemData);
+								$orderData[$orderRef]['raw_hash_parts'][] = json_encode($itemData);
 
 								$this->logOutput .= '<br/>-- <span class="ok">' . $langs->trans("DolistoreProductExtracted", dol_escape_htmltag($item['item_name'])) . '</span>';
 							} else {
@@ -1967,6 +3076,10 @@ class ActionsDolistorextract extends CommonHookActions
 					$this->logOutput .= '<br/>-> <strong class="error">' . $langs->trans("DolistoreExtractionFailed") . '</strong>';
 				}
 			}
+		}
+		foreach ($orderData as $orderRef => $details) {
+			$orderData[$orderRef]['raw_hash'] = hash('sha256', implode("\n", (array) ($details['raw_hash_parts'] ?? array($orderRef))));
+			unset($orderData[$orderRef]['raw_hash_parts']);
 		}
 		return $orderData;
 	}

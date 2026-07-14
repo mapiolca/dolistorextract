@@ -1,1 +1,1 @@
-INSERT INTO llx_c_actioncomm (id, code, type, libelle, module, active, todo, position) VALUES (500000, 'AC_STRXTRACT', 'dolistorextract', 'Envoi email vente Dolistore', 'dolistorextract', 1, NULL, 80);
+-- DoliStore order Agenda/Notification events are registered idempotently by the module descriptor.

@@ -1,0 +1,4 @@
+ALTER TABLE llx_dolistoreextract_invoice_batch ADD INDEX idx_dolistoreextract_invoice_batch_entity (entity);
+ALTER TABLE llx_dolistoreextract_invoice_batch ADD UNIQUE INDEX uk_dolistoreextract_invoice_batch_period (entity, period_year, period_month);
+ALTER TABLE llx_dolistoreextract_invoice_batch ADD INDEX idx_dolistoreextract_invoice_batch_fk_facture (entity, fk_facture);
+ALTER TABLE llx_dolistoreextract_invoice_batch ADD INDEX idx_dolistoreextract_invoice_batch_status (entity, status);
