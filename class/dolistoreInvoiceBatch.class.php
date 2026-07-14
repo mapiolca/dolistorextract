@@ -104,14 +104,18 @@ class DolistoreInvoiceBatch extends CommonObject
 	 *
 	 * @param int $year Year
 	 * @param int $month Month
+	 * @param int|null $entity Entity, current entity by default
 	 * @return int
 	 */
-	public function fetchByPeriod($year, $month)
+	public function fetchByPeriod($year, $month, $entity = null)
 	{
+		global $conf;
+
+		$entity = $entity !== null ? (int) $entity : (int) $conf->entity;
 		$sql = 'SELECT b.rowid FROM '.MAIN_DB_PREFIX.$this->table_element.' as b';
 		$sql .= ' WHERE b.period_year = '.((int) $year);
 		$sql .= ' AND b.period_month = '.((int) $month);
-		$sql .= ' AND b.entity IN ('.getEntity('dolistoreextract_order').')';
+		$sql .= ' AND b.entity = '.$entity;
 		$sql .= ' ORDER BY b.rowid DESC LIMIT 1';
 
 		$resql = $this->db->query($sql);
@@ -140,6 +144,9 @@ class DolistoreInvoiceBatch extends CommonObject
 		global $conf;
 
 		$this->entity = !empty($this->entity) ? (int) $this->entity : (int) $conf->entity;
+		if (!$this->hasValidSuccessState()) {
+			return -1;
+		}
 
 		$sql = 'INSERT INTO '.MAIN_DB_PREFIX.$this->table_element.' (';
 		$sql .= 'entity, fk_facture, period_year, period_month, amount_ht, orders_count, lines_count, email_sent, email_sent_date, status, log, datec, fk_user_creat';
@@ -148,7 +155,7 @@ class DolistoreInvoiceBatch extends CommonObject
 		$sql .= $this->nullableInt($this->fk_facture).',';
 		$sql .= ((int) $this->period_year).',';
 		$sql .= ((int) $this->period_month).',';
-		$sql .= price2num($this->amount_ht, 'MU').',';
+		$sql .= price2num($this->amount_ht, 'MT').',';
 		$sql .= ((int) $this->orders_count).',';
 		$sql .= ((int) $this->lines_count).',';
 		$sql .= ((int) $this->email_sent).',';
@@ -179,13 +186,20 @@ class DolistoreInvoiceBatch extends CommonObject
 	 */
 	public function update($user, $notrigger = 0)
 	{
+		global $conf;
+
 		if (empty($this->id)) {
+			$this->error = 'Missing invoice batch id';
 			return -1;
 		}
+		if (!$this->hasValidSuccessState()) {
+			return -1;
+		}
+		$entity = !empty($this->entity) ? (int) $this->entity : (int) $conf->entity;
 
 		$sql = 'UPDATE '.MAIN_DB_PREFIX.$this->table_element.' SET';
 		$sql .= ' fk_facture = '.$this->nullableInt($this->fk_facture);
-		$sql .= ', amount_ht = '.price2num($this->amount_ht, 'MU');
+		$sql .= ', amount_ht = '.price2num($this->amount_ht, 'MT');
 		$sql .= ', orders_count = '.((int) $this->orders_count);
 		$sql .= ', lines_count = '.((int) $this->lines_count);
 		$sql .= ', email_sent = '.((int) $this->email_sent);
@@ -194,7 +208,7 @@ class DolistoreInvoiceBatch extends CommonObject
 		$sql .= ', log = '.$this->quoteNullableSqlValue($this->log);
 		$sql .= ', fk_user_modif = '.((int) $user->id);
 		$sql .= ' WHERE rowid = '.((int) $this->id);
-		$sql .= ' AND entity IN ('.getEntity('dolistoreextract_order').')';
+		$sql .= ' AND entity = '.$entity;
 
 		if (!$this->db->query($sql)) {
 			$this->error = $this->db->lasterror();
@@ -202,6 +216,21 @@ class DolistoreInvoiceBatch extends CommonObject
 		}
 
 		return 1;
+	}
+
+	/**
+	 * Ensure a successful batch always references a native customer invoice.
+	 *
+	 * @return bool
+	 */
+	private function hasValidSuccessState()
+	{
+		if ((int) $this->status === self::STATUS_SUCCESS && (int) $this->fk_facture <= 0) {
+			$this->error = 'A successful invoice batch must reference a customer invoice';
+			return false;
+		}
+
+		return true;
 	}
 
 	/**

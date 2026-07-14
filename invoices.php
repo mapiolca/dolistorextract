@@ -36,7 +36,8 @@ if ($action === 'generate') {
 	$actions = new ActionsDolistorextract($db);
 	$result = $actions->generateMonthlyDolistoreInvoice($user, true);
 	if ($result < 0) setEventMessages($actions->error, $actions->errors, 'errors');
-	else setEventMessages($langs->trans('DolistoreInvoiceGenerationDone'), null, 'mesgs');
+	elseif ($result > 0) setEventMessages($langs->trans('DolistoreInvoiceGenerationDone'), null, 'mesgs');
+	else setEventMessages($langs->trans('DolistoreInvoiceNothingToDo'), null, 'warnings');
 }
 
 $sortfield = GETPOST('sortfield', 'aZ09comma');
@@ -45,7 +46,8 @@ if (!$sortfield) $sortfield = 'b.period_year,b.period_month';
 if (!$sortorder) $sortorder = 'DESC,DESC';
 $page = GETPOST('page', 'int');
 if ($page < 0) $page = 0;
-$limit = $conf->liste_limit;
+$limit = GETPOSTINT('limit');
+if ($limit <= 0) $limit = $conf->liste_limit;
 $offset = $limit * $page;
 
 $search_period = GETPOST('search_period', 'alphanohtml');
@@ -93,9 +95,12 @@ foreach (array('search_period', 'search_invoice', 'search_status', 'search_email
 foreach ($search_entity as $entityId) {
 	$param .= '&search_entity[]='.(int) $entityId;
 }
+if (GETPOSTINT('limit') > 0) {
+	$param .= '&limit='.(int) $limit;
+}
 
 $sqlFrom = ' FROM '.MAIN_DB_PREFIX.'dolistoreextract_invoice_batch b';
-$sqlFrom .= ' LEFT JOIN '.MAIN_DB_PREFIX.'facture f ON f.rowid = b.fk_facture';
+$sqlFrom .= ' LEFT JOIN '.MAIN_DB_PREFIX.'facture f ON f.rowid = b.fk_facture AND f.entity = b.entity';
 $sqlFrom .= ' LEFT JOIN '.MAIN_DB_PREFIX.'entity ent ON ent.rowid = b.entity';
 $sqlWhere = ' WHERE '.implode(' AND ', $where);
 
@@ -120,11 +125,6 @@ $statusOptions = array(
 );
 
 llxHeader('', $langs->trans('DolistoreInvoices'));
-print load_fiche_titre($langs->trans('DolistoreInvoices'), '', 'bill');
-print '<div class="tabsAction"><a class="butAction" href="'.$_SERVER['PHP_SELF'].'?action=generate&token='.newToken().'">'.$langs->trans('DolistoreGenerateMonthlyInvoice').'</a></div>';
-
-print_barre_liste($langs->trans('DolistoreInvoices'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', $num, $num, 'bill', 0, '', '', $limit);
-
 print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="list">';
@@ -133,6 +133,10 @@ print '<input type="hidden" name="column_contextpage" value="'.dol_escape_htmlta
 print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'">';
 print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'">';
 print '<input type="hidden" name="page" value="'.((int) $page).'">';
+
+$generateUrl = $_SERVER['PHP_SELF'].'?action=generate&token='.newToken();
+$newcardbutton = dolGetButtonTitle($langs->trans('DolistoreGenerateMonthlyInvoice'), '', 'fa fa-plus-circle', $generateUrl, '', true);
+print_barre_liste($langs->trans('DolistoreInvoices'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', $num, $num, 'bill', 0, $newcardbutton, '', $limit);
 
 print '<div class="div-table-responsive">';
 print '<table class="liste centpercent">';
@@ -176,11 +180,20 @@ if ($resql) {
 		$totalOrders += (int) $obj->orders_count;
 		$totalLines += (int) $obj->lines_count;
 		$period = ((int) $obj->period_year).'-'.str_pad((string) $obj->period_month, 2, '0', STR_PAD_LEFT);
-		$batchstatic->status = (int) $obj->status;
+		$hasLinkedInvoice = !empty($obj->fk_facture) && !empty($obj->invoice_ref);
+		$batchstatic->status = $hasLinkedInvoice ? (int) $obj->status : DolistoreInvoiceBatch::STATUS_ERROR;
 
 		print '<tr class="oddeven">';
 		if (dolistoreextractArrayFieldChecked($arrayfields, 'period')) print '<td>'.dol_escape_htmltag($period).'</td>';
-		if (dolistoreextractArrayFieldChecked($arrayfields, 'invoice_ref')) print '<td>'.(!empty($obj->fk_facture) ? '<a href="'.DOL_URL_ROOT.'/compta/facture/card.php?facid='.(int) $obj->fk_facture.'">'.dol_escape_htmltag($obj->invoice_ref).'</a>' : '').'</td>';
+		if (dolistoreextractArrayFieldChecked($arrayfields, 'invoice_ref')) {
+			print '<td>';
+			if ($hasLinkedInvoice) {
+				print '<a href="'.DOL_URL_ROOT.'/compta/facture/card.php?facid='.(int) $obj->fk_facture.'">'.dol_escape_htmltag($obj->invoice_ref).'</a>';
+			} else {
+				print '<span class="warning">'.$langs->trans('DolistoreInvoiceMissing').'</span>';
+			}
+			print '</td>';
+		}
 		if (dolistoreextractArrayFieldChecked($arrayfields, 'amount_ht')) print '<td class="right">'.price($obj->amount_ht).'</td>';
 		if (dolistoreextractArrayFieldChecked($arrayfields, 'orders_count')) print '<td class="right">'.((int) $obj->orders_count).'</td>';
 		if (dolistoreextractArrayFieldChecked($arrayfields, 'lines_count')) print '<td class="right">'.((int) $obj->lines_count).'</td>';

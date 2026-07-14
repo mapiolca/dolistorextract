@@ -2099,27 +2099,31 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$socid = getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID');
 		if ($socid <= 0) {
-			$this->logOutput .= '<br/><span class="error">'.$langs->trans("DolistoreInvoiceThirdpartyMissing").'</span>';
-			DolistoreImportLog::add($this->db, 'error', $langs->transnoentitiesnoconv("DolistoreInvoiceThirdpartyMissing"), 0, 'invoice', array(), $user);
-			return -1;
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceThirdpartyMissing'), $user);
 		}
 
 		$year = (int) dol_print_date(dol_now(), '%Y');
 		$month = (int) dol_print_date(dol_now(), '%m');
-		$batch = new DolistoreInvoiceBatch($this->db);
-		if ($batch->fetchByPeriod($year, $month) > 0) {
-			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreInvoiceBatchAlreadyExists", $year, $month).'</span>';
-			return 0;
-		}
-
-		$lockName = 'dolistoreextract_invoice_'.$conf->entity.'_'.$year.'_'.$month;
+		$lockName = 'dolistoreextract_invoice_'.$conf->entity;
 		if (!$this->acquireSqlLock($lockName)) {
 			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreInvoiceLockUnavailable").'</span>';
 			return 0;
 		}
 
 		try {
-			$result = $this->doGenerateMonthlyDolistoreInvoice($user, $socid, $year, $month);
+			$repairedInvoiceId = $this->reconcileHistoricalOrphanInvoiceBatches($user, $socid, $year, $month);
+			$batch = new DolistoreInvoiceBatch($this->db);
+			$batchResult = $batch->fetchByPeriod($year, $month, (int) $conf->entity);
+			if ($batchResult < 0) {
+				$result = $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchFetchError', $batch->error), $user);
+			} elseif ($batchResult > 0) {
+				$result = $this->reconcileExistingInvoiceBatch($batch, $user, $socid, $year, $month);
+			} else {
+				$result = $this->doGenerateMonthlyDolistoreInvoice($user, $socid, $year, $month);
+			}
+			if ($result === 0 && $repairedInvoiceId > 0) {
+				$result = $repairedInvoiceId;
+			}
 		} finally {
 			$this->releaseSqlLock($lockName);
 		}
@@ -2136,7 +2140,7 @@ class ActionsDolistorextract extends CommonHookActions
 	 * @param int  $month Period month
 	 * @return int
 	 */
-	private function doGenerateMonthlyDolistoreInvoice(User $user, int $socid, int $year, int $month): int
+	private function doGenerateMonthlyDolistoreInvoice(User $user, int $socid, int $year, int $month, ?DolistoreInvoiceBatch $existingBatch = null): int
 	{
 		global $conf, $langs;
 
@@ -2144,8 +2148,11 @@ class ActionsDolistorextract extends CommonHookActions
 		require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 
 		$orderStatic = new DolistoreOrder($this->db);
-		$orders = $orderStatic->fetchInvoiceableOrders(dol_now());
+		$orders = $orderStatic->fetchInvoiceableOrders(dol_now(), (int) $conf->entity);
 		if (empty($orders)) {
+			if ($existingBatch !== null) {
+				return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchCannotBeReconciled'), $user, $existingBatch);
+			}
 			$this->logOutput .= '<br/>'.$langs->trans("DolistoreInvoiceNoInvoiceableOrder");
 			return 0;
 		}
@@ -2156,102 +2163,296 @@ class ActionsDolistorextract extends CommonHookActions
 			$amountHt += (float) $order->billable_total_ht;
 			$linesCount += count($order->getLines());
 		}
+		$amountHt = (float) price2num($amountHt, 'MT');
 
-		$thresholdRaw = getDolGlobalString('DOLISTOREXTRACT_INVOICE_MIN_AMOUNT_HT');
-		if ($thresholdRaw === '') {
-			$thresholdRaw = '100.00';
+		if ($existingBatch !== null && !$this->invoiceableOrdersMatchBatch($orders, $amountHt, $linesCount, $existingBatch)) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchCannotBeReconciled'), $user, $existingBatch);
 		}
-		$threshold = (float) str_replace(',', '.', $thresholdRaw);
-		if ($amountHt < $threshold) {
-			$this->logOutput .= '<br/>'.$langs->trans("DolistoreInvoiceThresholdNotReached", price($amountHt), price($threshold));
-			return 0;
+
+		if ($existingBatch === null) {
+			$thresholdRaw = getDolGlobalString('DOLISTOREXTRACT_INVOICE_MIN_AMOUNT_HT');
+			if ($thresholdRaw === '') {
+				$thresholdRaw = '100.00';
+			}
+			$threshold = (float) str_replace(',', '.', $thresholdRaw);
+			if ($amountHt < $threshold) {
+				$this->logOutput .= '<br/>'.$langs->trans("DolistoreInvoiceThresholdNotReached", price($amountHt), price($threshold));
+				return 0;
+			}
 		}
 
 		$societe = new Societe($this->db);
 		if ($societe->fetch($socid) <= 0) {
-			$this->logOutput .= '<br/><span class="error">'.$langs->trans("DolistoreInvoiceThirdpartyMissing").'</span>';
-			return -1;
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceThirdpartyMissing'), $user, $existingBatch);
 		}
 
 		$this->db->begin();
 		$invoice = new Facture($this->db);
+		$invoice->entity = (int) $conf->entity;
 		$invoice->socid = $socid;
 		$invoice->date = dol_now();
 		$invoice->datef = dol_now();
 		$invoice->type = Facture::TYPE_STANDARD;
-		$invoice->ref_client = 'DOLISTORE-'.$year.'-'.str_pad((string) $month, 2, '0', STR_PAD_LEFT);
+		$invoice->ref_client = $this->getMonthlyInvoiceCustomerReference($year, $month);
 		$invoice->note_private = $this->buildDolistoreInvoicePrivateNote($year, $month, count($orders), $amountHt);
 
 		$invoiceId = $invoice->create($user);
 		if ($invoiceId <= 0) {
 			$this->db->rollback();
-			$this->logOutput .= '<br/><span class="error">'.$langs->trans("DolistoreInvoiceCreateError", dol_escape_htmltag($invoice->error)).'</span>';
-			return -1;
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceCreateError', $invoice->error), $user, $existingBatch);
 		}
 
-			foreach ($orders as $order) {
-				foreach ($order->getLines() as $line) {
-					$desc = $this->buildDolistoreInvoiceLineDescription($order, $line);
-					$lineId = $invoice->addline($desc, (float) $line->billable_unit_price_ht, (float) $line->qty, (float) getDolGlobalString('DOLISTOREXTRACT_INVOICE_TVA_RATE'), 0, 0, (int) $line->fk_product);
-					if ($lineId <= 0) {
-						$this->db->rollback();
-						$this->logOutput .= '<br/><span class="error">'.$langs->trans("DolistoreInvoiceLineCreateError", dol_escape_htmltag($invoice->error)).'</span>';
-						return -1;
-					}
-				}
-			}
-
-			foreach ($orders as $order) {
-				if ($order->markAsInvoiced($invoiceId, dol_now(), $user) <= 0) {
+		foreach ($orders as $order) {
+			foreach ($order->getLines() as $line) {
+				$desc = $this->buildDolistoreInvoiceLineDescription($order, $line);
+				$unitPrice = (float) price2num($line->billable_unit_price_ht, 'MU');
+				$lineId = $invoice->addline($desc, $unitPrice, (float) $line->qty, (float) getDolGlobalString('DOLISTOREXTRACT_INVOICE_TVA_RATE'), 0, 0, (int) $line->fk_product);
+				if ($lineId <= 0) {
 					$this->db->rollback();
-					$this->logOutput .= '<br/><span class="error">'.$langs->trans("DolistoreOrderMarkInvoicedError", dol_escape_htmltag($order->ref)).'</span>';
-					return -1;
+					return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceLineCreateError', $invoice->error), $user, $existingBatch);
 				}
 			}
+		}
+
+		foreach ($orders as $order) {
+			if ($order->markAsInvoiced($invoiceId, dol_now(), $user) <= 0) {
+				$this->db->rollback();
+				return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreOrderMarkInvoicedError', $order->ref), $user, $existingBatch);
+			}
+		}
 
 		$invoiceStatus = getDolGlobalString('DOLISTOREXTRACT_INVOICE_STATUS');
 		if ($invoiceStatus === '') {
 			$invoiceStatus = 'draft';
 		}
 		if ($invoiceStatus === 'validated') {
-			$invoice->fetch($invoiceId);
-			$invoice->fetch_lines();
+			if ($invoice->fetch($invoiceId) <= 0 || $invoice->fetch_lines() < 0) {
+				$this->db->rollback();
+				return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceReloadError'), $user, $existingBatch);
+			}
 			$validateResult = $invoice->validate($user);
 			if ($validateResult < 0) {
 				$this->db->rollback();
-				$this->logOutput .= '<br/><span class="error">'.$langs->trans("DolistoreInvoiceValidateError", dol_escape_htmltag($invoice->error)).'</span>';
-				return -1;
+				return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceValidateError', $invoice->error), $user, $existingBatch);
 			}
 		}
 
-		$batch = new DolistoreInvoiceBatch($this->db);
+		$batch = $existingBatch !== null ? $existingBatch : new DolistoreInvoiceBatch($this->db);
+		$batch->entity = (int) $conf->entity;
 		$batch->fk_facture = $invoiceId;
 		$batch->period_year = $year;
 		$batch->period_month = $month;
 		$batch->amount_ht = $amountHt;
 		$batch->orders_count = count($orders);
 		$batch->lines_count = $linesCount;
-		$batch->status = DolistoreInvoiceBatch::STATUS_SUCCESS;
-		$batch->log = $langs->transnoentitiesnoconv("DolistoreInvoiceBatchCreatedLog", $invoiceId, count($orders), price($amountHt));
-		$batchId = $batch->create($user);
-		if ($batchId <= 0) {
+		$batch->status = DolistoreInvoiceBatch::STATUS_DRAFT;
+		$batch->log = $langs->transnoentitiesnoconv('DolistoreInvoiceBatchPendingLog', $invoiceId, count($orders), price($amountHt));
+		$batchResult = $existingBatch !== null ? $batch->update($user) : $batch->create($user);
+		if ($batchResult <= 0) {
 			$this->db->rollback();
-			$this->logOutput .= '<br/><span class="error">'.$langs->trans("DolistoreInvoiceBatchCreateError", dol_escape_htmltag($batch->error)).'</span>';
-			return -1;
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchCreateError', $batch->error), $user, $existingBatch);
 		}
+		$batchId = (int) $batch->id;
 
 		$this->db->commit();
 
-		$invoice->fetch($invoiceId);
-		$pdfResult = $this->generateInvoicePdf($invoice, $langs);
-		if ($pdfResult < 0) {
-			$batch->status = DolistoreInvoiceBatch::STATUS_ERROR;
-			$batch->log .= "\n".$langs->transnoentitiesnoconv("DolistoreInvoicePdfError");
-			$batch->update($user);
-			DolistoreImportLog::add($this->db, 'error', $langs->transnoentitiesnoconv("DolistoreInvoicePdfError"), 0, 'invoice', array('invoice_id' => $invoiceId), $user, $batchId);
+		if ($invoice->fetch($invoiceId) <= 0) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceReloadError'), $user, $batch, $batchId);
 		}
 
-		if (getDolGlobalInt('DOLISTOREXTRACT_AUTO_SEND_INVOICE') && $pdfResult >= 0) {
+		return $this->completeInvoiceBatch($invoice, $batch, $societe, $user);
+	}
+
+	/**
+	 * Relink historical orphan batches only when one existing invoice matches exactly.
+	 *
+	 * Historical batches are never regenerated because their original order selection
+	 * cannot be reconstructed safely after the billing period has passed.
+	 *
+	 * @param User $user User
+	 * @param int  $socid Billing thirdparty id
+	 * @param int  $currentYear Current year
+	 * @param int  $currentMonth Current month
+	 * @return int Last repaired invoice id, 0 when no batch was repaired
+	 */
+	private function reconcileHistoricalOrphanInvoiceBatches(User $user, int $socid, int $currentYear, int $currentMonth): int
+	{
+		global $conf;
+
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+
+		$societe = new Societe($this->db);
+		if ($societe->fetch($socid) <= 0) {
+			return 0;
+		}
+
+		$sql = 'SELECT b.rowid FROM '.MAIN_DB_PREFIX.'dolistoreextract_invoice_batch as b';
+		$sql .= ' LEFT JOIN '.MAIN_DB_PREFIX.'facture as linked_invoice ON linked_invoice.rowid = b.fk_facture AND linked_invoice.entity = b.entity';
+		$sql .= ' WHERE b.entity = '.((int) $conf->entity);
+		$sql .= ' AND (b.fk_facture IS NULL OR linked_invoice.rowid IS NULL)';
+		$sql .= ' AND NOT (b.period_year = '.$currentYear.' AND b.period_month = '.$currentMonth.')';
+		$sql .= ' ORDER BY b.period_year ASC, b.period_month ASC, b.rowid ASC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return 0;
+		}
+
+		$batchIds = array();
+		while (is_object($obj = $this->db->fetch_object($resql))) {
+			$batchIds[] = (int) $obj->rowid;
+		}
+		$this->db->free($resql);
+
+		$lastRepairedInvoiceId = 0;
+		foreach ($batchIds as $batchId) {
+			$batch = new DolistoreInvoiceBatch($this->db);
+			if ($batch->fetch($batchId) <= 0 || (int) $batch->entity !== (int) $conf->entity) {
+				continue;
+			}
+
+			$refClient = $this->getMonthlyInvoiceCustomerReference((int) $batch->period_year, (int) $batch->period_month);
+			$sql = 'SELECT f.rowid FROM '.MAIN_DB_PREFIX.'facture as f';
+			$sql .= ' WHERE f.entity = '.((int) $batch->entity);
+			$sql .= ' AND f.fk_soc = '.$socid;
+			$sql .= " AND f.ref_client = '".$this->db->escape($refClient)."'";
+			$sql .= ' ORDER BY f.rowid ASC';
+			$resql = $this->db->query($sql);
+			if (!$resql) {
+				continue;
+			}
+
+			$candidateIds = array();
+			while (is_object($obj = $this->db->fetch_object($resql))) {
+				$candidateIds[] = (int) $obj->rowid;
+			}
+			$this->db->free($resql);
+
+			$matchingInvoices = array();
+			foreach ($candidateIds as $candidateId) {
+				$invoice = new Facture($this->db);
+				if ($invoice->fetch($candidateId) > 0 && $this->invoiceMatchesBatch($invoice, $batch, $socid, (int) $batch->period_year, (int) $batch->period_month)) {
+					$matchingInvoices[] = $invoice;
+				}
+			}
+
+			if (count($candidateIds) !== 1 || count($matchingInvoices) !== 1) {
+				continue;
+			}
+
+			$invoice = $matchingInvoices[0];
+			$batch->fk_facture = (int) $invoice->id;
+			$batch->status = DolistoreInvoiceBatch::STATUS_DRAFT;
+			if ($batch->update($user) <= 0) {
+				continue;
+			}
+			$repairResult = $this->completeInvoiceBatch($invoice, $batch, $societe, $user, false);
+			if ($repairResult > 0) {
+				$lastRepairedInvoiceId = $repairResult;
+			}
+		}
+
+		return $lastRepairedInvoiceId;
+	}
+
+	/**
+	 * Reconcile a batch already registered for the current period.
+	 *
+	 * @param DolistoreInvoiceBatch $batch Existing batch
+	 * @param User                  $user User
+	 * @param int                   $socid Billing thirdparty id
+	 * @param int                   $year Period year
+	 * @param int                   $month Period month
+	 * @return int
+	 */
+	private function reconcileExistingInvoiceBatch(DolistoreInvoiceBatch $batch, User $user, int $socid, int $year, int $month): int
+	{
+		global $langs;
+
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+
+		$societe = new Societe($this->db);
+		if ($societe->fetch($socid) <= 0) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceThirdpartyMissing'), $user, $batch);
+		}
+
+		if ((int) $batch->fk_facture > 0) {
+			$invoice = new Facture($this->db);
+			if ($invoice->fetch((int) $batch->fk_facture) > 0 && $this->invoiceMatchesBatch($invoice, $batch, $socid, $year, $month)) {
+				return $this->completeInvoiceBatch($invoice, $batch, $societe, $user);
+			}
+		}
+
+		$refClient = $this->getMonthlyInvoiceCustomerReference($year, $month);
+		$sql = 'SELECT f.rowid FROM '.MAIN_DB_PREFIX.'facture as f';
+		$sql .= ' WHERE f.entity = '.((int) $batch->entity);
+		$sql .= ' AND f.fk_soc = '.$socid;
+		$sql .= " AND f.ref_client = '".$this->db->escape($refClient)."'";
+		$sql .= ' ORDER BY f.rowid ASC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchFetchError', $this->db->lasterror()), $user, $batch);
+		}
+
+		$candidateIds = array();
+		while (is_object($obj = $this->db->fetch_object($resql))) {
+			$candidateIds[] = (int) $obj->rowid;
+		}
+		$this->db->free($resql);
+
+		$matchingInvoices = array();
+		foreach ($candidateIds as $candidateId) {
+			$invoice = new Facture($this->db);
+			if ($invoice->fetch($candidateId) > 0 && $this->invoiceMatchesBatch($invoice, $batch, $socid, $year, $month)) {
+				$matchingInvoices[] = $invoice;
+			}
+		}
+
+		if (count($candidateIds) === 1 && count($matchingInvoices) === 1) {
+			$invoice = $matchingInvoices[0];
+			$batch->fk_facture = (int) $invoice->id;
+			$batch->status = DolistoreInvoiceBatch::STATUS_DRAFT;
+			if ($batch->update($user) <= 0) {
+				return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchCreateError', $batch->error), $user, $batch);
+			}
+
+			return $this->completeInvoiceBatch($invoice, $batch, $societe, $user);
+		}
+
+		if (!empty($candidateIds)) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchAmbiguous'), $user, $batch);
+		}
+
+		return $this->doGenerateMonthlyDolistoreInvoice($user, $socid, $year, $month, $batch);
+	}
+
+	/**
+	 * Complete a batch only after the native PDF exists and is readable.
+	 *
+	 * @param Facture               $invoice Native invoice
+	 * @param DolistoreInvoiceBatch $batch Invoice batch
+	 * @param Societe               $societe Billing thirdparty
+	 * @param User                  $user User
+	 * @param bool                  $allowEmail Allow optional email sending
+	 * @return int
+	 */
+	private function completeInvoiceBatch(Facture $invoice, DolistoreInvoiceBatch $batch, Societe $societe, User $user, bool $allowEmail = true): int
+	{
+		global $langs;
+
+		$pdfResult = $this->generateInvoicePdf($invoice, $langs);
+		if ($pdfResult < 0) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoicePdfError'), $user, $batch, (int) $batch->id, (int) $invoice->id);
+		}
+
+		$batch->status = DolistoreInvoiceBatch::STATUS_SUCCESS;
+		$batch->log = $langs->transnoentitiesnoconv('DolistoreInvoiceBatchCreatedLog', $invoice->ref, $batch->orders_count, price($batch->amount_ht));
+		if ($batch->update($user) <= 0) {
+			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceBatchCreateError', $batch->error), $user, $batch, (int) $batch->id, (int) $invoice->id);
+		}
+
+		if ($allowEmail && getDolGlobalInt('DOLISTOREXTRACT_AUTO_SEND_INVOICE') && empty($batch->email_sent)) {
 			$mailResult = $this->sendDolistoreInvoiceEmail($invoice, $societe, $user);
 			if ($mailResult > 0) {
 				$batch->email_sent = 1;
@@ -2259,16 +2460,126 @@ class ActionsDolistorextract extends CommonHookActions
 				$batch->update($user);
 			} else {
 				$batch->status = DolistoreInvoiceBatch::STATUS_ERROR;
-				$batch->log .= "\n".$langs->transnoentitiesnoconv("DolistoreInvoiceEmailError");
+				$batch->log .= "\n".$langs->transnoentitiesnoconv('DolistoreInvoiceEmailError');
 				$batch->update($user);
-				DolistoreImportLog::add($this->db, 'error', $langs->transnoentitiesnoconv("DolistoreInvoiceEmailError"), 0, 'invoice', array('invoice_id' => $invoiceId), $user, $batchId);
+				DolistoreImportLog::add($this->db, 'error', $langs->transnoentitiesnoconv('DolistoreInvoiceEmailError'), 0, 'invoice', array('invoice_id' => (int) $invoice->id), $user, (int) $batch->id);
 			}
 		}
 
-		DolistoreImportLog::add($this->db, 'success', $langs->transnoentitiesnoconv("DolistoreInvoiceGenerated", $invoice->ref), 0, 'invoice', array('invoice_id' => $invoiceId), $user, $batchId);
-		$this->logOutput .= '<br/><span class="ok">'.$langs->trans("DolistoreInvoiceGenerated", $invoice->ref).'</span>';
+		DolistoreImportLog::add($this->db, 'success', $langs->transnoentitiesnoconv('DolistoreInvoiceGenerated', $invoice->ref), 0, 'invoice', array('invoice_id' => (int) $invoice->id), $user, (int) $batch->id);
+		$this->logOutput .= '<br/><span class="ok">'.$langs->trans('DolistoreInvoiceGenerated', $invoice->ref).'</span>';
 
-		return $invoiceId;
+		return (int) $invoice->id;
+	}
+
+	/**
+	 * Check that a native invoice unambiguously represents a stored batch.
+	 *
+	 * @param Facture               $invoice Native invoice
+	 * @param DolistoreInvoiceBatch $batch Batch
+	 * @param int                   $socid Billing thirdparty id
+	 * @param int                   $year Period year
+	 * @param int                   $month Period month
+	 * @return bool
+	 */
+	private function invoiceMatchesBatch(Facture $invoice, DolistoreInvoiceBatch $batch, int $socid, int $year, int $month): bool
+	{
+		if ((int) $invoice->entity !== (int) $batch->entity || (int) $invoice->socid !== $socid) {
+			return false;
+		}
+		if ((string) $invoice->ref_client !== $this->getMonthlyInvoiceCustomerReference($year, $month)) {
+			return false;
+		}
+		if ((float) price2num($invoice->total_ht, 'MT') !== (float) price2num($batch->amount_ht, 'MT')) {
+			return false;
+		}
+
+		$sql = 'SELECT COUNT(o.rowid) as orders_count, COALESCE(SUM(o.billable_total_ht), 0) as amount_ht';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'dolistoreextract_order as o';
+		$sql .= ' WHERE o.entity = '.((int) $batch->entity);
+		$sql .= ' AND o.fk_facture = '.((int) $invoice->id);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return false;
+		}
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+		if (!is_object($obj) || (int) $obj->orders_count !== (int) $batch->orders_count) {
+			return false;
+		}
+		if ((float) price2num($obj->amount_ht, 'MT') !== (float) price2num($batch->amount_ht, 'MT')) {
+			return false;
+		}
+
+		$sql = 'SELECT COUNT(l.rowid) as lines_count';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'dolistoreextract_order_line as l';
+		$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'dolistoreextract_order as o ON o.rowid = l.fk_order AND o.entity = l.entity';
+		$sql .= ' WHERE o.entity = '.((int) $batch->entity);
+		$sql .= ' AND o.fk_facture = '.((int) $invoice->id);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return false;
+		}
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+
+		return is_object($obj) && (int) $obj->lines_count === (int) $batch->lines_count;
+	}
+
+	/**
+	 * Check whether current invoiceable orders exactly match an orphan batch.
+	 *
+	 * @param DolistoreOrder[]      $orders Orders
+	 * @param float                 $amountHt Total excl. tax
+	 * @param int                   $linesCount Lines count
+	 * @param DolistoreInvoiceBatch $batch Batch
+	 * @return bool
+	 */
+	private function invoiceableOrdersMatchBatch(array $orders, float $amountHt, int $linesCount, DolistoreInvoiceBatch $batch): bool
+	{
+		return count($orders) === (int) $batch->orders_count
+			&& $linesCount === (int) $batch->lines_count
+			&& (float) price2num($amountHt, 'MT') === (float) price2num($batch->amount_ht, 'MT');
+	}
+
+	/**
+	 * Return the stable customer reference used to identify a monthly invoice.
+	 *
+	 * @param int $year Year
+	 * @param int $month Month
+	 * @return string
+	 */
+	private function getMonthlyInvoiceCustomerReference(int $year, int $month): string
+	{
+		return 'DOLISTORE-'.$year.'-'.str_pad((string) $month, 2, '0', STR_PAD_LEFT);
+	}
+
+	/**
+	 * Record a generation failure and keep a batch retryable.
+	 *
+	 * @param string                     $message Error message
+	 * @param User                       $user User
+	 * @param DolistoreInvoiceBatch|null $batch Batch
+	 * @param int                        $batchId Batch id
+	 * @param int                        $invoiceId Invoice id
+	 * @return int Always -1
+	 */
+	private function recordInvoiceFailure(string $message, User $user, ?DolistoreInvoiceBatch $batch = null, int $batchId = 0, int $invoiceId = 0): int
+	{
+		$this->error = $message;
+		$this->errors = array($message);
+		$this->logOutput .= '<br/><span class="error">'.dol_escape_htmltag($message).'</span>';
+
+		if ($batch !== null && !empty($batch->id)) {
+			$batch->status = DolistoreInvoiceBatch::STATUS_ERROR;
+			$batch->log = trim((string) $batch->log."\n".$message);
+			$batch->update($user);
+			$batchId = (int) $batch->id;
+		}
+
+		DolistoreImportLog::add($this->db, 'error', $message, 0, 'invoice', array('invoice_id' => $invoiceId), $user, $batchId);
+
+		return -1;
 	}
 
 	/**
@@ -2321,7 +2632,7 @@ class ActionsDolistorextract extends CommonHookActions
 	private function generateInvoicePdf(Facture $invoice, Translate $langs): int
 	{
 		if (!method_exists($invoice, 'generateDocument')) {
-			return 0;
+			return -1;
 		}
 
 		$model = getDolGlobalString('FACTURE_ADDON_PDF');
@@ -2330,7 +2641,11 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		$result = $invoice->generateDocument($model, $langs);
-		return ($result < 0) ? -1 : 1;
+		if ($result <= 0 || $invoice->fetch((int) $invoice->id) <= 0) {
+			return -1;
+		}
+
+		return $this->findInvoiceMainDocumentPath($invoice) !== '' ? 1 : -1;
 	}
 
 	/**

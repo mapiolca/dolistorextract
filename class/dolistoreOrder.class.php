@@ -576,15 +576,20 @@ class DolistoreOrder extends CommonObject
 	 * Fetch invoiceable orders.
 	 *
 	 * @param int|null $today Today timestamp
+	 * @param int|null $entity Strict entity, shared entities when omitted
 	 * @return DolistoreOrder[]
 	 */
-	public function fetchInvoiceableOrders($today = null)
+	public function fetchInvoiceableOrders($today = null, $entity = null)
 	{
 		$today = $today ?: dol_now();
 		$orders = array();
 
 		$sql = 'SELECT o.* FROM '.MAIN_DB_PREFIX.$this->table_element.' as o';
-		$sql .= ' WHERE o.entity IN ('.getEntity($this->element).')';
+		if ($entity !== null) {
+			$sql .= ' WHERE o.entity = '.((int) $entity);
+		} else {
+			$sql .= ' WHERE o.entity IN ('.getEntity($this->element).')';
+		}
 		$sql .= ' AND o.status IN ('.self::STATUS_IMPORTED.','.self::STATUS_WAITING_RELEASE.','.self::STATUS_INVOICEABLE.')';
 		$sql .= ' AND o.fk_facture IS NULL';
 		$sql .= " AND o.release_date <= '".dol_print_date($today, '%Y-%m-%d')."'";

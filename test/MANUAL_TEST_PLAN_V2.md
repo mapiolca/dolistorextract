@@ -24,7 +24,19 @@
 - Vérifier qu’une seule facture est créée pour le mois courant.
 - Vérifier une ligne de facture par ligne DoliStore, avec description de traçabilité.
 - Vérifier que les commandes passent en statut `Facturée` uniquement après création de facture.
+- Vérifier que le lot reste en brouillon tant que le PDF natif n'est pas lisible, puis passe en succès avec un lien vers la facture.
+- Simuler un échec de génération PDF, relancer le traitement et vérifier que le PDF est régénéré sans seconde facture.
+- Tester un lot sans `fk_facture` avec une facture candidate unique et vérifier son rapprochement automatique.
+- Tester un lot ambigu ou sans correspondance fiable et vérifier qu'aucune facture supplémentaire n'est créée.
+- Tester les réglages de statut de facture `Brouillon` et `Validée`.
 - Activer l’envoi email en environnement de test et vérifier l’envoi avec PDF joint.
+
+## Liste des factures
+
+- Vérifier qu'un seul titre `Factures DoliStore` est affiché.
+- Vérifier que le bouton natif `+` de génération est sur la ligne de pagination.
+- Vérifier dans le DOM que le sélecteur `#limit` appartient au formulaire de liste.
+- Vérifier qu'un lot sans facture résoluble affiche un avertissement au lieu d'une cellule vide.
 
 ## Multicompany
 
