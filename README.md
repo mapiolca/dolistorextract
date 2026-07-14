@@ -2,6 +2,8 @@
 
 DolistoreExtract est un module externe Dolibarr installé dans `htdocs/custom/dolistorextract`.
 
+Version stable : **2.0.0** — Dolibarr 20+ — PHP 8.0+
+
 ## Rôle
 
 Le module archive les emails de commande DoliStore dans un objet métier dédié, `Commande DoliStore`, avec lignes, montants, client final, tiers/contact liés et journal d'import. La V2 ne crée plus de commandes clientes Dolibarr natives à partir des emails.
