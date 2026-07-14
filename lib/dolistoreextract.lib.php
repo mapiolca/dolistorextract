@@ -42,7 +42,7 @@ function dolistorextractAdminPrepareHead()
 	$h++;
 
 	$head[$h][0] = dol_buildpath('/dolistorextract/admin/compatibility.php', 1);
-	$head[$h][1] = $langs->trans('Compatibility');
+	$head[$h][1] = $langs->trans('DolistorextractCompatibility');
 	$head[$h][2] = 'compatibility';
 	$h++;
 

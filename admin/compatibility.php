@@ -20,7 +20,7 @@ if (empty($user->admin) && !dolistoreextractUserHasRight($user, 'setup', 'write'
 	accessforbidden();
 }
 
-$title = $langs->trans('Compatibility');
+$title = $langs->trans('DolistorextractCompatibility');
 llxHeader('', $title);
 
 $linkback = '<a href="'.DOL_URL_ROOT.'/admin/modules.php?search_keyword='.urlencode('dolistorextract').'">'.$langs->trans('BackToModuleList').'</a>';
@@ -41,10 +41,12 @@ print '<table class="noborder centpercent">';
 print '<tr class="liste_titre"><th>'.$langs->trans('Feature').'</th><th>'.$langs->trans('Description').'</th><th>'.$langs->trans('Status').'</th><th>'.$langs->trans('Reason').'</th></tr>';
 foreach (DolistoreextractCompatibility::getFeatures() as $feature) {
 	$available = !empty($feature['available']);
+	$statusLabel = $langs->trans($available ? 'DolistoreCompatibilityAvailable' : 'DolistoreCompatibilityUnavailable');
+	$statusBadge = dolGetStatus($statusLabel, $statusLabel, '', $available ? 'status4' : 'status9', 4);
 	print '<tr class="oddeven">';
 	print '<td>'.dol_escape_htmltag($langs->trans($feature['label'])).'</td>';
 	print '<td>'.dol_escape_htmltag($langs->trans($feature['description'])).'</td>';
-	print '<td>'.($available ? '<span class="badge badge-status status4">'.$langs->trans('Available').'</span>' : '<span class="badge badge-status status9">'.$langs->trans('Unavailable').'</span>').'</td>';
+	print '<td>'.$statusBadge.'</td>';
 	print '<td>'.($available ? '' : dol_escape_htmltag($langs->trans($feature['reason']))).'</td>';
 	print '</tr>';
 }

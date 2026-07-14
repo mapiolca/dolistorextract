@@ -1,6 +1,7 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Translate the Compatibility setup tab and render feature availability with native text status badges.
 - FIX : Route successful automatic invoice emails through the native `BILL_SENTBYMAIL` trigger so Agenda owns the linked `ActionComm` event.
 - CHANGED : Replace the legacy module family and publisher with Les Métiers du Bâtiment.
 - FIX : Provide the official DoliStore module pictogram at a resolution suitable for Dolibarr module tiles.

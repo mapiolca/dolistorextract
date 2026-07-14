@@ -11,6 +11,8 @@
 
 ## Réglages
 
+- Ouvrir l'onglet Compatibilité en français et vérifier que le titre et l'onglet affichent `Compatibilité`, sans clé ni libellé anglais résiduel.
+- Vérifier que chaque fonctionnalité affiche son état dans un badge Dolibarr natif contenant le texte `Disponible` ou `Indisponible`, avec la raison renseignée pour les fonctionnalités indisponibles.
 - Depuis chacun des onglets `Paramètres`, `Commandes DoliStore`, `Facturation` et `Courriels/IMAP`, enregistrer un réglage et vérifier que l'onglet d'origine reste actif.
 - Dans l'onglet Facturation, tester un champ texte, le Select2 de TVA, une zone de texte, le statut de facture et chaque switch natif.
 - Dans l'onglet Courriels/IMAP, tester un champ texte, un modèle d'email et le switch d'import automatique.
