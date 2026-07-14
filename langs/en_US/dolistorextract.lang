@@ -49,10 +49,14 @@ DolistorExtractImapPassword = IMAP Password
 DolistorExtractUserForActions = User assigned to events created by the module
 DolistorExtractEmailTemplateFr = Email template for French messages
 DolistorExtractEmailTemplateEn = Email template for English messages
+DolistorextractMessageToSendAfterDolistorePurchase=DoliStore orders
+DolistoreOrderEmailTemplateUnavailable=The configured DoliStore order email template (ID %s) is no longer available for this language. Select another template.
+DolistoreOrderEmailTemplateMissing=No active public DoliStore order email template is available in %s.
 DolistoreInvoiceEmailTemplate=Email template used to send the invoice
-DolistoreInvoiceEmailTemplateDefault=Default Dolibarr invoice template
 DolistoreManageEmailTemplates=Manage email templates
 DolistoreInvoiceEmailTemplateUnavailable=The configured email template (ID %s) is no longer available. Select another template.
+DolistoreInvoiceEmailTemplateMissing=No active public email template is available for sending customer invoices.
+DolistoreInvoiceEmailTemplateRequired=No valid email template is selected for sending the invoice.
 
 #
 # Menu

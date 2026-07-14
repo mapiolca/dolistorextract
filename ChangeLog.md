@@ -1,6 +1,9 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- NEW : Create and preselect a per-entity native `facture_send` template for DoliStore invoices, with the generated PDF attached.
+- FIX : Keep the invoice email Select2 empty when no public template is available and remove the implicit global-template fallback.
+- NEW : Add per-entity native French and English email templates in the `Commandes Dolistore` category while keeping automatic customer welcome emails disabled.
 - FIX : Replace the invoice email subject and body settings with native Dolibarr `facture_send` email templates.
 - FIX : Keep the active configuration tab after saving a setting and prevent form resubmission on refresh.
 - FIX : Initialize the DoliStore invoice VAT rate from the current entity and select active sales rates through the native VAT dictionary.

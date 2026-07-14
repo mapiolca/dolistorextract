@@ -421,26 +421,37 @@ if ($mode === 'billing') {
 	dolistorextractPrintUpdateRow($bc[$var], $langs->trans('DolistoreInvoiceTvaRate'), 'DOLISTOREXTRACT_INVOICE_TVA_RATE', $fieldInvoiceVatRate, $setupPageUrl, $mode, $token);
 
 	$var = !$var;
-	$invoiceEmailTemplates = array(0 => $langs->trans('DolistoreInvoiceEmailTemplateDefault'));
-	$emailTemplateResult = $formmail->fetchAllEMailTemplate('facture_send', $user, $langs);
-	if ($emailTemplateResult < 0) {
-		setEventMessages($formmail->error, $formmail->errors, 'errors');
-	} elseif (is_array($formmail->lines_model)) {
-		foreach ($formmail->lines_model as $emailTemplate) {
-			if (!empty($emailTemplate->private)) {
+	$invoiceEmailTemplates = array();
+	$sql = 'SELECT rowid, module, label, lang';
+	$sql .= ' FROM '.MAIN_DB_PREFIX.'c_email_templates';
+	$sql .= " WHERE type_template = 'facture_send'";
+	$sql .= ' AND active = 1';
+	$sql .= ' AND private = 0';
+	$sql .= ' AND entity IN ('.getEntity('c_email_templates').')';
+	$sql .= ' ORDER BY position ASC, lang ASC, label ASC';
+	$resql = $db->query($sql);
+	if (!$resql) {
+		setEventMessages($db->lasterror(), null, 'errors');
+	} else {
+		while (is_object($emailTemplate = $db->fetch_object($resql))) {
+			$templateModule = (string) $emailTemplate->module;
+			if ($templateModule !== '' && !isModEnabled($templateModule)) {
 				continue;
 			}
 			$templateLabel = (string) $emailTemplate->label;
-			if (!empty($emailTemplate->lang)) {
+			if ((string) $emailTemplate->lang !== '') {
 				$templateLabel .= ' ['.(string) $emailTemplate->lang.']';
 			}
-			$invoiceEmailTemplates[(int) $emailTemplate->id] = $templateLabel;
+			$invoiceEmailTemplates[(int) $emailTemplate->rowid] = $templateLabel;
 		}
+		$db->free($resql);
 	}
 	$selectedInvoiceEmailTemplate = getDolGlobalInt('DOLISTOREXTRACT_INVOICE_EMAIL_TEMPLATE_ID');
-	$fieldInvoiceEmailTemplate = $form->selectarray('constvalue', $invoiceEmailTemplates, $selectedInvoiceEmailTemplate);
+	$fieldInvoiceEmailTemplate = $form->selectarray('constvalue', $invoiceEmailTemplates, $selectedInvoiceEmailTemplate, 1);
 	if ($selectedInvoiceEmailTemplate > 0 && !isset($invoiceEmailTemplates[$selectedInvoiceEmailTemplate])) {
 		$fieldInvoiceEmailTemplate .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreInvoiceEmailTemplateUnavailable', $selectedInvoiceEmailTemplate).'</span>';
+	} elseif (empty($invoiceEmailTemplates)) {
+		$fieldInvoiceEmailTemplate .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreInvoiceEmailTemplateMissing').'</span>';
 	}
 	$manageEmailTemplatesUrl = DOL_URL_ROOT.'/admin/mails_templates.php?search_type_template='.urlencode('facture_send');
 	$manageEmailTemplatesLink = '<a href="'.dol_escape_htmltag($manageEmailTemplatesUrl).'">'.img_picto('', 'email', 'class="pictofixedwidth"').$langs->trans('DolistoreManageEmailTemplates').'</a>';
@@ -511,20 +522,44 @@ if ($mode === 'emailsimap') {
 	$var = !$var;
 	print '<tr '.$bc[$var].'><td>'.$langs->trans("DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU").'</td><td class="opacitymedium">'.$langs->trans("DolistoreFinalCustomerEmailObsolete").'</td><td align="center">&nbsp;</td></tr>';
 
-	$arrayTemplates = array();
+	$arrayTemplatesFr = array();
+	$arrayTemplatesEn = array();
 	$ret = $formmail->fetchAllEMailTemplate('dolistore_extract', $user, $langs);
-	if ($ret > 0) {
+	if ($ret < 0) {
+		setEventMessages($formmail->error, $formmail->errors, 'errors');
+	} elseif (is_array($formmail->lines_model)) {
 		foreach ($formmail->lines_model as $modelEmail) {
-			$arrayTemplates[$modelEmail->id] = $modelEmail->label;
+			if (!empty($modelEmail->private)) {
+				continue;
+			}
+			if ((string) $modelEmail->lang === 'fr_FR') {
+				$arrayTemplatesFr[(int) $modelEmail->id] = (string) $modelEmail->label;
+			} elseif ((string) $modelEmail->lang === 'en_US') {
+				$arrayTemplatesEn[(int) $modelEmail->id] = (string) $modelEmail->label;
+			}
 		}
 	}
+	$manageDolistoreEmailTemplatesUrl = DOL_URL_ROOT.'/admin/mails_templates.php?search_type_template='.urlencode('dolistore_extract');
+	$manageDolistoreEmailTemplatesLink = '<a href="'.dol_escape_htmltag($manageDolistoreEmailTemplatesUrl).'">'.img_picto('', 'email', 'class="pictofixedwidth"').$langs->trans('DolistoreManageEmailTemplates').'</a>';
 
 	$var = !$var;
-	$fieldTemplateFr = $form->selectarray('constvalue', $arrayTemplates, getDolGlobalString('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR'));
-	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractEmailTemplateFr"), 'DOLISTOREXTRACT_EMAIL_TEMPLATE_FR', $fieldTemplateFr, $setupPageUrl, $mode, $token);
+	$selectedTemplateFr = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR');
+	$fieldTemplateFr = $form->selectarray('constvalue', $arrayTemplatesFr, $selectedTemplateFr);
+	if ($selectedTemplateFr > 0 && !isset($arrayTemplatesFr[$selectedTemplateFr])) {
+		$fieldTemplateFr .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateUnavailable', $selectedTemplateFr).'</span>';
+	} elseif (empty($arrayTemplatesFr)) {
+		$fieldTemplateFr .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateMissing', $langs->trans('French')).'</span>';
+	}
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractEmailTemplateFr"), 'DOLISTOREXTRACT_EMAIL_TEMPLATE_FR', $fieldTemplateFr, $setupPageUrl, $mode, $token, $manageDolistoreEmailTemplatesLink);
 
 	$var = !$var;
-	$fieldTemplateEn = $form->selectarray('constvalue', $arrayTemplates, getDolGlobalString('DOLISTOREXTRACT_EMAIL_TEMPLATE_EN'));
+	$selectedTemplateEn = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_EN');
+	$fieldTemplateEn = $form->selectarray('constvalue', $arrayTemplatesEn, $selectedTemplateEn);
+	if ($selectedTemplateEn > 0 && !isset($arrayTemplatesEn[$selectedTemplateEn])) {
+		$fieldTemplateEn .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateUnavailable', $selectedTemplateEn).'</span>';
+	} elseif (empty($arrayTemplatesEn)) {
+		$fieldTemplateEn .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateMissing', $langs->trans('English')).'</span>';
+	}
 	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractEmailTemplateEn"), 'DOLISTOREXTRACT_EMAIL_TEMPLATE_EN', $fieldTemplateEn, $setupPageUrl, $mode, $token);
 }
 

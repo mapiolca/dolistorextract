@@ -297,6 +297,7 @@ class ActionsDolistorextract extends CommonHookActions
 	public function emailElementlist(array $parameters, ?object &$object, string &$action, HookManager $hookmanager) : int
 	{
 		global $langs;
+		$langs->load('dolistorextract@dolistorextract');
 
 		$error = 0;
 
@@ -2486,10 +2487,14 @@ class ActionsDolistorextract extends CommonHookActions
 				$batch->email_sent_date = dol_now();
 				$batch->update($user);
 			} else {
+				$emailError = $langs->transnoentitiesnoconv('DolistoreInvoiceEmailError');
+				if ((string) $this->error !== '') {
+					$emailError .= ' '.$this->error;
+				}
 				$batch->status = DolistoreInvoiceBatch::STATUS_ERROR;
-				$batch->log .= "\n".$langs->transnoentitiesnoconv('DolistoreInvoiceEmailError');
+				$batch->log .= "\n".$emailError;
 				$batch->update($user);
-				DolistoreImportLog::add($this->db, 'error', $langs->transnoentitiesnoconv('DolistoreInvoiceEmailError'), 0, 'invoice', array('invoice_id' => (int) $invoice->id), $user, (int) $batch->id);
+				DolistoreImportLog::add($this->db, 'error', $emailError, 0, 'invoice', array('invoice_id' => (int) $invoice->id), $user, (int) $batch->id);
 			}
 		}
 
@@ -2686,6 +2691,7 @@ class ActionsDolistorextract extends CommonHookActions
 	private function sendDolistoreInvoiceEmail(Facture $invoice, Societe $societe, User $user): int
 	{
 		global $conf, $langs;
+		$this->error = '';
 
 		require_once DOL_DOCUMENT_ROOT.'/core/class/CMailFile.class.php';
 		require_once DOL_DOCUMENT_ROOT.'/core/class/html.formmail.class.php';
@@ -2708,8 +2714,37 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$formmail = new FormMail($this->db);
 		$templateId = getDolGlobalInt('DOLISTOREXTRACT_INVOICE_EMAIL_TEMPLATE_ID');
-		$template = $formmail->getEMailTemplate($this->db, 'facture_send', $user, $outputlangs, $templateId, 1, '', ($templateId > 0 ? -1 : 1));
-		if (!is_object($template) || ($templateId > 0 && (int) $template->id !== $templateId)) {
+		if ($templateId <= 0) {
+			$this->error = $langs->transnoentitiesnoconv('DolistoreInvoiceEmailTemplateRequired');
+			return -1;
+		}
+
+		$sql = 'SELECT rowid, module FROM '.MAIN_DB_PREFIX.'c_email_templates';
+		$sql .= ' WHERE rowid = '.((int) $templateId);
+		$sql .= " AND type_template = 'facture_send'";
+		$sql .= ' AND active = 1';
+		$sql .= ' AND private = 0';
+		$sql .= ' AND entity IN ('.getEntity('c_email_templates').')';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		$templateRecord = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+		if (!is_object($templateRecord)) {
+			$this->error = $langs->transnoentitiesnoconv('DolistoreInvoiceEmailTemplateUnavailable', $templateId);
+			return -1;
+		}
+		$templateModule = (string) $templateRecord->module;
+		if ($templateModule !== '' && !isModEnabled($templateModule)) {
+			$this->error = $langs->transnoentitiesnoconv('DolistoreInvoiceEmailTemplateUnavailable', $templateId);
+			return -1;
+		}
+
+		$template = $formmail->getEMailTemplate($this->db, 'facture_send', $user, $outputlangs, $templateId, 1, '', -1);
+		if (!is_object($template) || (int) $template->id !== $templateId) {
+			$this->error = $langs->transnoentitiesnoconv('DolistoreInvoiceEmailTemplateUnavailable', $templateId);
 			return -1;
 		}
 
