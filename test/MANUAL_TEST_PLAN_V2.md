@@ -16,6 +16,17 @@
 - Importer une ligne sans service mappé et vérifier que la ligne reste archivée avec `fk_product` vide et un avertissement dans le journal.
 - Vérifier que le fichier `.eml` source apparaît dans les fichiers joints de la commande.
 
+## Travaux planifiés
+
+- Sur une première activation, vérifier que les trois travaux DolistoreExtract sont présents et actifs dans l'interface native.
+- Vérifier que les switches `Import IMAP automatique`, `Génération automatique de facture` et `Notification quotidienne` sont désactivés par défaut.
+- Exécuter chacun des trois travaux depuis l'interface native avec son switch désactivé et vérifier un résultat réussi, sans traitement, avec un message explicite.
+- Activer chaque switch séparément puis exécuter le travail correspondant depuis l'interface native.
+- Désactiver manuellement les travaux, noter leur fréquence, priorité et prochaine exécution, puis réactiver le module : vérifier que leur statut repasse à actif sans modification des autres réglages.
+- Répéter dans deux entités et vérifier l'indépendance des travaux et des trois switches métier.
+- Avec les switches automatiques désactivés, vérifier que l'import manuel, la génération manuelle de facture et l'API forcée restent fonctionnels.
+- Vérifier que l'option d'envoi automatique de facture n'ajoute aucun travail planifié et ne pilote que l'envoi après génération d'une facture.
+
 ## Facturation
 
 - Configurer le tiers DoliStore, le seuil HT, le délai de libération et le statut de facture brouillon.

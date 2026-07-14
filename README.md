@@ -19,9 +19,11 @@ Le module déclare trois tâches natives Dolibarr :
 
 - `DolistoreCronImportLabel` : import IMAP des commandes DoliStore.
 - `DolistoreCronInvoiceLabel` : génération mensuelle de facture DoliStore.
-- `DolistoreCronDailyNotificationLabel` : notification quotidienne optionnelle, désactivée par défaut.
+- `DolistoreCronDailyNotificationLabel` : notification quotidienne optionnelle.
 
-Les tâches sont visibles dans le module Dolibarr `Travaux planifiés` et doivent être activées depuis l'interface native.
+Les trois travaux sont activés dans le module Dolibarr `Travaux planifiés` dès l'activation ou la réactivation de DolistoreExtract. Leur fréquence, leur priorité et leur prochaine exécution restent administrables dans l'interface native.
+
+L'exécution métier est pilotée séparément, par entité, avec les switches `Import IMAP automatique`, `Génération automatique de facture` et `Notification quotidienne`. Ces trois options sont désactivées par défaut. L'envoi automatique de la facture reste une option secondaire de la facturation et ne crée pas un quatrième travail planifié. Les actions manuelles du module et l'API forcée restent utilisables lorsque les automatisations sont désactivées.
 
 ## Droits
 

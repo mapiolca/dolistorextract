@@ -451,6 +451,18 @@ if ($mode === 'emailsimap') {
 	}
 
 	$var = !$var;
+	print '<tr '.$bc[$var].'>';
+	print '<td>'.$langs->trans('DolistoreAutoImportEnabled').'</td>';
+	print '<td align="center">&nbsp;</td>';
+	print '<td align="right">';
+	print '<div class="notopnoleft"><form method="POST" action="'.$self.'">';
+	print '<input type="hidden" name="token" value="'.$token.'">';
+	print '<input type="hidden" name="action" value="set_DOLISTOREXTRACT_AUTO_IMPORT_ENABLED">';
+	print ajax_constantonoff('DOLISTOREXTRACT_AUTO_IMPORT_ENABLED');
+	print '</form></div>';
+	print '</td></tr>';
+
+	$var = !$var;
 	print '<tr '.$bc[$var].'><td>'.$langs->trans("DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU").'</td><td class="opacitymedium">'.$langs->trans("DolistoreFinalCustomerEmailObsolete").'</td><td align="center">&nbsp;</td></tr>';
 
 	$arrayTemplates = array();

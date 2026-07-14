@@ -198,9 +198,9 @@ class modDolistorextract extends DolibarrModules
 
 		// Cronjobs
 		$this->cronjobs = array(
-			0 => array('label' => 'DolistoreCronImportLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runImport', 'parameters' => '', 'comment' => 'DolistoreCronImportComment', 'frequency' => 1, 'unitfrequency' => 3600, 'status' => 0, 'test' => 'isModEnabled("dolistorextract")', 'priority' => 50),
-			1 => array('label' => 'DolistoreCronInvoiceLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runInvoice', 'parameters' => '', 'comment' => 'DolistoreCronInvoiceComment', 'frequency' => 1, 'unitfrequency' => 86400, 'status' => 0, 'test' => 'isModEnabled("dolistorextract")', 'priority' => 55),
-			2 => array('label' => 'DolistoreCronDailyNotificationLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runDailyNotification', 'parameters' => '', 'comment' => 'DolistoreCronDailyNotificationComment', 'frequency' => 1, 'unitfrequency' => 86400, 'status' => 0, 'test' => 'isModEnabled("dolistorextract") && getDolGlobalInt("DOLISTOREXTRACT_DAILY_NOTIFICATION_ENABLED")', 'priority' => 90),
+			0 => array('label' => 'DolistoreCronImportLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runImport', 'parameters' => '', 'comment' => 'DolistoreCronImportComment', 'frequency' => 1, 'unitfrequency' => 3600, 'status' => 1, 'test' => 'isModEnabled("dolistorextract")', 'priority' => 50),
+			1 => array('label' => 'DolistoreCronInvoiceLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runInvoice', 'parameters' => '', 'comment' => 'DolistoreCronInvoiceComment', 'frequency' => 1, 'unitfrequency' => 86400, 'status' => 1, 'test' => 'isModEnabled("dolistorextract")', 'priority' => 55),
+			2 => array('label' => 'DolistoreCronDailyNotificationLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runDailyNotification', 'parameters' => '', 'comment' => 'DolistoreCronDailyNotificationComment', 'frequency' => 1, 'unitfrequency' => 86400, 'status' => 1, 'test' => 'isModEnabled("dolistorextract")', 'priority' => 90),
 		);
 
 		// Permissions
@@ -501,6 +501,11 @@ class modDolistorextract extends DolibarrModules
 			return $result;
 		}
 
+		$result = $this->activateDeclaredScheduledJobs();
+		if ($result < 0) {
+			return 0;
+		}
+
 		$result = $this->migrateLegacyPermissionIds();
 		if ($result < 0) {
 			return 0;
@@ -534,6 +539,35 @@ class modDolistorextract extends DolibarrModules
 		$result = $this->cleanupLegacyActionTriggers();
 		if ($result < 0) {
 			return 0;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Activate this module's existing scheduled jobs in the current entity.
+	 *
+	 * Only the native status is changed so administrator scheduling choices are preserved.
+	 *
+	 * @return int 1 if OK, -1 if KO
+	 */
+	private function activateDeclaredScheduledJobs()
+	{
+		global $conf;
+
+		$methods = array('runImport', 'runInvoice', 'runDailyNotification');
+		$quotedMethods = array();
+		foreach ($methods as $method) {
+			$quotedMethods[] = "'".$this->db->escape($method)."'";
+		}
+
+		$sql = 'UPDATE '.MAIN_DB_PREFIX.'cronjob SET status = 1';
+		$sql .= " WHERE module_name = '".$this->db->escape($this->rights_class)."'";
+		$sql .= ' AND entity = '.((int) $conf->entity);
+		$sql .= ' AND methodename IN ('.implode(',', $quotedMethods).')';
+		if (!$this->db->query($sql)) {
+			$this->error = $this->db->lasterror();
+			return -1;
 		}
 
 		return 1;
@@ -760,6 +794,7 @@ class modDolistorextract extends DolibarrModules
 			'DOLISTOREXTRACT_PAYMENT_RELEASE_DELAY_DAYS' => '30',
 			'DOLISTOREXTRACT_INVOICE_MIN_AMOUNT_HT' => '100.00',
 			'DOLISTOREXTRACT_INVOICE_TVA_RATE' => '0',
+			'DOLISTOREXTRACT_AUTO_IMPORT_ENABLED' => '0',
 			'DOLISTOREXTRACT_AUTO_CREATE_INVOICE' => '0',
 			'DOLISTOREXTRACT_AUTO_SEND_INVOICE' => '0',
 			'DOLISTOREXTRACT_INVOICE_STATUS' => 'draft',

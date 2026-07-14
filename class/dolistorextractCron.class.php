@@ -40,10 +40,18 @@ class dolistorextractCron
 	 */
 	public function runImport() : int
 	{
-
-		global $conf, $langs, $db;
+		global $langs;
 
 		$langs->loadLangs(array('dolistorextract@dolistorextract'));
+		if (!isModEnabled('dolistorextract')) {
+			$this->output .= $langs->trans('DolistoreModuleDisabled');
+			return 0;
+		}
+		if (!getDolGlobalInt('DOLISTOREXTRACT_AUTO_IMPORT_ENABLED')) {
+			$this->output .= $langs->trans('DolistoreAutoImportDisabled');
+			return 0;
+		}
+
 		require_once __DIR__.'/actions_dolistorextract.class.php';
 
 		$dolistorextractActions = new \ActionsDolistorextract($this->db);
@@ -83,6 +91,15 @@ class dolistorextractCron
 		global $langs;
 
 		$langs->loadLangs(array('dolistorextract@dolistorextract'));
+		if (!isModEnabled('dolistorextract')) {
+			$this->output .= $langs->trans('DolistoreModuleDisabled');
+			return 0;
+		}
+		if (!getDolGlobalInt('DOLISTOREXTRACT_AUTO_CREATE_INVOICE')) {
+			$this->output .= $langs->trans('DolistoreInvoiceAutoDisabled');
+			return 0;
+		}
+
 		require_once DOL_DOCUMENT_ROOT.'/user/class/user.class.php';
 		require_once __DIR__.'/actions_dolistorextract.class.php';
 
@@ -125,6 +142,10 @@ class dolistorextractCron
 		global $langs;
 
 		$langs->loadLangs(array('dolistorextract@dolistorextract'));
+		if (!isModEnabled('dolistorextract')) {
+			$this->output .= $langs->trans('DolistoreModuleDisabled');
+			return 0;
+		}
 		if (!getDolGlobalInt('DOLISTOREXTRACT_DAILY_NOTIFICATION_ENABLED')) {
 			$this->output .= $langs->trans('DolistoreDailyNotificationDisabled');
 			return 0;
