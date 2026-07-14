@@ -389,14 +389,34 @@ if ($mode === 'billing') {
 		array('DOLISTOREXTRACT_INVOICE_EMAIL_TO', 'DolistoreInvoiceEmailTo', 'text'),
 		array('DOLISTOREXTRACT_INVOICE_MIN_AMOUNT_HT', 'DolistoreInvoiceMinAmountHt', 'text'),
 		array('DOLISTOREXTRACT_PAYMENT_RELEASE_DELAY_DAYS', 'DolistorePaymentReleaseDelayDays', 'text'),
-		array('DOLISTOREXTRACT_INVOICE_TVA_RATE', 'DolistoreInvoiceTvaRate', 'text'),
-		array('DOLISTOREXTRACT_INVOICE_EMAIL_SUBJECT', 'DolistoreInvoiceEmailSubject', 'text'),
 	);
 	foreach ($textRows as $textDefinition) {
 		$var = !$var;
 		$fieldText = '<input type="'.$textDefinition[2].'" class="text flat minwidth300" name="constvalue" value="'.dol_escape_htmltag(getDolGlobalString($textDefinition[0])).'">';
 		dolistorextractPrintUpdateRow($bc[$var], $langs->trans($textDefinition[1]), $textDefinition[0], $fieldText, $self, $token);
 	}
+
+	$var = !$var;
+	$configuredInvoiceVatRate = getDolGlobalString('DOLISTOREXTRACT_INVOICE_TVA_RATE');
+	$selectedInvoiceVatRate = $configuredInvoiceVatRate;
+	if ($selectedInvoiceVatRate === '' && is_object($mysoc)) {
+		$defaultInvoiceVatRate = get_default_tva($mysoc, $mysoc);
+		if ($defaultInvoiceVatRate !== -1 && $defaultInvoiceVatRate !== '-1') {
+			$selectedInvoiceVatRate = (string) $defaultInvoiceVatRate;
+		}
+	}
+	$fieldInvoiceVatRate = $form->load_tva('constvalue', $selectedInvoiceVatRate, $mysoc, $mysoc, 0, 0, '', false, 1, 1);
+	if (strpos($fieldInvoiceVatRate, ' disabled') !== false) {
+		$fieldInvoiceVatRate .= '<input type="hidden" name="constvalue" value="'.dol_escape_htmltag($selectedInvoiceVatRate).'">';
+	}
+	if ($configuredInvoiceVatRate !== '' && strpos($fieldInvoiceVatRate, ' selected') === false) {
+		$fieldInvoiceVatRate .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreInvoiceVatRateUnavailable', dol_escape_htmltag($configuredInvoiceVatRate)).'</span>';
+	}
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans('DolistoreInvoiceTvaRate'), 'DOLISTOREXTRACT_INVOICE_TVA_RATE', $fieldInvoiceVatRate, $self, $token);
+
+	$var = !$var;
+	$fieldEmailSubject = '<input type="text" class="text flat minwidth300" name="constvalue" value="'.dol_escape_htmltag(getDolGlobalString('DOLISTOREXTRACT_INVOICE_EMAIL_SUBJECT')).'">';
+	dolistorextractPrintUpdateRow($bc[$var], $langs->trans('DolistoreInvoiceEmailSubject'), 'DOLISTOREXTRACT_INVOICE_EMAIL_SUBJECT', $fieldEmailSubject, $self, $token);
 
 	$var = !$var;
 	$fieldBody = '<textarea class="flat centpercent" rows="5" name="constvalue">'.dol_escape_htmltag(getDolGlobalString('DOLISTOREXTRACT_INVOICE_EMAIL_BODY')).'</textarea>';

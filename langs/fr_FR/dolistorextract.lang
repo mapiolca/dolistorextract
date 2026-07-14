@@ -294,6 +294,7 @@ DolistoreInvoiceEmailTo=Adresse email DoliStore
 DolistoreInvoiceMinAmountHt=Seuil minimum de facturation HT
 DolistorePaymentReleaseDelayDays=Délai de libération des paiements en jours
 DolistoreInvoiceTvaRate=Taux de TVA de facturation
+DolistoreInvoiceVatRateUnavailable=Le taux de TVA configuré (%s) n’est plus disponible dans le dictionnaire actif de l’entité. Sélectionnez un taux valide pour le remplacer.
 DolistoreInvoiceEmailSubject=Objet du mail d'envoi
 DolistoreInvoiceEmailBody=Corps du mail d'envoi
 DolistoreInvoiceGeneratedStatus=Statut de facture générée

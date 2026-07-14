@@ -1143,7 +1143,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$line->qty = $itemQty;
 		$line->unit_price_ht = $itemUnitPrice;
 		$line->total_ht = $itemTotal;
-		$line->tax_rate = (float) getDolGlobalString('DOLISTOREXTRACT_INVOICE_TVA_RATE');
+		$line->tax_rate = (float) $this->getDolistoreInvoiceVatRate();
 		$line->total_tva = 0;
 		$line->total_ttc = $itemTotal;
 		$line->billable_unit_price_ht = $itemUnitPrice * $commissionFactor;
@@ -2080,6 +2080,32 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
+	 * Return the configured invoice VAT rate or the native entity default.
+	 *
+	 * The string format is preserved so Dolibarr can keep an optional VAT code.
+	 *
+	 * @return string VAT rate such as "20", "5.5" or "20 (CODE)"
+	 */
+	private function getDolistoreInvoiceVatRate(): string
+	{
+		global $mysoc;
+
+		$invoiceVatRate = trim(getDolGlobalString('DOLISTOREXTRACT_INVOICE_TVA_RATE'));
+		if ($invoiceVatRate !== '') {
+			return $invoiceVatRate;
+		}
+
+		if (is_object($mysoc)) {
+			$defaultInvoiceVatRate = get_default_tva($mysoc, $mysoc);
+			if ($defaultInvoiceVatRate !== -1 && $defaultInvoiceVatRate !== '-1' && trim((string) $defaultInvoiceVatRate) !== '') {
+				return (string) $defaultInvoiceVatRate;
+			}
+		}
+
+		return '0';
+	}
+
+	/**
 	 * Generate the monthly DoliStore invoice.
 	 *
 	 * @param User $user  User
@@ -2195,6 +2221,7 @@ class ActionsDolistorextract extends CommonHookActions
 		$invoice->type = Facture::TYPE_STANDARD;
 		$invoice->ref_client = $this->getMonthlyInvoiceCustomerReference($year, $month);
 		$invoice->note_private = $this->buildDolistoreInvoicePrivateNote($year, $month, count($orders), $amountHt);
+		$invoiceVatRate = $this->getDolistoreInvoiceVatRate();
 
 		$invoiceId = $invoice->create($user);
 		if ($invoiceId <= 0) {
@@ -2206,7 +2233,7 @@ class ActionsDolistorextract extends CommonHookActions
 			foreach ($order->getLines() as $line) {
 				$desc = $this->buildDolistoreInvoiceLineDescription($order, $line);
 				$unitPrice = (float) price2num($line->billable_unit_price_ht, 'MU');
-				$lineId = $invoice->addline($desc, $unitPrice, (float) $line->qty, (float) getDolGlobalString('DOLISTOREXTRACT_INVOICE_TVA_RATE'), 0, 0, (int) $line->fk_product);
+				$lineId = $invoice->addline($desc, $unitPrice, (float) $line->qty, $invoiceVatRate, 0, 0, (int) $line->fk_product);
 				if ($lineId <= 0) {
 					$this->db->rollback();
 					return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceLineCreateError', $invoice->error), $user, $existingBatch);

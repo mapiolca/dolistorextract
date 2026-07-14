@@ -35,7 +35,7 @@ Les commandes DoliStore sont filtrées avec `getEntity('dolistoreextract_order')
 
 ## Facturation
 
-La facturation utilise l'objet natif `Facture`. Une facture mensuelle maximum est générée par entité pour le tiers DoliStore configuré, selon le seuil HT et les commandes libérées. Les lignes restent détaillées par ligne DoliStore pour préserver la traçabilité. Le lot n'est déclaré réussi qu'après création de la facture, liaison des commandes et génération vérifiée du PDF natif. Une nouvelle tentative réutilise la facture déjà liée et ne crée pas de doublon.
+La facturation utilise l'objet natif `Facture`. Une facture mensuelle maximum est générée par entité pour le tiers DoliStore configuré, selon le seuil HT et les commandes libérées. Le taux de TVA est initialisé, lors de la première configuration de chaque entité, avec son taux de vente par défaut puis reste un réglage autonome sélectionné dans le dictionnaire TVA natif. Les lignes restent détaillées par ligne DoliStore pour préserver la traçabilité. Le lot n'est déclaré réussi qu'après création de la facture, liaison des commandes et génération vérifiée du PDF natif. Une nouvelle tentative réutilise la facture déjà liée et ne crée pas de doublon.
 
 ## Limites
 

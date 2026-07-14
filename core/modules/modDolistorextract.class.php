@@ -786,14 +786,22 @@ class modDolistorextract extends DolibarrModules
 	 */
 	private function setDefaultConfigurationConstants()
 	{
-		global $conf;
+		global $conf, $mysoc;
+
+		$defaultInvoiceVatRate = '0';
+		if (getDolGlobalString('DOLISTOREXTRACT_INVOICE_TVA_RATE') === '' && is_object($mysoc)) {
+			$detectedInvoiceVatRate = get_default_tva($mysoc, $mysoc);
+			if ($detectedInvoiceVatRate !== -1 && $detectedInvoiceVatRate !== '-1' && trim((string) $detectedInvoiceVatRate) !== '') {
+				$defaultInvoiceVatRate = (string) $detectedInvoiceVatRate;
+			}
+		}
 
 		$defaults = array(
 			'DOLISTOREXTRACT_ORDER_ADDON' => 'mod_dolistoreextract_order_dse',
 			'DOLISTOREXTRACT_ORDER_ADDON_PDF' => 'standard',
 			'DOLISTOREXTRACT_PAYMENT_RELEASE_DELAY_DAYS' => '30',
 			'DOLISTOREXTRACT_INVOICE_MIN_AMOUNT_HT' => '100.00',
-			'DOLISTOREXTRACT_INVOICE_TVA_RATE' => '0',
+			'DOLISTOREXTRACT_INVOICE_TVA_RATE' => $defaultInvoiceVatRate,
 			'DOLISTOREXTRACT_AUTO_IMPORT_ENABLED' => '0',
 			'DOLISTOREXTRACT_AUTO_CREATE_INVOICE' => '0',
 			'DOLISTOREXTRACT_AUTO_SEND_INVOICE' => '0',

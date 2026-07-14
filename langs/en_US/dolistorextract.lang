@@ -285,6 +285,7 @@ DolistoreInvoiceEmailTo=DoliStore email address
 DolistoreInvoiceMinAmountHt=Minimum invoice amount excl. tax
 DolistorePaymentReleaseDelayDays=Payment release delay in days
 DolistoreInvoiceTvaRate=Invoice VAT rate
+DolistoreInvoiceVatRateUnavailable=The configured VAT rate (%s) is no longer available in the entity's active dictionary. Select a valid rate to replace it.
 DolistoreInvoiceEmailSubject=Invoice email subject
 DolistoreInvoiceEmailBody=Invoice email body
 DolistoreInvoiceGeneratedStatus=Generated invoice status

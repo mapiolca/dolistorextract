@@ -1,6 +1,7 @@
 # Change log for DolistoreExtract
 
 ## Unreleased
+- FIX : Initialize the DoliStore invoice VAT rate from the current entity and select active sales rates through the native VAT dictionary.
 - FIX : Enable native scheduled jobs on module activation and gate their runtime actions with per-entity settings switches.
 - FIX : Align the monthly invoice action with the native list toolbar and require a linked customer invoice plus a readable PDF before an invoice batch is successful.
 - FIX : Reconcile orphan monthly invoice batches conservatively without creating duplicate customer invoices.

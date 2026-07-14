@@ -30,6 +30,13 @@
 ## Facturation
 
 - Configurer le tiers DoliStore, le seuil HT, le délai de libération et le statut de facture brouillon.
+- Sur une nouvelle entité taxable, vérifier que le taux de TVA de vente par défaut est enregistré et présélectionné dans le Select2 natif.
+- Sur une entité non assujettie, vérifier que le taux initial est `0 %`.
+- Vérifier que le Select2 propose uniquement les taux de vente actifs du dictionnaire de l'entité.
+- Tester une valeur avec code TVA, par exemple `20 (CODE)`, et vérifier que le code est conservé sur la ligne de facture native.
+- Réactiver le module avec des valeurs existantes `0`, `5.5` et `20 (CODE)` et vérifier qu'elles ne sont pas remplacées.
+- Désactiver dans le dictionnaire un taux déjà configuré et vérifier l'avertissement sans modification automatique de la constante.
+- Tester deux entités avec des taux par défaut différents et vérifier l'indépendance des réglages.
 - Lancer le CRON de facturation avec un montant inférieur au seuil.
 - Lancer le CRON avec des commandes libérées au-dessus du seuil.
 - Vérifier qu’une seule facture est créée pour le mois courant.
