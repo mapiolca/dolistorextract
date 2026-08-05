@@ -1,5 +1,9 @@
 # Journal des modifications de DolistoreExtract
 
+## Version 2.0.1 — 5 août 2026
+
+- Correction de la traduction des libellés des événements Agenda natifs lors de la validation et de l'envoi des factures, y compris depuis les travaux planifiés.
+
 ## Version 2.0.0 — 14 juillet 2026
 
 ### Nouveau workflow DoliStore

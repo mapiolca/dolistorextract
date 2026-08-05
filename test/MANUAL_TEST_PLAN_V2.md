@@ -79,7 +79,10 @@
 - Tester un lot ambigu ou sans correspondance fiable et vérifier qu'aucune facture supplémentaire n'est créée.
 - Tester les réglages de statut de facture `Brouillon` et `Validée`.
 - Activer l'envoi email en environnement de test et vérifier le destinataire configuré, le sujet `Facture des ventes DoliStore`, le corps HTML et le PDF joint.
+- Activer dans la configuration Agenda native l'événement automatique `BILL_VALIDATE`, générer une facture validée depuis l'interface puis depuis le CRON et vérifier que le titre enregistré est `Facture <référence> validée`, jamais `InvoiceValidatedInDolibarr`.
 - Activer dans la configuration Agenda native l'événement automatique `BILL_SENTBYMAIL`, envoyer automatiquement une facture DoliStore et vérifier la création d'un unique événement natif lié à la facture, avec expéditeur, destinataire, sujet et pièce jointe.
+- Avec `MAIN_MAIL_REPLACE_EVENT_TITLE_BY_EMAIL_SUBJECT` désactivé, vérifier que le titre de l'événement d'envoi est `E-mail envoyé par <expéditeur> à <destinataire>`, jamais `MailSentByTo` ; avec la constante activée, vérifier que le sujet du courriel devient le titre.
+- Répéter les contrôles des titres en `fr_FR` et `en_US` et vérifier qu'un seul événement est créé par trigger.
 - Désactiver `MAIN_AGENDA_ACTIONAUTO_BILL_SENTBYMAIL`, envoyer une autre facture et vérifier que l'email reste envoyé sans création forcée d'événement Agenda par le module.
 - Répéter dans deux entités et vérifier que les modèles créés et les constantes de sélection sont indépendants.
 
