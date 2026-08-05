@@ -78,6 +78,17 @@ DolistoreAssociationThirdpartyCreated=Tercero Association Dolibarr creado (ID: %
 DolistoreAssociationThirdpartyExists=El tercero Association Dolibarr ya existe (ID: %s).
 DolistoreAssociationThirdpartyCreateError=No se pudo crear el tercero Association Dolibarr.
 DolistoreBillingThirdpartyLabel=Tercero de facturación Dolistore
+DolistoreThirdpartyCategorySettings=Categoría de los terceros creados
+DolistoreThirdpartyCategoryLabel=Categoría asignada a los nuevos terceros DoliStore
+DolistoreThirdpartyCategoryInvalid=La categoría de terceros %s no está disponible en el entorno actual. Se ha conservado la configuración anterior.
+DolistoreThirdpartyCategoryModuleDisabled=El módulo Categorías debe estar activado para configurar la categoría de los nuevos terceros DoliStore.
+DolistoreThirdpartyCategoryReadDenied=No dispone del permiso para consultar las categorías de terceros.
+DolistoreThirdpartyCategoryUnavailable=La categoría configurada (ID %s) ya no está disponible. Seleccione otra categoría o borre la configuración.
+DolistoreThirdpartyCategoryReasonModuleDisabled=el módulo Categorías está desactivado
+DolistoreThirdpartyCategoryReasonUnavailable=la categoría no existe o no es accesible en este entorno
+DolistoreThirdpartyCategoryReasonLinkError=la asociación nativa con la categoría ha fallado: %s
+DolistoreThirdpartyCategoryAssignmentSkipped=El tercero %s se ha creado sin la categoría configurada %s: %s.
+DolistoreThirdpartyCategoryAssigned=El tercero %s se ha añadido a la categoría %s.
 
 DolistorextractAbout = Acerca de
 DolistorextractAboutPage = Información sobre el módulo Dolistorextract

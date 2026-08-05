@@ -40,6 +40,8 @@ require_once DOL_DOCUMENT_ROOT . "/core/lib/admin.lib.php";
 require_once __DIR__ . '/dolistorextract.lib.php';
 require_once __DIR__ . '/../class/dolistoreOrder.class.php';
 require_once DOL_DOCUMENT_ROOT."/core/class/html.formmail.class.php";
+require_once DOL_DOCUMENT_ROOT.'/core/class/html.formother.class.php';
+require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 dol_include_once("/dolistorextract/include/ssilence/php-imap-client/autoload.php");
 
@@ -48,6 +50,7 @@ use SSilence\ImapClient\ImapClient as Imap;
 
 // Translations
 $langs->load('admin');
+$langs->load('categories');
 $langs->load("dolistorextract@dolistorextract");
 
 // Access control
@@ -170,24 +173,49 @@ if ($action == 'update' || $action == 'add')
 {
 	$constname=GETPOST('constname','alpha');
 	$constvalue=(GETPOST('constvalue_'.$constname) ? GETPOST('constvalue_'.$constname) : GETPOST('constvalue'));
+	$consttype='chaine';
+	$validationError = false;
 	if ($constname === 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES' && GETPOSTISARRAY('categories')) {
 		$constvalue = GETPOST('categories', 'array');
 	}
 	if ($constname === 'DOLISTOREXTRACT_DEFAULT_ORDER_CATEGORIES' && is_array($constvalue)) {
 		$constvalue = implode(',', array_map('intval', $constvalue));
 	}
+	if ($constname === 'DOLISTOREXTRACT_THIRDPARTY_CATEGORY_ID') {
+		$categoryId = GETPOSTINT('constvalue');
+		$constvalue = $categoryId > 0 ? $categoryId : 0;
+		$consttype = 'entier';
 
-	$consttype=GETPOST('consttype','alpha');
+		if ($categoryId > 0) {
+			$availableCategories = array();
+			if (isModEnabled('category') && (!empty($user->admin) || $user->hasRight('categorie', 'lire'))) {
+				$category = new Categorie($db);
+				$categoryTree = $category->get_full_arbo(Categorie::TYPE_CUSTOMER);
+				if (is_array($categoryTree)) {
+					$availableCategories = $categoryTree;
+				}
+			}
+
+			if (!isset($availableCategories[$categoryId])) {
+				$error++;
+				$validationError = true;
+				setEventMessages($langs->trans('DolistoreThirdpartyCategoryInvalid', $categoryId), null, 'errors');
+			}
+		}
+	}
+
 	$constnote=GETPOST('constnote');
-	$res=dolibarr_set_const($db,$constname,$constvalue,'chaine',0,$constnote,$conf->entity);
-
-	if (! $res > 0) $error++;
+	$res = 0;
+	if (!$error) {
+		$res=dolibarr_set_const($db,$constname,$constvalue,$consttype,0,$constnote,$conf->entity);
+		if ($res <= 0) $error++;
+	}
 
 	if (! $error)
 	{
 		setEventMessages($langs->trans("SetupSaved"), null, 'mesgs');
 	}
-	else
+	elseif (!$validationError)
 	{
 		setEventMessages($langs->trans("Error"), null, 'errors');
 	}
@@ -343,6 +371,7 @@ print load_fiche_titre($pageTitle, $linkback);
 $head = dolistorextractAdminPrepareHead();
 // Setup page goes here
 $form = new Form($db);
+$formother = new FormOther($db);
 $formmail = new FormMail($db);
 $token = $_SESSION['newtoken'];
 
@@ -564,6 +593,42 @@ if ($mode === 'emailsimap') {
 }
 
 if ($mode === 'orders') {
+	print load_fiche_titre($langs->trans('DolistoreThirdpartyCategorySettings'), '', '');
+	print '<table class="noborder centpercent">';
+	print '<tr class="liste_titre">';
+	print '<td>'.$langs->trans('Description').'</td>';
+	print '<td>'.$langs->trans('Value').'</td>';
+	print '<td class="center">'.$langs->trans('Action').'</td>';
+	print '</tr>';
+
+	$selectedThirdpartyCategory = getDolGlobalInt('DOLISTOREXTRACT_THIRDPARTY_CATEGORY_ID');
+	if (!isModEnabled('category')) {
+		print '<tr class="oddeven"><td>'.$langs->trans('DolistoreThirdpartyCategoryLabel').'</td>';
+		print '<td colspan="2"><span class="warning">'.img_warning().' '.$langs->trans('DolistoreThirdpartyCategoryModuleDisabled').'</span></td></tr>';
+	} elseif (empty($user->admin) && !$user->hasRight('categorie', 'lire')) {
+		print '<tr class="oddeven"><td>'.$langs->trans('DolistoreThirdpartyCategoryLabel').'</td>';
+		print '<td colspan="2"><span class="warning">'.img_warning().' '.$langs->trans('DolistoreThirdpartyCategoryReadDenied').'</span></td></tr>';
+	} else {
+		$category = new Categorie($db);
+		$categoryTree = $category->get_full_arbo(Categorie::TYPE_CUSTOMER);
+		$availableCategories = is_array($categoryTree) ? $categoryTree : array();
+		$fieldThirdpartyCategory = img_picto('', 'category', 'class="pictofixedwidth"');
+		$fieldThirdpartyCategory .= $formother->select_categories(Categorie::TYPE_CUSTOMER, $selectedThirdpartyCategory, 'constvalue', 0, 1, 'minwidth300 widthcentpercentminusx');
+
+		if (!empty($user->admin) || $user->hasRight('categorie', 'creer')) {
+			$backToOrdersSetup = $self.'?mode=orders';
+			$createCategoryUrl = DOL_URL_ROOT.'/categories/card.php?action=create&type=customer&backtopage='.urlencode($backToOrdersSetup);
+			$fieldThirdpartyCategory .= ' '.dolGetButtonTitle($langs->trans('NewCategory'), '', 'fa fa-plus-circle', $createCategoryUrl);
+		}
+		if ($selectedThirdpartyCategory > 0 && !isset($availableCategories[$selectedThirdpartyCategory])) {
+			$fieldThirdpartyCategory .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreThirdpartyCategoryUnavailable', $selectedThirdpartyCategory).'</span>';
+		}
+
+		dolistorextractPrintUpdateRow('class="oddeven"', $langs->trans('DolistoreThirdpartyCategoryLabel'), 'DOLISTOREXTRACT_THIRDPARTY_CATEGORY_ID', $fieldThirdpartyCategory, $setupPageUrl, $mode, $token);
+	}
+	print '</table>';
+	print '<br>';
+
 	print load_fiche_titre($langs->trans('DolistoreOrderNumberingModules'), '', '');
 	print '<table class="noborder centpercent">';
 	print '<tr class="liste_titre">';

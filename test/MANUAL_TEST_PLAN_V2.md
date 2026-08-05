@@ -26,6 +26,11 @@
 - Rafraîchir la page après une sauvegarde classique et vérifier que le navigateur ne propose pas de renvoyer le formulaire.
 - Vérifier dans le DOM que les formulaires concernés contiennent le token CSRF et le champ caché `mode`, et que leur URL d'action conserve ce mode.
 - Appeler `admin/setup.php?mode=invalide` et vérifier le retour propre sur l'onglet `Paramètres`.
+- Dans l’onglet `Commandes DoliStore`, vérifier que la catégorie des nouveaux tiers utilise un Select2 natif limité aux catégories client accessibles dans l’entité courante.
+- Vérifier que le bouton natif « + » apparaît avec le droit de créer des catégories, ouvre la fiche native d’une catégorie de tiers et revient ensuite sur l’onglet `Commandes DoliStore`.
+- Enregistrer, remplacer puis vider la catégorie ; vérifier qu’une catégorie d’un autre type ou d’une entité inaccessible est refusée sans écraser le réglage précédent.
+- Supprimer une catégorie configurée et vérifier que son identifiant est conservé avec un avertissement visible dans les réglages.
+- Configurer des catégories différentes dans deux entités, désactiver puis réactiver le module et vérifier que les deux sélections sont conservées indépendamment.
 
 ## Import IMAP
 
@@ -36,6 +41,11 @@
 - Vérifier qu'un import réussi n'envoie aucun courriel de bienvenue au client final.
 - Importer une ligne sans service mappé et vérifier que la ligne reste archivée avec `fk_product` vide et un avertissement dans le journal.
 - Vérifier que le fichier `.eml` source apparaît dans les fichiers joints de la commande.
+- Configurer une catégorie de tiers, importer une commande d’un client inconnu et vérifier avec `Categorie::containing()` que le nouveau tiers appartient à cette catégorie.
+- Importer ensuite une commande rattachée à un tiers existant sans cette catégorie et vérifier qu’il n’est pas reclassé.
+- Tester sans catégorie configurée : le tiers et la commande doivent être créés sans avertissement de catégorisation.
+- Avec une catégorie configurée, désactiver le module Catégories ou rendre la catégorie inaccessible, puis vérifier que le tiers et la commande sont conservés et qu’un avertissement apparaît dans le résultat du travail, `dol_syslog()` et le journal d’import lié à la commande.
+- Simuler un échec de `Societe::setCategories()` et vérifier le même comportement non bloquant, sans liaison partielle ni modification des tiers existants.
 
 ## Travaux planifiés
 
