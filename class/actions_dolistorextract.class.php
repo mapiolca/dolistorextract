@@ -2117,7 +2117,7 @@ class ActionsDolistorextract extends CommonHookActions
 	{
 		global $conf, $langs;
 
-		$langs->loadLangs(array('dolistorextract@dolistorextract', 'bills'));
+		$langs->loadLangs(array('main', 'agenda', 'bills', 'dolistorextract@dolistorextract'));
 
 		if (!$force && !getDolGlobalInt('DOLISTOREXTRACT_AUTO_CREATE_INVOICE')) {
 			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreInvoiceAutoDisabled").'</span>';

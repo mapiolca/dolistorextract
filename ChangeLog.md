@@ -19,6 +19,7 @@
 
 - Trois travaux planifiés natifs sont installés actifs : import IMAP, facturation mensuelle et notification quotidienne. Leur exécution métier reste pilotée par des switches indépendants dans les réglages de chaque entité.
 - Les commandes DoliStore exposent leurs événements CRUD aux modules Agenda et Notifications, sans système d'événements parallèle.
+- Les libellés des événements natifs de validation et d'envoi des factures sont traduits avant leur enregistrement dans l'Agenda, y compris lors d'une exécution par un travail planifié.
 - Les modèles de courriels français et anglais sont initialisés dans la catégorie native `Commandes Dolistore` sans écraser les personnalisations existantes.
 - Les modèles de documents, la numérotation, les fichiers joints, les droits granulaires et les listes utilisent les composants natifs Dolibarr.
 
