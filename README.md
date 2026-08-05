@@ -2,7 +2,7 @@
 
 DolistoreExtract est un module externe Dolibarr installé dans `htdocs/custom/dolistorextract`.
 
-Version stable : **2.0.1** — Dolibarr 20+ — PHP 8.0+
+Version stable : **2.1.0** — Dolibarr 20+ — PHP 8.0+
 
 ## Rôle
 

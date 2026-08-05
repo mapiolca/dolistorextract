@@ -1,9 +1,12 @@
 # Journal des modifications de DolistoreExtract
 
+## Version 2.1.0 — 5 août 2026
+
+- Ajout, par entité, d’une catégorie native configurable pour les nouveaux tiers créés depuis les commandes DoliStore, avec Select2, accès direct à la création d’une catégorie et avertissements non bloquants journalisés.
+
 ## Version 2.0.1 — 5 août 2026
 
 - Correction de la traduction des libellés des événements Agenda natifs lors de la validation et de l'envoi des factures, y compris depuis les travaux planifiés.
-- Ajout, par entité, d’une catégorie native configurable pour les nouveaux tiers créés depuis les commandes DoliStore, avec Select2, accès direct à la création d’une catégorie et avertissements non bloquants journalisés.
 
 ## Version 2.0.0 — 14 juillet 2026
 
