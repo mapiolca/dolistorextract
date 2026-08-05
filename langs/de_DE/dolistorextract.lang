@@ -78,6 +78,17 @@ DolistoreAssociationThirdpartyCreated=Association-Dolibarr-Drittpartei erstellt 
 DolistoreAssociationThirdpartyExists=Association-Dolibarr-Drittpartei existiert bereits (ID: %s).
 DolistoreAssociationThirdpartyCreateError=Association-Dolibarr-Drittpartei konnte nicht erstellt werden.
 DolistoreBillingThirdpartyLabel=Dolistore-Abrechnungsdrittpartei
+DolistoreThirdpartyCategorySettings=Kategorie für erstellte Geschäftspartner
+DolistoreThirdpartyCategoryLabel=Kategorie für neue DoliStore-Geschäftspartner
+DolistoreThirdpartyCategoryInvalid=Die Geschäftspartnerkategorie %s ist in der aktuellen Umgebung nicht verfügbar. Die vorherige Einstellung wurde beibehalten.
+DolistoreThirdpartyCategoryModuleDisabled=Das Modul Kategorien muss aktiviert sein, um die Kategorie für neue DoliStore-Geschäftspartner zu konfigurieren.
+DolistoreThirdpartyCategoryReadDenied=Sie haben keine Berechtigung, Geschäftspartnerkategorien anzuzeigen.
+DolistoreThirdpartyCategoryUnavailable=Die konfigurierte Kategorie (ID %s) ist nicht mehr verfügbar. Wählen Sie eine andere Kategorie oder leeren Sie die Einstellung.
+DolistoreThirdpartyCategoryReasonModuleDisabled=das Modul Kategorien ist deaktiviert
+DolistoreThirdpartyCategoryReasonUnavailable=die Kategorie fehlt oder ist in dieser Umgebung nicht zugänglich
+DolistoreThirdpartyCategoryReasonLinkError=die native Kategoriezuordnung ist fehlgeschlagen: %s
+DolistoreThirdpartyCategoryAssignmentSkipped=Der Geschäftspartner %s wurde ohne die konfigurierte Kategorie %s erstellt: %s.
+DolistoreThirdpartyCategoryAssigned=Der Geschäftspartner %s wurde der Kategorie %s hinzugefügt.
 
 DolistorextractAbout = Über
 DolistorextractAboutPage = Informationen zum Modul Dolistorextract

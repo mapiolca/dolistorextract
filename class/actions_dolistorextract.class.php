@@ -27,6 +27,7 @@ require_once DOL_DOCUMENT_ROOT . '/compta/facture/class/facture.class.php';
 require_once DOL_DOCUMENT_ROOT . '/contact/class/contact.class.php';
 require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
 require_once DOL_DOCUMENT_ROOT . '/societe/class/societe.class.php';
+require_once DOL_DOCUMENT_ROOT . '/categories/class/categorie.class.php';
 require_once DOL_DOCUMENT_ROOT . '/user/class/user.class.php';
 require_once __DIR__ . '/dolistoreOrder.class.php';
 require_once __DIR__ . '/dolistoreOrderLine.class.php';
@@ -100,6 +101,13 @@ class ActionsDolistorextract extends CommonHookActions
 	public $logOutput = '';
 	public $lastOrderImportStatus = '';
 	public $hasProductIddolistoreColumn = null;
+
+	/**
+	 * Non-blocking category warning to persist once the DoliStore order exists.
+	 *
+	 * @var string
+	 */
+	private $pendingCustomerCategoryWarning = '';
 
 	/**
 	 *    Constructor
@@ -387,12 +395,72 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->logOutput .= '<br/><span class="ok">-> ' . $langs->trans("DolistoreThirdPartyCreatedWithID", $dolistoreMail->buyer_company, $socStatic->id) . ' </span>';
 
 		if ($socid > 0) {
+			$this->assignConfiguredCategoryToNewCustomer($socStatic);
 			$socStatic->create_individual($user);
 			$this->logOutput .= '<br/><span class="ok">-> ' . $langs->trans("DolistoreContactCreatedWithID", $socStatic->firstname, $socStatic->lastname, $socStatic->id) . ' </span>';
 		} elseif (is_array($socStatic->errors)) {
 			$this->errors = array_merge($this->errors, $socStatic->errors);
 		}
 		return $socid;
+	}
+
+	/**
+	 * Assign the configured native customer category to a newly created thirdparty.
+	 *
+	 * Assignment failures are deliberately non-blocking and are persisted later once
+	 * the related DoliStore order has been created.
+	 *
+	 * @param Societe $thirdparty Newly created thirdparty
+	 * @return void
+	 */
+	private function assignConfiguredCategoryToNewCustomer(Societe $thirdparty): void
+	{
+		global $langs;
+
+		$categoryId = getDolGlobalInt('DOLISTOREXTRACT_THIRDPARTY_CATEGORY_ID');
+		if ($categoryId <= 0) {
+			return;
+		}
+
+		$reason = '';
+		$categoryLabel = '';
+		if (!isModEnabled('category')) {
+			$reason = $langs->transnoentitiesnoconv('DolistoreThirdpartyCategoryReasonModuleDisabled');
+		} else {
+			$category = new Categorie($this->db);
+			$categoryTree = $category->get_full_arbo(Categorie::TYPE_CUSTOMER);
+			if (!is_array($categoryTree) || !isset($categoryTree[$categoryId])) {
+				$reason = $langs->transnoentitiesnoconv('DolistoreThirdpartyCategoryReasonUnavailable');
+			} else {
+				$categoryData = $categoryTree[$categoryId];
+				$categoryLabel = isset($categoryData['fulllabel']) ? (string) $categoryData['fulllabel'] : (string) $categoryId;
+				$result = $thirdparty->setCategories(array($categoryId), Categorie::TYPE_CUSTOMER);
+				if ($result < 0) {
+					$linkError = trim((string) $thirdparty->error);
+					if ($linkError === '' && is_array($thirdparty->errors)) {
+						$linkError = trim(implode(' ', $thirdparty->errors));
+					}
+					if ($linkError === '') {
+						$linkError = $langs->transnoentitiesnoconv('Error');
+					}
+					$reason = $langs->transnoentitiesnoconv('DolistoreThirdpartyCategoryReasonLinkError', $linkError);
+				}
+			}
+		}
+
+		if ($reason !== '') {
+			$this->pendingCustomerCategoryWarning = $langs->transnoentitiesnoconv(
+				'DolistoreThirdpartyCategoryAssignmentSkipped',
+				(int) $thirdparty->id,
+				$categoryId,
+				$reason
+			);
+			$this->logOutput .= '<br/><span class="warning">'.dol_escape_htmltag($this->pendingCustomerCategoryWarning).'</span>';
+			dol_syslog(__METHOD__.' '.$this->pendingCustomerCategoryWarning, LOG_WARNING);
+			return;
+		}
+
+		$this->logOutput .= '<br/><span class="ok">'.dol_escape_htmltag($langs->trans('DolistoreThirdpartyCategoryAssigned', (int) $thirdparty->id, $categoryLabel)).'</span>';
 	}
 
 	/**
@@ -956,6 +1024,7 @@ class ActionsDolistorextract extends CommonHookActions
 		global $langs;
 		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreProcessingOrder", $orderRef) . '</strong>';
 		$this->lastOrderImportStatus = '';
+		$this->pendingCustomerCategoryWarning = '';
 
 		$this->db->begin();
 
@@ -984,6 +1053,21 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$this->db->commit();
 		$this->logOutput .= '<br/><span class="ok">'.$langs->trans("DolistoreOrderImported", $orderRef).'</span>';
+		if ($this->pendingCustomerCategoryWarning !== '') {
+			DolistoreImportLog::add(
+				$this->db,
+				'warning',
+				$this->pendingCustomerCategoryWarning,
+				$dolistoreOrder,
+				'import',
+				array(
+					'order_ref' => $orderRef,
+					'thirdparty_id' => $companyId,
+					'category_id' => getDolGlobalInt('DOLISTOREXTRACT_THIRDPARTY_CATEGORY_ID'),
+				),
+				$user
+			);
+		}
 		DolistoreImportLog::add($this->db, 'success', $langs->transnoentitiesnoconv("DolistoreOrderImported", $orderRef), $dolistoreOrder, 'import', array('order_ref' => $orderRef), $user);
 
 		return true;

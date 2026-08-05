@@ -1045,13 +1045,15 @@ class modDolistorextract extends DolibarrModules
 			'DOLISTOREXTRACT_INVOICE_STATUS' => 'draft',
 			'DOLISTOREXTRACT_DAILY_NOTIFICATION_ENABLED' => '0',
 			'DOLISTOREXTRACT_V2_ARCHIVE_MODE' => '1',
+			'DOLISTOREXTRACT_THIRDPARTY_CATEGORY_ID' => '0',
 		);
 
 		foreach ($defaults as $name => $value) {
 			if (getDolGlobalString($name) !== '') {
 				continue;
 			}
-			$result = dolibarr_set_const($this->db, $name, $value, 'chaine', 0, '', (int) $conf->entity);
+			$constantType = $name === 'DOLISTOREXTRACT_THIRDPARTY_CATEGORY_ID' ? 'entier' : 'chaine';
+			$result = dolibarr_set_const($this->db, $name, $value, $constantType, 0, '', (int) $conf->entity);
 			if ($result <= 0) {
 				$this->error = $this->db->lasterror();
 				return -1;
