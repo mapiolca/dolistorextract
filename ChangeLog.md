@@ -1,5 +1,9 @@
 # Journal des modifications de DolistoreExtract
 
+## Version 2.0.1 — 5 août 2026
+
+- Correction de la traduction des libellés des événements Agenda natifs lors de la validation et de l'envoi des factures, y compris depuis les travaux planifiés.
+
 ## Version 2.0.0 — 14 juillet 2026
 
 ### Nouveau workflow DoliStore
@@ -19,7 +23,6 @@
 
 - Trois travaux planifiés natifs sont installés actifs : import IMAP, facturation mensuelle et notification quotidienne. Leur exécution métier reste pilotée par des switches indépendants dans les réglages de chaque entité.
 - Les commandes DoliStore exposent leurs événements CRUD aux modules Agenda et Notifications, sans système d'événements parallèle.
-- Les libellés des événements natifs de validation et d'envoi des factures sont traduits avant leur enregistrement dans l'Agenda, y compris lors d'une exécution par un travail planifié.
 - Les modèles de courriels français et anglais sont initialisés dans la catégorie native `Commandes Dolistore` sans écraser les personnalisations existantes.
 - Les modèles de documents, la numérotation, les fichiers joints, les droits granulaires et les listes utilisent les composants natifs Dolibarr.
 
