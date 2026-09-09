@@ -1,4 +1,4 @@
-# AGENT.md — DolistoreExtract
+# AGENTS.md — DolistoreExtract
 
 This repository is the root of the external Dolibarr module `dolistorextract`.
 
@@ -28,6 +28,6 @@ This repository is the root of the external Dolibarr module `dolistorextract`.
 
 - Declare object properties and document stable array shapes and method contracts for static analysis.
 - Do not add PHPStan ignores, baselines or global exclusions to hide new errors.
-- Provide and maintain `fr_FR` and `en_US` translations with correct spelling and UTF-8 accents.
+- Provide and maintain `fr_FR`, `en_US`, `es_ES`, `it_IT` and `de_DE` translations with correct spelling and UTF-8 accents.
 - Keep lists, forms, pagination, status badges and administration pages visually native to Dolibarr.
 - Update `ChangeLog.md` for functional changes and always propose a commit title and description in the delivery report.

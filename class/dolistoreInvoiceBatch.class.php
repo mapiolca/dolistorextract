@@ -24,7 +24,7 @@ class DolistoreInvoiceBatch extends CommonObject
 	public $picto = 'bill';
 	public $ismultientitymanaged = 1;
 	public $fields = array(
-		'rowid' => array('type' => 'integer', 'label' => 'ID', 'enabled' => 1, 'visible' => -2, 'position' => 1, 'notnull' => 1),
+		'rowid' => array('type' => 'integer', 'label' => 'Ref', 'enabled' => 1, 'visible' => -2, 'position' => 1, 'notnull' => 1),
 		'entity' => array('type' => 'integer', 'label' => 'Entity', 'enabled' => 1, 'visible' => -2, 'position' => 5, 'notnull' => 1),
 		'fk_facture' => array('type' => 'integer:Facture:compta/facture/class/facture.class.php', 'label' => 'DolistoreLinkedInvoice', 'enabled' => 1, 'visible' => 1, 'position' => 10),
 		'period_year' => array('type' => 'integer', 'label' => 'Year', 'enabled' => 1, 'visible' => 1, 'position' => 20, 'notnull' => 1),
@@ -143,7 +143,8 @@ class DolistoreInvoiceBatch extends CommonObject
 	{
 		global $conf;
 
-		$this->entity = !empty($this->entity) ? (int) $this->entity : (int) $conf->entity;
+		$this->entity = (int) $conf->entity;
+		if (!$this->validateForWrite($user)) return -1;
 		if (!$this->hasValidSuccessState()) {
 			return -1;
 		}
@@ -186,16 +187,19 @@ class DolistoreInvoiceBatch extends CommonObject
 	 */
 	public function update($user, $notrigger = 0)
 	{
-		global $conf;
+		global $conf, $langs;
 
+		if (!$this->validateForWrite($user)) return -1;
 		if (empty($this->id)) {
-			$this->error = 'Missing invoice batch id';
+			$this->error = $langs->trans('ErrorRecordNotFound');
 			return -1;
 		}
 		if (!$this->hasValidSuccessState()) {
 			return -1;
 		}
-		$entity = !empty($this->entity) ? (int) $this->entity : (int) $conf->entity;
+		$entity = (int) $this->entity;
+		$existing = new self($this->db);
+		if ($existing->fetch((int) $this->id) <= 0 || (int) $existing->entity !== $entity) return -1;
 
 		$sql = 'UPDATE '.MAIN_DB_PREFIX.$this->table_element.' SET';
 		$sql .= ' fk_facture = '.$this->nullableInt($this->fk_facture);
@@ -218,6 +222,31 @@ class DolistoreInvoiceBatch extends CommonObject
 		return 1;
 	}
 
+	/** Validate the current entity and native invoice relation before any write.
+	 * @param User $user Actor
+	 * @return bool
+	 */
+	private function validateForWrite($user): bool
+	{
+		global $conf, $langs;
+		$langs->load('dolistorextract@dolistorextract');
+		if (!isModEnabled('dolistorextract') || !empty($user->socid)
+			|| !$user->hasRight('dolistorextract', 'invoice', 'generate') || (int) $this->entity !== (int) $conf->entity) {
+			$this->error = $langs->trans('NotEnoughPermissions'); return false;
+		}
+		if ((int) $this->period_year < 1 || (int) $this->period_month < 1 || (int) $this->period_month > 12
+			|| !in_array((int) $this->status, array(self::STATUS_DRAFT, self::STATUS_SUCCESS, self::STATUS_ERROR), true)) {
+			$this->error = $langs->trans('DolistoreApiInvalidValue', 'period/status'); return false;
+		}
+		if ((int) $this->fk_facture > 0) {
+			$res = $this->db->query('SELECT rowid FROM '.MAIN_DB_PREFIX.'facture WHERE rowid = '.(int) $this->fk_facture.' AND entity = '.(int) $this->entity);
+			$invoice = $res ? $this->db->fetch_object($res) : null;
+			if ($res) $this->db->free($res);
+			if (!is_object($invoice)) { $this->error = $langs->trans('DolistoreInvalidRelation', 'fk_facture'); return false; }
+		}
+		return true;
+	}
+
 	/**
 	 * Ensure a successful batch always references a native customer invoice.
 	 *
@@ -225,8 +254,9 @@ class DolistoreInvoiceBatch extends CommonObject
 	 */
 	private function hasValidSuccessState()
 	{
+		global $langs;
 		if ((int) $this->status === self::STATUS_SUCCESS && (int) $this->fk_facture <= 0) {
-			$this->error = 'A successful invoice batch must reference a customer invoice';
+			$this->error = $langs->trans('DolistoreInvalidRelation', 'fk_facture');
 			return false;
 		}
 
@@ -257,7 +287,7 @@ class DolistoreInvoiceBatch extends CommonObject
 
 		$labels = array(
 			self::STATUS_DRAFT => 'Draft',
-			self::STATUS_SUCCESS => 'Success',
+			self::STATUS_SUCCESS => 'DolistoreStatusSuccess',
 			self::STATUS_ERROR => 'Error',
 		);
 		$classes = array(

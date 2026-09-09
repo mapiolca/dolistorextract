@@ -1,5 +1,13 @@
 # Journal des modifications de DolistoreExtract
 
+## Version 2.2.0 — 2026-09-09
+
+- Rétablissement de la bienvenue pour chaque nouvel achat importé : cinq modèles natifs FR/EN/ES/IT/DE conformes au modèle français fourni, file transactionnelle unique, envoi après commit, suivi fiche/journal/API et travail natif toutes les 15 minutes. Trois reprises à 1 h, 6 h et 24 h après un échec certain ; vérification manuelle obligatoire avant reprise d’un résultat incertain. Aucun rattrapage historique ni renvoi au réimport.
+- Regroupement des produits par référence DoliStore normalisée, recherches sur les libellés historiques et actuels et signalement des rattachements contradictoires, sans altérer les lignes commerciales archivées.
+- Interface traduite dans les cinq langues : liens et infobulles natifs, pictogrammes compacts, statuts et origines traduits, titre de journal unique, référence facture native, badges/filtres Multicompany et pagination des listes et de l’Agenda corrigés.
+- Droits directs sans élévation administrateur, accès internes et d’entité, validation native des champs (avec colonne standard `ref_ext` requise en v20), préfixes CRUD, conservation des réglages et verrous de traitement renforcés. Identifiant migré vers 450032 avec conservation des attributions provenant des deux anciennes plages ; l’ancienne notification quotidienne non implémentée est signalée indisponible.
+- Documents limités à l’entité propriétaire, migration conservatrice/rejouable du rangement et des index ECM, et PDF avec en-têtes/pieds et textes longs. Après mise à jour : réactiver dans les entités concernées, exécuter leur migration documentaire, vérifier les sélections de modèles et l’utilisateur des travaux planifiés. Socle Dolibarr 20 / PHP 8.0 conservé ; validations réelles Multicompany et SMTP à effectuer sur une instance de test.
+
 ## Version 2.1.0 — 5 août 2026
 
 - Ajout, par entité, d’une catégorie native configurable pour les nouveaux tiers créés depuis les commandes DoliStore, avec Select2, accès direct à la création d’une catégorie et avertissements non bloquants journalisés.

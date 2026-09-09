@@ -12,7 +12,7 @@ require_once __DIR__.'/class/dolistoreOrder.class.php';
 require_once __DIR__.'/lib/dolistoreextract.lib.php';
 
 $langs->loadLangs(array('dolistorextract@dolistorextract', 'companies'));
-if (!isModEnabled('dolistorextract') || !dolistoreextractUserHasRight($user, 'order', 'read')) accessforbidden();
+if (!isModEnabled('dolistorextract') || !empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'read')) accessforbidden();
 
 $object = new DolistoreOrder($db);
 if (GETPOST('id', 'int') <= 0 || $object->fetch(GETPOST('id', 'int')) <= 0) accessforbidden();
@@ -23,16 +23,16 @@ dol_banner_tab($object, 'ref', '', 1, 'ref', 'ref', '');
 print '<table class="noborder centpercent">';
 print '<tr class="liste_titre"><th>'.$langs->trans('Type').'</th><th>'.$langs->trans('Name').'</th><th>'.$langs->trans('Email').'</th></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('ThirdParty').'</td><td>';
-if (!empty($object->fk_soc_customer)) {
+if (!empty($object->fk_soc_customer) && $user->hasRight('societe', 'lire')) {
 	$soc = new Societe($db);
-	if ($soc->fetch($object->fk_soc_customer) > 0) print $soc->getNomUrl(1);
+	if ($soc->fetch($object->fk_soc_customer) > 0 && in_array((int) $soc->entity, array_map('intval', explode(',', getEntity('societe'))), true)) print $soc->getNomUrl(1);
 } else {
 	print dol_escape_htmltag($object->customer_name);
 }
 print '</td><td>'.dol_escape_htmltag($object->customer_email).'</td></tr>';
-if (!empty($object->fk_contact_customer)) {
+if (!empty($object->fk_contact_customer) && $user->hasRight('societe', 'contact', 'lire')) {
 	$contact = new Contact($db);
-	if ($contact->fetch($object->fk_contact_customer) > 0) {
+	if ($contact->fetch($object->fk_contact_customer) > 0 && (int) $contact->socid === (int) $object->fk_soc_customer && in_array((int) $contact->entity, array_map('intval', explode(',', getEntity('contact'))), true)) {
 		print '<tr class="oddeven"><td>'.$langs->trans('Contact').'</td><td>'.$contact->getNomUrl(1).'</td><td>'.dol_escape_htmltag($contact->email).'</td></tr>';
 	}
 }

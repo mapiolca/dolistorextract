@@ -21,7 +21,8 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	public function __construct()
 	{
-		global $db;
+		global $db, $langs;
+		$langs->loadLangs(array('main', 'dolistorextract@dolistorextract'));
 		$this->db = $db;
 	}
 
@@ -36,23 +37,29 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	public function getOrders($limit = 100, $page = 0)
 	{
-		$this->checkAccess('read');
+		global $langs;
+		$user = DolibarrApiAccess::$user;
+		if (!isModEnabled('dolistorextract') || !empty($user->socid)
+			|| !$user->hasRight('dolistorextract', 'api', 'read')
+			|| !$user->hasRight('dolistorextract', 'order', 'read')) {
+			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
+		}
 		$limit = max(1, min(500, (int) $limit));
 		$offset = max(0, (int) $page) * $limit;
 
-		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'dolistoreextract_order';
+		$sql = 'SELECT * FROM '.MAIN_DB_PREFIX.'dolistoreextract_order';
 		$sql .= ' WHERE entity IN ('.getEntity('dolistoreextract_order').')';
 		$sql .= ' ORDER BY rowid DESC';
 		$sql .= $this->db->plimit($limit, $offset);
 		$resql = $this->db->query($sql);
 		if (!$resql) {
-			throw new RestException(500, $this->db->lasterror());
+			throw new RestException(500, $langs->trans('DolistoreArchiveWriteFailed'));
 		}
 
 		$result = array();
 		while ($obj = $this->db->fetch_object($resql)) {
 			$order = new DolistoreOrder($this->db);
-			$order->fetch((int) $obj->rowid);
+			$order->setVarsFromObject($obj);
 			$result[] = $this->cleanOrder($order);
 		}
 		$this->db->free($resql);
@@ -70,13 +77,22 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	public function getOrder($id)
 	{
-		$this->checkAccess('read');
+		global $langs;
+		$user = DolibarrApiAccess::$user;
+		if (!isModEnabled('dolistorextract') || !empty($user->socid)
+			|| !$user->hasRight('dolistorextract', 'api', 'read')
+			|| !$user->hasRight('dolistorextract', 'order', 'read')) {
+			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
+		}
 		$order = new DolistoreOrder($this->db);
 		if ($order->fetch((int) $id) <= 0) {
-			throw new RestException(404, 'DoliStore order not found');
+			throw new RestException(404, $langs->trans('ErrorRecordNotFound'));
 		}
 
 		$data = $this->cleanOrder($order);
+		require_once __DIR__.'/dolistoreWelcomeMail.class.php';
+		$welcome = new DolistoreWelcomeMail($this->db);
+		$data['welcome_delivery'] = $welcome->getStatus((int) $order->id);
 		$data['lines'] = array();
 		foreach ($order->getLines() as $line) {
 			$data['lines'][] = $this->cleanLine($line);
@@ -95,14 +111,21 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	public function postOrder($request_data = null)
 	{
-		$this->checkAccess('import');
+		global $langs;
 		$user = DolibarrApiAccess::$user;
-		$data = (array) $request_data;
+		if (!isModEnabled('dolistorextract') || !empty($user->socid)
+			|| !$user->hasRight('dolistorextract', 'api', 'read')
+			|| !$user->hasRight('dolistorextract', 'order', 'import')) {
+			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
+		}
+		$user = DolibarrApiAccess::$user;
+		if (!is_array($request_data)) throw new RestException(400, $langs->trans('DolistoreApiInvalidValue', 'body'));
+		$data = $request_data;
 		$order = new DolistoreOrder($this->db);
 		$this->fillOrderFromArray($order, $data, 'create');
 		$duplicateId = $this->findDuplicateOrderId($order);
 		if ($duplicateId > 0) {
-			throw new RestException(409, 'DoliStore order already exists: '.$duplicateId);
+			throw new RestException(409, $langs->trans('DolistoreOrderAlreadyExists', $duplicateId));
 		}
 		$result = $order->create($user);
 		if ($result <= 0) {
@@ -123,13 +146,20 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	public function putOrder($id, $request_data = null)
 	{
-		$this->checkAccess('write');
+		global $langs;
+		$user = DolibarrApiAccess::$user;
+		if (!isModEnabled('dolistorextract') || !empty($user->socid)
+			|| !$user->hasRight('dolistorextract', 'api', 'read')
+			|| !$user->hasRight('dolistorextract', 'order', 'write')) {
+			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
+		}
 		$user = DolibarrApiAccess::$user;
 		$order = new DolistoreOrder($this->db);
 		if ($order->fetch((int) $id) <= 0) {
-			throw new RestException(404, 'DoliStore order not found');
+			throw new RestException(404, $langs->trans('ErrorRecordNotFound'));
 		}
-		$this->fillOrderFromArray($order, (array) $request_data, 'update');
+		if (!is_array($request_data)) throw new RestException(400, $langs->trans('DolistoreApiInvalidValue', 'body'));
+		$this->fillOrderFromArray($order, $request_data, 'update');
 		if ($order->update($user) <= 0) {
 			throw new RestException(500, $order->error);
 		}
@@ -147,11 +177,17 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	public function deleteOrder($id)
 	{
-		$this->checkAccess('delete');
+		global $langs;
+		$user = DolibarrApiAccess::$user;
+		if (!isModEnabled('dolistorextract') || !empty($user->socid)
+			|| !$user->hasRight('dolistorextract', 'api', 'read')
+			|| !$user->hasRight('dolistorextract', 'order', 'delete')) {
+			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
+		}
 		$user = DolibarrApiAccess::$user;
 		$order = new DolistoreOrder($this->db);
 		if ($order->fetch((int) $id) <= 0) {
-			throw new RestException(404, 'DoliStore order not found');
+			throw new RestException(404, $langs->trans('ErrorRecordNotFound'));
 		}
 		if ($order->delete($user) <= 0) {
 			throw new RestException(500, $order->error);
@@ -169,7 +205,13 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	public function generateInvoice()
 	{
-		$this->checkAccess('invoice');
+		global $langs;
+		$user = DolibarrApiAccess::$user;
+		if (!isModEnabled('dolistorextract') || !empty($user->socid)
+			|| !$user->hasRight('dolistorextract', 'api', 'read')
+			|| !$user->hasRight('dolistorextract', 'invoice', 'generate')) {
+			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
+		}
 		$actions = new ActionsDolistorextract($this->db);
 		$result = $actions->generateMonthlyDolistoreInvoice(DolibarrApiAccess::$user, true);
 		if ($result < 0) {
@@ -177,61 +219,6 @@ class DolistoreextractApi extends DolibarrApi
 		}
 
 		return array('invoice_id' => $result);
-	}
-
-	/**
-	 * Check API access.
-	 *
-	 * @param string $right Right
-	 * @return void
-	 */
-	private function checkAccess($right)
-	{
-		$user = DolibarrApiAccess::$user;
-		if (!isModEnabled('dolistorextract')) {
-			throw new RestException(403, 'Module disabled');
-		}
-		if (!$this->hasModuleRight($user, 'api', 'read')) {
-			throw new RestException(403, 'API permission denied');
-		}
-		if ($right === 'read') {
-			if (empty($user->admin) && !$this->hasModuleRight($user, 'order', 'read')) {
-				throw new RestException(403, 'Permission denied');
-			}
-			return;
-		}
-		$map = array(
-			'import' => array('order', 'import'),
-			'write' => array('order', 'write'),
-			'delete' => array('order', 'delete'),
-			'invoice' => array('invoice', 'generate'),
-		);
-		if (!empty($user->admin)) {
-			return;
-		}
-		if (!isset($map[$right]) || !$this->hasModuleRight($user, $map[$right][0], $map[$right][1])) {
-			throw new RestException(403, 'Permission denied');
-		}
-	}
-
-	/**
-	 * Check one module right with Dolibarr v20-compatible fallback.
-	 *
-	 * @param User   $user User
-	 * @param string $object Right object
-	 * @param string $action Right action
-	 * @return bool
-	 */
-	private function hasModuleRight($user, $object, $action)
-	{
-		if (!is_object($user)) {
-			return false;
-		}
-		if (!empty($user->admin)) {
-			return true;
-		}
-
-		return (bool) $user->hasRight('dolistorextract', $object, $action);
 	}
 
 	/**
@@ -244,6 +231,12 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	private function fillOrderFromArray(DolistoreOrder $order, array $data, $mode)
 	{
+		global $langs;
+		foreach ($data as $key => $value) {
+			if ($value !== null && !is_scalar($value)) {
+				throw new RestException(400, $langs->trans('DolistoreApiInvalidValue', 'value'));
+			}
+		}
 		$mode = ($mode === 'create') ? 'create' : 'update';
 		$textFields = array('currency_code', 'customer_name', 'customer_email', 'customer_country', 'customer_country_code', 'note_public');
 		if ($mode === 'create') {
@@ -254,13 +247,16 @@ class DolistoreextractApi extends DolibarrApi
 				$order->{$field} = (string) $data[$field];
 			}
 		}
-		if (array_key_exists('note_private', $data) && ($mode === 'create' || $this->hasModuleRight(DolibarrApiAccess::$user, 'order', 'write'))) {
+		if (array_key_exists('note_private', $data) && ($mode === 'create' || DolibarrApiAccess::$user->hasRight('dolistorextract', 'order', 'write'))) {
 			$order->note_private = (string) $data['note_private'];
 		}
 
 		$amountFields = ($mode === 'create') ? array('total_ht', 'total_tva', 'total_ttc', 'commission_percent', 'billable_total_ht') : array();
 		foreach ($amountFields as $field) {
 			if (array_key_exists($field, $data)) {
+				if (!is_numeric($data[$field])) {
+					throw new RestException(400, $langs->trans('DolistoreApiInvalidValue', 'amount'));
+				}
 				$order->{$field} = (float) $data[$field];
 			}
 		}
@@ -270,6 +266,9 @@ class DolistoreextractApi extends DolibarrApi
 		}
 		foreach ($intFields as $field) {
 			if (array_key_exists($field, $data)) {
+				if (!ctype_digit((string) $data[$field])) {
+					throw new RestException(400, $langs->trans('DolistoreApiInvalidValue', 'id'));
+				}
 				$order->{$field} = (int) $data[$field];
 			}
 		}
@@ -294,6 +293,7 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	private function cleanOrder(DolistoreOrder $order)
 	{
+		global $langs;
 		$data = array(
 			'id' => (int) $order->id,
 			'rowid' => (int) $order->rowid,
@@ -330,7 +330,7 @@ class DolistoreextractApi extends DolibarrApi
 			'fk_user_creat' => (int) $order->fk_user_creat,
 			'fk_user_modif' => (int) $order->fk_user_modif,
 		);
-		if ($this->canExposePrivateNote()) {
+		if (DolibarrApiAccess::$user->hasRight('dolistorextract', 'order', 'write')) {
 			$data['note_private'] = (string) $order->note_private;
 		}
 
@@ -345,6 +345,7 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	private function cleanLine(DolistoreOrderLine $line)
 	{
+		global $langs;
 		return array(
 			'id' => (int) $line->id,
 			'rowid' => (int) $line->rowid,
@@ -375,6 +376,7 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	private function parseApiDate($value, $field)
 	{
+		global $langs;
 		if ($value === null || $value === '') {
 			return 0;
 		}
@@ -383,7 +385,7 @@ class DolistoreextractApi extends DolibarrApi
 		}
 		$timestamp = strtotime((string) $value);
 		if ($timestamp === false) {
-			throw new RestException(400, 'Invalid date for field '.$field);
+			throw new RestException(400, $langs->trans('DolistoreApiInvalidValue', $field));
 		}
 
 		return (int) $timestamp;
@@ -397,6 +399,8 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	private function normalizeStatus($status)
 	{
+		global $langs;
+		if (!is_int($status) && !(is_string($status) && ctype_digit($status))) throw new RestException(400, $langs->trans('DolistoreApiInvalidValue', 'status'));
 		$status = (int) $status;
 		$allowed = array(
 			DolistoreOrder::STATUS_DRAFT,
@@ -406,20 +410,10 @@ class DolistoreextractApi extends DolibarrApi
 			DolistoreOrder::STATUS_ERROR,
 		);
 		if (!in_array($status, $allowed, true)) {
-			throw new RestException(400, 'Invalid DoliStore order status');
+			throw new RestException(400, $langs->trans('DolistoreApiInvalidValue', 'status'));
 		}
 
 		return $status;
-	}
-
-	/**
-	 * Check if private note can be exposed through API.
-	 *
-	 * @return bool
-	 */
-	private function canExposePrivateNote()
-	{
-		return $this->hasModuleRight(DolibarrApiAccess::$user, 'order', 'write');
 	}
 
 	/**
@@ -430,6 +424,7 @@ class DolistoreextractApi extends DolibarrApi
 	 */
 	private function findDuplicateOrderId(DolistoreOrder $order)
 	{
+		global $langs;
 		$lookup = new DolistoreOrder($this->db);
 		if (!empty($order->dolistore_order_ref) && $lookup->fetchByDolistoreRef($order->dolistore_order_ref) > 0) {
 			return (int) $lookup->id;

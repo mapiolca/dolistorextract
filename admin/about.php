@@ -36,7 +36,7 @@ require_once __DIR__.'/../core/modules/modDolistorextract.class.php';
 
 $langs->loadLangs(array('admin', 'dolistorextract@dolistorextract'));
 
-if (empty($user->admin) && !dolistoreextractUserHasRight($user, 'setup', 'write')) {
+if (empty($user->admin) || !empty($user->socid)) {
 	accessforbidden();
 }
 
@@ -63,8 +63,8 @@ print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('Dolistorextra
 print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutFamily').'</td><td>'.dol_escape_htmltag($moduleDescriptor->family).'</td></tr>';
 print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutDescription').'</td><td>'.dol_escape_htmltag($moduleDescriptor->description).'</td></tr>';
 print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutMaintainer').'</td><td>'.dol_escape_htmltag($moduleDescriptor->editor_name).'</td></tr>';
-print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutCompatibility').'</td><td>'.$langs->trans('DolistorextractAboutCompatibilityValue').'</td></tr>';
-print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutDependencies').'</td><td>'.$langs->trans('DolistorextractAboutDependenciesValue').'</td></tr>';
+print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutCompatibility').'</td><td>'.'Dolibarr '.implode('.', $moduleDescriptor->need_dolibarr_version).'+ / PHP '.implode('.', $moduleDescriptor->phpmin).'+'.'</td></tr>';
+print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutDependencies').'</td><td>'.dol_escape_htmltag(implode(', ', $moduleDescriptor->depends)).'</td></tr>';
 print '</table>';
 print '</div>';
 print '</div>';
@@ -77,7 +77,7 @@ print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('Dolistorextra
 print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutSupport').'</td><td>'.dol_escape_htmltag($langs->trans('DolistorextractAboutSupportValue')).'</td></tr>';
 print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutContact').'</td><td><a href="'.$moduleDescriptor->editor_url.'" target="_blank" rel="noopener">'.dol_escape_htmltag($moduleDescriptor->editor_url).'</a></td></tr>';
 print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutFeatures').'</td><td>'.dol_escape_htmltag($langs->trans('DolistorextractAboutFeaturesValue')).'</td></tr>';
-print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutLicense').'</td><td>GPL-3.0-or-later</td></tr>';
+print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistorextractAboutLicense').'</td><td>'.dol_escape_htmltag($moduleDescriptor->license).'</td></tr>';
 print '</table>';
 print '</div>';
 print '</div>';

@@ -51,10 +51,11 @@ use SSilence\ImapClient\ImapClient as Imap;
 // Translations
 $langs->load('admin');
 $langs->load('categories');
+$langs->load('other');
 $langs->load("dolistorextract@dolistorextract");
 
 // Access control
-if (empty($user->admin) && !dolistoreextractUserHasRight($user, 'setup', 'write')) {
+if (empty($user->admin) || !empty($user->socid)) {
 	accessforbidden();
 }
 
@@ -77,6 +78,17 @@ if (in_array($action, array('update', 'add', 'setmod', 'set', 'del', 'setdoc', '
 }
 
 include DOL_DOCUMENT_ROOT.'/core/actions_setmoduleoptions.inc.php';
+
+if ($action === 'migratedocuments') {
+	if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !$user->hasRight('dolistorextract', 'order', 'write')) accessforbidden();
+	require_once __DIR__.'/../class/dolistoreDocumentMigration.class.php';
+	$migration = new DolistoreDocumentMigration($db);
+	$count = $migration->run($user);
+	setEventMessages($count < 0 ? $migration->error : $langs->trans('DolistoreDocumentMigrationDone', $count), null, $count < 0 ? 'errors' : 'mesgs');
+	header('Location: '.$setupPageUrl);
+	exit;
+}
+
 
 /**
  * Print one update row while keeping form tags inside table cells.
@@ -188,7 +200,7 @@ if ($action == 'update' || $action == 'add')
 
 		if ($categoryId > 0) {
 			$availableCategories = array();
-			if (isModEnabled('category') && (!empty($user->admin) || $user->hasRight('categorie', 'lire'))) {
+			if (isModEnabled('category') && $user->hasRight('categorie', 'lire')) {
 				$category = new Categorie($db);
 				$categoryTree = $category->get_full_arbo(Categorie::TYPE_CUSTOMER);
 				if (is_array($categoryTree)) {
@@ -353,7 +365,7 @@ if ($action == 'create_dolistore_association_thirdparty') {
 $page_name = "DolistorextractSetup";
 $pageTitle = $langs->trans($page_name);
 if ($pageTitle === $page_name || strpos($pageTitle, 'mon module') !== false) {
-	$pageTitle = $langs->trans("Setup").' '.$langs->trans("Module104976Name");
+	$pageTitle = $langs->trans("Setup").' '.$langs->trans("Module450032Name");
 }
 llxHeader('', $pageTitle);
 
@@ -375,7 +387,7 @@ $formother = new FormOther($db);
 $formmail = new FormMail($db);
 $token = $_SESSION['newtoken'];
 
-print dol_get_fiche_head($head, $mode, $langs->trans("Module104976Name"), -1, "dolistore@dolistorextract");
+print dol_get_fiche_head($head, $mode, $langs->trans("Module450032Name"), -1, "dolistore@dolistorextract");
 if ($mode !== 'orders') {
 	print '<table class="noborder" width="100%">';
 	print '<tr class="liste_titre">';
@@ -497,7 +509,6 @@ if ($mode === 'billing') {
 	$binaryConstants = array(
 		'DOLISTOREXTRACT_AUTO_CREATE_INVOICE' => 'DolistoreAutoCreateInvoice',
 		'DOLISTOREXTRACT_AUTO_SEND_INVOICE' => 'DolistoreAutoSendInvoice',
-		'DOLISTOREXTRACT_DAILY_NOTIFICATION_ENABLED' => 'DolistoreDailyNotificationEnabled',
 	);
 	foreach ($binaryConstants as $constName => $labelKey) {
 		$var = !$var;
@@ -549,47 +560,31 @@ if ($mode === 'emailsimap') {
 	print '</td></tr>';
 
 	$var = !$var;
-	print '<tr '.$bc[$var].'><td>'.$langs->trans("DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU").'</td><td class="opacitymedium">'.$langs->trans("DolistoreFinalCustomerEmailObsolete").'</td><td align="center">&nbsp;</td></tr>';
-
-	$arrayTemplatesFr = array();
-	$arrayTemplatesEn = array();
+	print '<tr '.$bc[$var].'><td>'.$langs->trans('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU').'</td><td>'.$langs->trans('DolistoreWelcomeDeliveryHelp').'</td><td>'.ajax_constantonoff('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU').'</td></tr>';
+	require_once __DIR__.'/../class/dolistoreWelcomeMail.class.php';
+	$templatesByLanguage = array();
 	$ret = $formmail->fetchAllEMailTemplate('dolistore_extract', $user, $langs);
-	if ($ret < 0) {
-		setEventMessages($formmail->error, $formmail->errors, 'errors');
-	} elseif (is_array($formmail->lines_model)) {
-		foreach ($formmail->lines_model as $modelEmail) {
-			if (!empty($modelEmail->private)) {
-				continue;
-			}
-			if ((string) $modelEmail->lang === 'fr_FR') {
-				$arrayTemplatesFr[(int) $modelEmail->id] = (string) $modelEmail->label;
-			} elseif ((string) $modelEmail->lang === 'en_US') {
-				$arrayTemplatesEn[(int) $modelEmail->id] = (string) $modelEmail->label;
-			}
+	if ($ret < 0) setEventMessages($formmail->error, $formmail->errors, 'errors');
+	foreach ($formmail->lines_model ?? array() as $modelEmail) {
+		if (empty($modelEmail->private) && isset(DolistoreWelcomeMail::LANGUAGES[$modelEmail->lang])) {
+			$templatesByLanguage[$modelEmail->lang][(int) $modelEmail->id] = (string) $modelEmail->label;
 		}
 	}
-	$manageDolistoreEmailTemplatesUrl = DOL_URL_ROOT.'/admin/mails_templates.php?search_type_template='.urlencode('dolistore_extract');
-	$manageDolistoreEmailTemplatesLink = '<a href="'.dol_escape_htmltag($manageDolistoreEmailTemplatesUrl).'">'.img_picto('', 'email', 'class="pictofixedwidth"').$langs->trans('DolistoreManageEmailTemplates').'</a>';
-
-	$var = !$var;
-	$selectedTemplateFr = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_FR');
-	$fieldTemplateFr = $form->selectarray('constvalue', $arrayTemplatesFr, $selectedTemplateFr);
-	if ($selectedTemplateFr > 0 && !isset($arrayTemplatesFr[$selectedTemplateFr])) {
-		$fieldTemplateFr .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateUnavailable', $selectedTemplateFr).'</span>';
-	} elseif (empty($arrayTemplatesFr)) {
-		$fieldTemplateFr .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateMissing', $langs->trans('French')).'</span>';
+	$manageUrl = DOL_URL_ROOT.'/admin/mails_templates.php?search_type_template=dolistore_extract';
+	$manageLink = '<a href="'.$manageUrl.'">'.img_picto('', 'email', 'class="pictofixedwidth"').$langs->trans('DolistoreManageEmailTemplates').'</a>';
+	foreach (DolistoreWelcomeMail::LANGUAGES as $language => $suffix) {
+		$constant = 'DOLISTOREXTRACT_EMAIL_TEMPLATE_'.$suffix;
+		$selected = getDolGlobalInt($constant);
+		$options = $templatesByLanguage[$language] ?? array();
+		$field = $form->selectarray('constvalue', $options, $selected, 1, 0, 0, '', 0, 0, 0, '', 'minwidth200', 1, '', 0, 0);
+		// Each row is a separate native settings form; Select2 targets a unique id.
+		$field = str_replace('id="constvalue"', 'id="template_'.$suffix.'"', $field).ajax_combobox('template_'.$suffix);
+		if ($selected > 0 && !isset($options[$selected])) $field .= '<br>'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateUnavailable', $selected);
+		elseif (!$options) $field .= '<br>'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateMissing', $language);
+		$var = !$var;
+		dolistorextractPrintUpdateRow($bc[$var], $langs->trans('DolistoreWelcomeTemplate'.$suffix), $constant, $field, $setupPageUrl, $mode, $token, $manageLink);
 	}
-	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractEmailTemplateFr"), 'DOLISTOREXTRACT_EMAIL_TEMPLATE_FR', $fieldTemplateFr, $setupPageUrl, $mode, $token, $manageDolistoreEmailTemplatesLink);
 
-	$var = !$var;
-	$selectedTemplateEn = getDolGlobalInt('DOLISTOREXTRACT_EMAIL_TEMPLATE_EN');
-	$fieldTemplateEn = $form->selectarray('constvalue', $arrayTemplatesEn, $selectedTemplateEn);
-	if ($selectedTemplateEn > 0 && !isset($arrayTemplatesEn[$selectedTemplateEn])) {
-		$fieldTemplateEn .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateUnavailable', $selectedTemplateEn).'</span>';
-	} elseif (empty($arrayTemplatesEn)) {
-		$fieldTemplateEn .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateMissing', $langs->trans('English')).'</span>';
-	}
-	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractEmailTemplateEn"), 'DOLISTOREXTRACT_EMAIL_TEMPLATE_EN', $fieldTemplateEn, $setupPageUrl, $mode, $token);
 }
 
 if ($mode === 'orders') {
@@ -605,7 +600,7 @@ if ($mode === 'orders') {
 	if (!isModEnabled('category')) {
 		print '<tr class="oddeven"><td>'.$langs->trans('DolistoreThirdpartyCategoryLabel').'</td>';
 		print '<td colspan="2"><span class="warning">'.img_warning().' '.$langs->trans('DolistoreThirdpartyCategoryModuleDisabled').'</span></td></tr>';
-	} elseif (empty($user->admin) && !$user->hasRight('categorie', 'lire')) {
+	} elseif (!$user->hasRight('categorie', 'lire')) {
 		print '<tr class="oddeven"><td>'.$langs->trans('DolistoreThirdpartyCategoryLabel').'</td>';
 		print '<td colspan="2"><span class="warning">'.img_warning().' '.$langs->trans('DolistoreThirdpartyCategoryReadDenied').'</span></td></tr>';
 	} else {
@@ -615,7 +610,7 @@ if ($mode === 'orders') {
 		$fieldThirdpartyCategory = img_picto('', 'category', 'class="pictofixedwidth"');
 		$fieldThirdpartyCategory .= $formother->select_categories(Categorie::TYPE_CUSTOMER, $selectedThirdpartyCategory, 'constvalue', 0, 1, 'minwidth300 widthcentpercentminusx');
 
-		if (!empty($user->admin) || $user->hasRight('categorie', 'creer')) {
+		if ($user->hasRight('categorie', 'creer')) {
 			$backToOrdersSetup = $self.'?mode=orders';
 			$createCategoryUrl = DOL_URL_ROOT.'/categories/card.php?action=create&type=customer&backtopage='.urlencode($backToOrdersSetup);
 			$fieldThirdpartyCategory .= ' '.dolGetButtonTitle($langs->trans('NewCategory'), '', 'fa fa-plus-circle', $createCategoryUrl);
@@ -773,7 +768,7 @@ if ($mode === 'orders') {
 		if (!empty($module->type) && $module->type == 'pdf' && !empty($module->page_largeur) && !empty($module->page_hauteur)) {
 			$htmltooltip .= '<b>'.$langs->trans('Width').'/'.$langs->trans('Height').':</b> '.dol_escape_htmltag($module->page_largeur.'/'.$module->page_hauteur).'<br>';
 		}
-		$htmltooltip .= '<b>'.$langs->trans('Path').':</b> '.dol_escape_htmltag($documentRealPath.'/'.$file);
+		$htmltooltip .= '<b>'.$langs->trans('File').':</b> '.dol_escape_htmltag($documentRealPath.'/'.$file);
 
 		print '<tr class="oddeven">';
 		print '<td>'.dol_escape_htmltag($modelLabel).'</td>';
@@ -853,4 +848,13 @@ if ($action == 'test_connect') {
 
 // Page end
 print dol_get_fiche_end();
+if ($user->hasRight('dolistorextract', 'order', 'write') && $mode === 'orders') {
+	print '<form method="POST" action="'.dol_escape_htmltag($setupPageUrl).'">';
+	print '<input type="hidden" name="token" value="'.newToken().'">';
+	print '<input type="hidden" name="action" value="migratedocuments">';
+	print '<input type="hidden" name="mode" value="orders">';
+	print '<input type="submit" class="button" value="'.dol_escape_htmltag($langs->trans('DolistoreDocumentMigration')).'">';
+	print '</form>';
+}
+
 llxFooter();

@@ -7,14 +7,16 @@ if (!$res && file_exists('../../main.inc.php')) $res = include '../../main.inc.p
 if (!$res) die('Include of main fails');
 
 require_once __DIR__.'/class/dolistoreOrder.class.php';
+require_once __DIR__.'/class/dolistoreProductIdentity.class.php';
 require_once __DIR__.'/lib/dolistoreextract.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/dolgraph.class.php';
 
-$langs->loadLangs(array('dolistorextract@dolistorextract', 'bills'));
-if (!isModEnabled('dolistorextract') || !dolistoreextractUserHasRight($user, 'order', 'read')) accessforbidden();
+$langs->loadLangs(array('dolistorextract@dolistorextract', 'bills', 'products', 'orders'));
+if (!isModEnabled('dolistorextract') || !empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'read')) accessforbidden();
 
 $form = new Form($db);
+$productIdentity = new DolistoreProductIdentity($db);
 $dateStart = dolistoreextractGetDateFilter('date_start', 'date_start', 0, 0, 0);
 $dateEnd = dolistoreextractGetDateFilter('date_end', 'date_end', 23, 59, 59);
 $dateStartSql = !empty($dateStart) ? dol_print_date($dateStart, '%Y-%m-%d') : '';
@@ -26,15 +28,7 @@ if (!is_array($searchEntity)) $searchEntity = array();
 $splitBy = GETPOST('split_by', 'alpha');
 if (!in_array($splitBy, array('amount', 'qty'), true)) $splitBy = 'amount';
 
-$entityOptions = array();
-$resqlEntities = $db->query('SELECT rowid, label FROM '.MAIN_DB_PREFIX.'entity WHERE rowid IN ('.getEntity('dolistoreextract_order').') ORDER BY label ASC');
-if ($resqlEntities) {
-	while ($objEntity = $db->fetch_object($resqlEntities)) {
-		$entityOptions[(int) $objEntity->rowid] = (string) $objEntity->label;
-	}
-	$db->free($resqlEntities);
-}
-if (empty($entityOptions)) $entityOptions[(int) $conf->entity] = (string) $conf->entity;
+$entityOptions = dolistoreextractGetEntityOptions($db);
 
 $whereOrder = array('entity IN ('.getEntity('dolistoreextract_order').')');
 $whereOrderAlias = array('o.entity IN ('.getEntity('dolistoreextract_order').')');
@@ -56,7 +50,7 @@ if ($searchStatus !== '') {
 	$whereOrderAlias[] = 'o.status IN ('.$db->sanitize($searchStatus).')';
 }
 if ($searchProduct !== '') {
-	$productSql = "(lf.product_label LIKE '%".$db->escape($searchProduct)."%' OR lf.product_dolistore_ref LIKE '%".$db->escape($searchProduct)."%')";
+	$productSql = $productIdentity->searchSql('lf', $searchProduct);
 	$whereOrder[] = 'EXISTS (SELECT 1 FROM '.MAIN_DB_PREFIX.'dolistoreextract_order_line as lf WHERE lf.fk_order = '.MAIN_DB_PREFIX.'dolistoreextract_order.rowid AND lf.entity = '.MAIN_DB_PREFIX.'dolistoreextract_order.entity AND '.$productSql.')';
 	$whereOrderAlias[] = 'EXISTS (SELECT 1 FROM '.MAIN_DB_PREFIX.'dolistoreextract_order_line as lf WHERE lf.fk_order = o.rowid AND lf.entity = o.entity AND '.$productSql.')';
 }
@@ -148,7 +142,7 @@ $amountInvoiceable = dolistoreextractScalar($db, 'SELECT SUM(billable_total_ht) 
 $waitingRelease = dolistoreextractScalar($db, 'SELECT COUNT(rowid) as v FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere.' AND status = '.DolistoreOrder::STATUS_WAITING_RELEASE);
 $errors = dolistoreextractScalar($db, 'SELECT COUNT(rowid) as v FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere.' AND status = '.DolistoreOrder::STATUS_ERROR);
 $lastInvoice = '';
-$resqlLastInvoice = $db->query('SELECT f.ref FROM '.MAIN_DB_PREFIX.'dolistoreextract_invoice_batch b INNER JOIN '.MAIN_DB_PREFIX.'facture f ON f.rowid = b.fk_facture WHERE b.entity IN ('.getEntity('dolistoreextract_order').') ORDER BY b.rowid DESC LIMIT 1');
+$resqlLastInvoice = $user->hasRight('facture', 'lire') ? $db->query('SELECT f.ref FROM '.MAIN_DB_PREFIX.'dolistoreextract_invoice_batch b INNER JOIN '.MAIN_DB_PREFIX.'facture f ON f.rowid = b.fk_facture AND f.entity = b.entity AND f.entity IN ('.getEntity('facture').') WHERE b.entity IN ('.getEntity('dolistoreextract_order').') ORDER BY b.rowid DESC LIMIT 1') : false;
 if ($resqlLastInvoice && ($obj = $db->fetch_object($resqlLastInvoice))) $lastInvoice = $obj->ref;
 if ($resqlLastInvoice) $db->free($resqlLastInvoice);
 
@@ -172,7 +166,7 @@ print '<td>'.$langs->trans('DateStart').'</td><td>'.$form->selectDate($dateStart
 print '<td>'.$langs->trans('DateEnd').'</td><td>'.$form->selectDate($dateEnd ?: '', 'date_end', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('to')).'</td>';
 print '<td>'.$langs->trans('Product').'</td><td><input type="text" class="flat maxwidth150" name="search_product" value="'.dol_escape_htmltag($searchProduct).'"></td>';
 print '<td>'.$langs->trans('Status').'</td><td>'.$form->selectarray('search_status', $statusOptions, $searchStatus, 1, 0, 0, '', 0, 0, 0, '', 'maxwidth125').'</td>';
-print '<td>'.$langs->trans('Environment').'</td><td>'.$form->multiselectarray('search_entity', $entityOptions, $searchEntity, 0, 0, 'minwidth100 maxwidth200').'</td>';
+if (isModEnabled('multicompany')) print '<td>'.$langs->trans('DolistoreEnvironment').'</td><td>'.$form->multiselectarray('search_entity', $entityOptions, $searchEntity, 0, 0, 'minwidth100 maxwidth200').'</td>';
 print '</tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('DolistoreProductSplitMode').'</td><td>'.$form->selectarray('split_by', array('amount' => $langs->trans('Amount'), 'qty' => $langs->trans('Qty')), $splitBy).'</td><td colspan="8" class="right"><button class="button" type="submit">'.$langs->trans('Search').'</button> <a class="button" href="'.$_SERVER['PHP_SELF'].'">'.$langs->trans('RemoveFilter').'</a></td></tr>';
 print '</table><br>';
@@ -205,22 +199,29 @@ dolistoreextractPrintLineGraph($langs->trans('DolistoreAmountsByMonth'), $langs-
 print '</div></div><br>';
 
 $productOrder = ($splitBy === 'qty') ? 'qty' : 'amount';
-$sql = 'SELECT l.product_label, SUM(l.billable_total_ht) as amount, SUM(l.qty) as qty';
+$productKey = DolistoreProductIdentity::keySql('l');
+$sql = 'SELECT '.$productKey.' AS identity_key, SUM(l.billable_total_ht) as amount, SUM(l.qty) as qty';
 $sql .= ' FROM '.MAIN_DB_PREFIX.'dolistoreextract_order_line as l';
 $sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'dolistoreextract_order as o ON o.rowid = l.fk_order AND o.entity = l.entity';
 $sql .= ' WHERE '.$entityWhereAlias;
-if ($searchProduct !== '') {
-	$sql .= " AND (l.product_label LIKE '%".$db->escape($searchProduct)."%' OR l.product_dolistore_ref LIKE '%".$db->escape($searchProduct)."%')";
-}
-$sql .= ' GROUP BY l.product_label ORDER BY '.$productOrder.' DESC LIMIT 20';
+if ($searchProduct !== '') $sql .= ' AND '.$productIdentity->searchSql('l', $searchProduct);
+$sql .= ' GROUP BY '.$productKey.' ORDER BY '.$productOrder.' DESC, identity_key LIMIT 20';
 $resql = $db->query($sql);
 $productRows = array();
 $productGraphData = array();
 while ($resql && ($obj = $db->fetch_object($resql))) {
 	$productRows[] = $obj;
-	$productGraphData[] = array((string) $obj->product_label, (float) ($splitBy === 'qty' ? $obj->qty : $obj->amount));
+
 }
 if ($resql) $db->free($resql);
+$definitions = $productIdentity->getDefinitions(array_map(static function ($row) { return (string) $row->identity_key; }, $productRows));
+foreach ($productRows as $row) {
+	$row->product_label = $definitions[$row->identity_key]['label'] ?? '';
+	$row->conflict = $definitions[$row->identity_key]['conflict'] ?? false;
+	$productGraphData[] = array($row->product_label, (float) ($splitBy === 'qty' ? $row->qty : $row->amount));
+}
+if ($productIdentity->error !== '') setEventMessages($langs->trans('DolistoreProductReadFailed'), null, 'errors');
+
 
 print '<div class="fichecenter"><div class="fichehalfleft">';
 dolistoreextractPrintPieGraph($langs->trans('DolistoreSalesByProduct'), $productGraphData, 'dolistoreextract_sales_by_product');
@@ -230,7 +231,7 @@ if (empty($productRows)) {
 	dolistoreextractPrintNoRecordLine(3);
 } else {
 	foreach ($productRows as $obj) {
-		print '<tr class="oddeven"><td>'.dol_escape_htmltag($obj->product_label).'</td><td class="right">'.price($obj->amount).'</td><td class="right">'.price($obj->qty).'</td></tr>';
+		print '<tr class="oddeven"><td>'.dol_escape_htmltag($obj->product_label).(!empty($obj->conflict) ? ' '.img_warning($langs->trans('DolistoreProductConflict')) : '').'</td><td class="right">'.price($obj->amount).'</td><td class="right">'.price($obj->qty).'</td></tr>';
 	}
 }
 print '</table>';

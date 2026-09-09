@@ -81,7 +81,7 @@ function dolistorextractResolveMessageId($imap, $id, $uid)
 
 // Load traductions files requiredby by page
 $langs->load("dolistorextract@dolistorextract");
-$langs->load("other");
+$langs->loadLangs(array("other", "companies", "agenda"));
 
 // Get parameters
 $id			= GETPOST('id', 'int');
@@ -105,7 +105,7 @@ if (in_array($action, array('manual_create_service', 'manual_link_service', 'imp
 if (empty($action) && empty($id) && empty($ref)) $action='view';
 
 // Protection if external user
-if ($user->societe_id > 0 || !dolistoreextractUserHasRight($user, 'order', 'read'))
+if (!empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'read'))
 {
 	accessforbidden();
 }
@@ -187,7 +187,7 @@ if (!$imap) {
  * Import des données du message
  */
 if ($action == 'import' || $action == 'importnative') {
-	if (!dolistoreextractUserHasRight($user, 'order', 'import')) {
+	if (!$user->hasRight('dolistorextract', 'order', 'import')) {
 		accessforbidden();
 	}
 	$imap->selectFolder($mailFolder);
@@ -227,11 +227,11 @@ if ($action == 'read') {
 
 	if ($view == 'plain') {
 		print '<pre>';
-		print $email->message->plain;
+		print dol_escape_htmltag($email->message->plain);
 		print '</pre>';
 	}
 	if ($view == 'html') {
-		print $email->message->html;
+		print dol_htmlwithnojs($email->message->html, 1);
 	}
 	$socStatic = new Societe($db);
 	$formMail = new FormMail($db);
@@ -251,13 +251,13 @@ if ($action == 'read') {
 	$searchSoc = $socStatic->fetch('', $invoiceCompany);  // Retourne -2 si on trouve plusieurs Tiers
 
 	if($searchSoc < 0) {
-		print "Erreur recherche client";
+		print $langs->trans('DolistoreCustomerMgmtFailed');
 
 	} else {
-		print 'Client trouvé : '.$socStatic->getNomUrl(1).'<br />';
+		if ($searchSoc > 0 && $user->hasRight('societe', 'lire') && in_array((int) $socStatic->entity, array_map('intval', explode(',', getEntity('societe'))), true)) print $langs->trans('DolistoreCustomerFinal').': '.$socStatic->getNomUrl(1).'<br />';
 	}
 	$listProduct = array();
-	$canManageServices = !empty($user->rights->produit->creer);
+	$canManageServices = $user->hasRight('produit', 'creer');
 	// Service mapping management
 	foreach ($dolistoreMail->items as $product) {
 	    // Save list of products for email message
@@ -308,12 +308,12 @@ if ($action == 'read') {
 				echo '<input type="hidden" name="id" value="' . ((int) $id) . '">';
 				echo '<input type="hidden" name="item_reference" value="' . dol_escape_htmltag((string) $proposal['dolistore_ref']) . '">';
 				echo '<input type="hidden" name="item_name" value="' . dol_escape_htmltag((string) $proposal['dolistore_label']) . '">';
-				echo '<select name="target_service_id">';
+				echo '<select class="flat" id="target_service_id_'.((int) $id).'_'.substr(hash('sha256', (string) $proposal['dolistore_ref']), 0, 12).'" name="target_service_id">';
 				echo '<option value="">' . $langs->trans("DolistoreSelectExistingService") . '</option>';
 				foreach ($proposal['candidates'] as $candidate) {
 					echo '<option value="' . ((int) $candidate['id']) . '">' . dol_escape_htmltag($candidate['ref']) . ' - ' . dol_escape_htmltag($candidate['label']) . '</option>';
 				}
-				echo '</select> ';
+				echo '</select> '.ajax_combobox('target_service_id_'.((int) $id).'_'.substr(hash('sha256', (string) $proposal['dolistore_ref']), 0, 12));
 				echo '<button class="button" type="submit">' . $langs->trans("DolistoreActionLinkService") . '</button>';
 				echo '</form>';
 				echo '</td></tr>';
@@ -324,14 +324,10 @@ if ($action == 'read') {
 	}
 
 	print '<br />';
-	print 'Langue du mail : '.$langEmail;
+	print $langs->trans('DolistorePrivateNoteLangLabel').': '.dol_escape_htmltag($langEmail);
 
 	print '<br /><span class="opacitymedium">'.$langs->trans("DolistoreFinalCustomerEmailObsolete").'</span>';
 
-	print '<strong>Données extraites</strong><br/>';
-	print '<pre>';
-
-	var_dump($dolistoreMail);
 
 	if (!empty($nativeImportLog)) {
 		print '<div class="info">';
@@ -358,11 +354,11 @@ print load_fiche_titre($langs->trans('DolistoreMailsList'));
 $mailArrayFields = array(
 	'folder' => array('label' => 'DolistoreEmailFolder', 'checked' => 1, 'enabled' => 1, 'position' => 10),
 	'date' => array('label' => 'Date', 'checked' => 1, 'enabled' => 1, 'position' => 20),
-	'msgno' => array('label' => 'ID', 'checked' => 1, 'enabled' => 1, 'position' => 30),
+	'msgno' => array('label' => 'Ref', 'checked' => 1, 'enabled' => 1, 'position' => 30),
 	'order_ref' => array('label' => 'DolistoreOrderRef', 'checked' => 1, 'enabled' => 1, 'position' => 40),
 	'lang' => array('label' => 'Language', 'checked' => 1, 'enabled' => 1, 'position' => 50),
 	'company' => array('label' => 'Company', 'checked' => 1, 'enabled' => 1, 'position' => 60),
-	'email' => array('label' => 'EMail', 'checked' => 1, 'enabled' => 1, 'position' => 70),
+	'email' => array('label' => 'Email', 'checked' => 1, 'enabled' => 1, 'position' => 70),
 	'contact' => array('label' => 'Contact', 'checked' => 1, 'enabled' => 1, 'position' => 80),
 	'read_status' => array('label' => 'DolistoreMailReadStatus', 'checked' => 1, 'enabled' => 1, 'position' => 90, 'align' => 'center'),
 );
@@ -462,11 +458,11 @@ print '</tr>';
 print '<tr class="liste_titre">';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'folder')) print '<th>'.$langs->trans('DolistoreEmailFolder').'</th>';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'date')) print '<th>'.$langs->trans('Date').'</th>';
-if (dolistoreextractArrayFieldChecked($mailArrayFields, 'msgno')) print '<th>'.$langs->trans('ID').'</th>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'msgno')) print '<th>'.$langs->trans('Ref').'</th>';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'order_ref')) print '<th>'.$langs->trans('DolistoreOrderRef').'</th>';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'lang')) print '<th>'.$langs->trans('Language').'</th>';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'company')) print '<th>'.$langs->trans('Company').'</th>';
-if (dolistoreextractArrayFieldChecked($mailArrayFields, 'email')) print '<th>'.$langs->trans('EMail').'</th>';
+if (dolistoreextractArrayFieldChecked($mailArrayFields, 'email')) print '<th>'.$langs->trans('Email').'</th>';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'contact')) print '<th>'.$langs->trans('Contact').'</th>';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'read_status')) print '<th class="center">'.$langs->trans('DolistoreMailReadStatus').'</th>';
 print '<th>'.$langs->trans('Actions').'</th>';

@@ -16,7 +16,7 @@ require_once __DIR__.'/../class/dolistorextractCompatibility.class.php';
 
 $langs->loadLangs(array('admin', 'dolistorextract@dolistorextract'));
 
-if (empty($user->admin) && !dolistoreextractUserHasRight($user, 'setup', 'write')) {
+if (empty($user->admin) || !empty($user->socid)) {
 	accessforbidden();
 }
 
@@ -38,7 +38,7 @@ print '<tr class="oddeven"><td>'.$langs->trans('DolistoreCompatibilityDolibarrMi
 print '</table><br>';
 
 print '<table class="noborder centpercent">';
-print '<tr class="liste_titre"><th>'.$langs->trans('Feature').'</th><th>'.$langs->trans('Description').'</th><th>'.$langs->trans('Status').'</th><th>'.$langs->trans('Reason').'</th></tr>';
+print '<tr class="liste_titre"><th>'.$langs->trans('Feature').'</th><th>'.$langs->trans('Description').'</th><th>Dolibarr / PHP</th><th>'.$langs->trans('Status').'</th><th>'.$langs->trans('Reason').'</th></tr>';
 foreach (DolistoreextractCompatibility::getFeatures() as $feature) {
 	$available = !empty($feature['available']);
 	$statusLabel = $langs->trans($available ? 'DolistoreCompatibilityAvailable' : 'DolistoreCompatibilityUnavailable');
@@ -46,6 +46,7 @@ foreach (DolistoreextractCompatibility::getFeatures() as $feature) {
 	print '<tr class="oddeven">';
 	print '<td>'.dol_escape_htmltag($langs->trans($feature['label'])).'</td>';
 	print '<td>'.dol_escape_htmltag($langs->trans($feature['description'])).'</td>';
+	print '<td>'.dol_escape_htmltag($feature['min_dolibarr'].' / '.$feature['min_php']).'</td>';
 	print '<td>'.$statusBadge.'</td>';
 	print '<td>'.($available ? '' : dol_escape_htmltag($langs->trans($feature['reason']))).'</td>';
 	print '</tr>';
