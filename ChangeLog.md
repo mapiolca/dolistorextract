@@ -1,8 +1,11 @@
 # Journal des modifications de DolistoreExtract
 
-## Correctif en préparation — 2026-09-10
+## Correctifs de la version 2.2.0 — 2026-09-10
 
 - Tous les droits fonctionnels du module sont accordés aux administrateurs, conformément à la consigne explicite du projet : menus, pages, API, infobulles, documents, imports, exports et traitements planifiés. Les autres comptes conservent leurs droits granulaires ; les restrictions d’entité, de compte externe, d’activation et de CSRF restent appliquées. Les conditions de menus utilisent le sélecteur natif des utilisateurs internes et une expression acceptée en v20 et v23, sans `empty()` ni `$user->socid` dans la formule. Réactiver le module après déploiement pour renouveler les menus, sans réinitialiser les attributions.
+- Les filtres vides, composés d’espaces ou laissés sur le choix vide natif sont ignorés ; le statut `0` reste filtrable. Les recherches par référence, produit, message et titre Agenda produisent des requêtes valides. Pagination et remise à zéro conservent les filtres indépendants des deux tableaux de commandes.
+- Les tableaux utilisent les composants et conteneurs natifs, sans grand espace réservé sous les commandes non importées. Boutons de recherche, sélection des colonnes et totaux suivent la position des actions configurée dans Dolibarr. L’onglet Fiche conserve uniquement le pictogramme DoliStore.
+- Les cinq sélecteurs de modèles de bienvenue affichent leur libellé traduit et le nom natif de la langue, sans double échappement des accents. Le compteur de mails non lus est traduit et le contrôle des catalogues couvre les clés construites dynamiquement pour les cinq langues. Ces correctifs d’interface ne nécessitent aucune nouvelle migration.
 
 ## Version 2.2.0 — 2026-09-09
 

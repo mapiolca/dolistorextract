@@ -52,6 +52,7 @@ use SSilence\ImapClient\ImapClient as Imap;
 $langs->load('admin');
 $langs->load('categories');
 $langs->load('other');
+$langs->load('languages');
 $langs->load("dolistorextract@dolistorextract");
 
 // Access control
@@ -582,7 +583,7 @@ if ($mode === 'emailsimap') {
 		if ($selected > 0 && !isset($options[$selected])) $field .= '<br>'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateUnavailable', $selected);
 		elseif (!$options) $field .= '<br>'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateMissing', $language);
 		$var = !$var;
-		dolistorextractPrintUpdateRow($bc[$var], $langs->trans('DolistoreWelcomeTemplate'.$suffix), $constant, $field, $setupPageUrl, $mode, $token, $manageLink);
+		dolistorextractPrintUpdateRow($bc[$var], $langs->trans('DolistoreWelcomeTemplate', $langs->transnoentities('Language_'.$language)), $constant, $field, $setupPageUrl, $mode, $token, $manageLink);
 	}
 
 }

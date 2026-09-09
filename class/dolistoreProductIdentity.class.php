@@ -59,7 +59,7 @@ class DolistoreProductIdentity
 	 */
 	public function searchSql(string $alias, string $search): string
 	{
-		$match = natural_search(array('history.product_label', 'history.product_dolistore_ref', 'product.label', 'product.ref'), $search);
+		$match = natural_search(array('history.product_label', 'history.product_dolistore_ref', 'product.label', 'product.ref'), $search, 0, 1);
 		return 'EXISTS (SELECT 1 FROM '.MAIN_DB_PREFIX.'dolistoreextract_order_line history'
 			.' INNER JOIN '.MAIN_DB_PREFIX.'dolistoreextract_order owner ON owner.rowid = history.fk_order AND owner.entity = history.entity'
 			.' LEFT JOIN '.MAIN_DB_PREFIX.'product product ON product.rowid = history.fk_product AND product.entity IN ('.$this->db->sanitize(getEntity('product')).')'

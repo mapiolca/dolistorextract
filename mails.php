@@ -348,9 +348,6 @@ if ($action == 'read') {
 }
 if (!$id) {
 
-
-print load_fiche_titre($langs->trans('DolistoreMailsList'));
-
 $mailArrayFields = array(
 	'folder' => array('label' => 'DolistoreEmailFolder', 'checked' => 1, 'enabled' => 1, 'position' => 10),
 	'date' => array('label' => 'Date', 'checked' => 1, 'enabled' => 1, 'position' => 20),
@@ -363,12 +360,17 @@ $mailArrayFields = array(
 	'read_status' => array('label' => 'DolistoreMailReadStatus', 'checked' => 1, 'enabled' => 1, 'position' => 90, 'align' => 'center'),
 );
 	$selectedFieldsMails = dolistoreextractPrepareSelectedFields($form, $mailsContextPage, 'selectedfields_mails', $mailArrayFields);
-$searchMailFolder = GETPOST('search_mail_folder', 'alphanohtml');
-$searchMailRef = GETPOST('search_mail_ref', 'alphanohtml');
-$searchMailLang = GETPOST('search_mail_lang', 'alphanohtml');
-$searchMailCompany = GETPOST('search_mail_company', 'alphanohtml');
-$searchMailEmail = GETPOST('search_mail_email', 'alphanohtml');
-$searchMailRead = GETPOST('search_mail_read', 'alpha');
+$actionColumnLeft = !empty($conf->main_checkbox_left_column) || getDolGlobalInt('MAIN_CHECKBOX_LEFT_COLUMN');
+$searchMailFolder = trim(GETPOST('search_mail_folder', 'alphanohtml'));
+$searchMailRef = trim(GETPOST('search_mail_ref', 'alphanohtml'));
+$searchMailLang = trim(GETPOST('search_mail_lang', 'alphanohtml'));
+$searchMailCompany = trim(GETPOST('search_mail_company', 'alphanohtml'));
+$searchMailEmail = trim(GETPOST('search_mail_email', 'alphanohtml'));
+$searchMailRead = trim(GETPOST('search_mail_read', 'alpha'));
+if (!in_array($searchMailRead, array('read', 'unread'), true)) $searchMailRead = '';
+if (GETPOSTISSET('button_removefilter') || GETPOSTISSET('button_removefilter_x')) {
+	$searchMailFolder = $searchMailRef = $searchMailLang = $searchMailCompany = $searchMailEmail = $searchMailRead = '';
+}
 
 $emails = $dolistorextractActions->fetchDolistoreEmailsFromConfiguredLocation($imap, false);
 $mailRows = array();
@@ -430,15 +432,17 @@ foreach ($emails as $emailEntry) {
 }
 $overallMessages = count($mailRows);
 
-print '<div class="info">'.$overallMessages.' messages / '. $unreadMessages.' non lus</div>';
+print load_fiche_titre($langs->trans('DolistoreMailsList').' ('.$overallMessages.')', '', 'email');
+print '<div class="opacitymedium">'.$langs->trans('DolistoreMailUnreadCount', $unreadMessages).'</div>';
 
-print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
+print '<form method="POST" id="dolistoremailsfilter" action="'.$_SERVER['PHP_SELF'].'">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="formfilteraction" value="">';
 print '<input type="hidden" name="column_contextpage" value="'.dol_escape_htmltag($mailsContextPage).'">';
 print '<div class="div-table-responsive">';
-print '<table class="liste centpercent">';
+print '<table id="dolistoremails" class="tagtable liste centpercent">';
 print '<tr class="liste_titre_filter">';
+if ($actionColumnLeft) print '<td class="liste_titre center maxwidthsearch">'.$form->showFilterButtons('left').'</td>';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'folder')) print '<td><input type="text" class="flat maxwidth100" name="search_mail_folder" value="'.dol_escape_htmltag($searchMailFolder).'"></td>';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'date')) print '<td></td>';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'msgno')) print '<td></td>';
@@ -448,31 +452,26 @@ if (dolistoreextractArrayFieldChecked($mailArrayFields, 'company')) print '<td><
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'email')) print '<td><input type="text" class="flat maxwidth150" name="search_mail_email" value="'.dol_escape_htmltag($searchMailEmail).'"></td>';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'contact')) print '<td></td>';
 if (dolistoreextractArrayFieldChecked($mailArrayFields, 'read_status')) print '<td>'.$form->selectarray('search_mail_read', array('read' => $langs->trans('DolistoreMailRead'), 'unread' => $langs->trans('DolistoreMailUnread')), $searchMailRead, 1, 0, 0, '', 0, 0, 0, '', 'maxwidth100').'</td>';
-print '<td class="right">';
-print '<button class="liste_titre button_search" type="submit" name="button_search" value="x">'.img_picto($langs->trans('Search'), 'search').'</button> ';
-print '<a class="button button_search" href="'.$_SERVER['PHP_SELF'].'">'.img_picto($langs->trans('RemoveFilter'), 'searchclear').'</a> ';
-print $selectedFieldsMails;
-print '</td>';
+if (!$actionColumnLeft) print '<td class="liste_titre center maxwidthsearch">'.$form->showFilterButtons().'</td>';
 print '</tr>';
 
 print '<tr class="liste_titre">';
-if (dolistoreextractArrayFieldChecked($mailArrayFields, 'folder')) print '<th>'.$langs->trans('DolistoreEmailFolder').'</th>';
-if (dolistoreextractArrayFieldChecked($mailArrayFields, 'date')) print '<th>'.$langs->trans('Date').'</th>';
-if (dolistoreextractArrayFieldChecked($mailArrayFields, 'msgno')) print '<th>'.$langs->trans('Ref').'</th>';
-if (dolistoreextractArrayFieldChecked($mailArrayFields, 'order_ref')) print '<th>'.$langs->trans('DolistoreOrderRef').'</th>';
-if (dolistoreextractArrayFieldChecked($mailArrayFields, 'lang')) print '<th>'.$langs->trans('Language').'</th>';
-if (dolistoreextractArrayFieldChecked($mailArrayFields, 'company')) print '<th>'.$langs->trans('Company').'</th>';
-if (dolistoreextractArrayFieldChecked($mailArrayFields, 'email')) print '<th>'.$langs->trans('Email').'</th>';
-if (dolistoreextractArrayFieldChecked($mailArrayFields, 'contact')) print '<th>'.$langs->trans('Contact').'</th>';
-if (dolistoreextractArrayFieldChecked($mailArrayFields, 'read_status')) print '<th class="center">'.$langs->trans('DolistoreMailReadStatus').'</th>';
-print '<th>'.$langs->trans('Actions').'</th>';
+if ($actionColumnLeft) print_liste_field_titre($selectedFieldsMails, $_SERVER['PHP_SELF'], '', '', '', '', '', '', 'center maxwidthsearch');
+foreach ($mailArrayFields as $field => $definition) {
+	if (dolistoreextractArrayFieldChecked($mailArrayFields, $field)) {
+		print_liste_field_titre($definition['label'], $_SERVER['PHP_SELF'], '', '', '', '', '', '', 'wrapcolumntitle '.($definition['align'] ?? 'left'));
+	}
+}
+if (!$actionColumnLeft) print_liste_field_titre($selectedFieldsMails, $_SERVER['PHP_SELF'], '', '', '', '', '', '', 'center maxwidthsearch');
 print '</tr>';
 
 if (empty($mailRows)) {
 	dolistoreextractPrintNoRecordLine(dolistoreextractVisibleColumnCount($mailArrayFields, 1));
 } else {
 	foreach ($mailRows as $mailRow) {
+		$mailAction = '<td><a href="'.$_SERVER['PHP_SELF'].'?action=read&view=plain&id='.(int) $mailRow['msgno'].'&uid='.(int) $mailRow['uid'].'&folder='.urlencode($mailRow['folder']).'">'.$langs->trans('View').'</a></td>';
 		print '<tr class="oddeven">';
+		if ($actionColumnLeft) print $mailAction;
 		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'folder')) print '<td>'.dol_escape_htmltag($mailRow['folder']).'</td>';
 		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'date')) print '<td>'.dol_escape_htmltag($mailRow['date']).'</td>';
 		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'msgno')) print '<td>'.dol_escape_htmltag($mailRow['order_id']).'</td>';
@@ -482,9 +481,7 @@ if (empty($mailRows)) {
 		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'email')) print '<td>'.dol_escape_htmltag($mailRow['email']).'</td>';
 		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'contact')) print '<td>'.dol_escape_htmltag($mailRow['contact']).'</td>';
 		if (dolistoreextractArrayFieldChecked($mailArrayFields, 'read_status')) print '<td class="center">'.($mailRow['is_unread'] ? $langs->trans('DolistoreMailUnread') : $langs->trans('DolistoreMailRead')).'</td>';
-		print '<td>';
-		print '<a href="'.$_SERVER['PHP_SELF'].'?action=read&view=plain&id=' . ((int) $mailRow['msgno']) . '&uid=' . ((int) $mailRow['uid']) . '&folder=' . urlencode($mailRow['folder']) . '">'.$langs->trans('View').'</a>';
-		print '</td>';
+		if (!$actionColumnLeft) print $mailAction;
 		print '</tr>';
 	}
 }

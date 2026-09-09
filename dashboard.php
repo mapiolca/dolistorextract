@@ -21,14 +21,17 @@ $dateStart = dolistoreextractGetDateFilter('date_start', 'date_start', 0, 0, 0);
 $dateEnd = dolistoreextractGetDateFilter('date_end', 'date_end', 23, 59, 59);
 $dateStartSql = !empty($dateStart) ? dol_print_date($dateStart, '%Y-%m-%d') : '';
 $dateEndSql = !empty($dateEnd) ? dol_print_date($dateEnd, '%Y-%m-%d') : '';
-$searchProduct = GETPOST('search_product', 'alphanohtml');
-$searchStatus = GETPOST('search_status', 'intcomma');
+$searchProduct = trim(GETPOST('search_product', 'alphanohtml'));
+$searchStatus = trim(GETPOST('search_status', 'intcomma'));
+// Native selectarray uses -1 for its empty option; status 0 remains a filter.
+if ($searchStatus === '-1') $searchStatus = '';
 $searchEntity = GETPOST('search_entity', 'array');
 if (!is_array($searchEntity)) $searchEntity = array();
 $splitBy = GETPOST('split_by', 'alpha');
 if (!in_array($splitBy, array('amount', 'qty'), true)) $splitBy = 'amount';
 
 $entityOptions = dolistoreextractGetEntityOptions($db);
+$searchEntity = array_values(array_intersect(array_map('intval', $searchEntity), array_keys($entityOptions)));
 
 $whereOrder = array('entity IN ('.getEntity('dolistoreextract_order').')');
 $whereOrderAlias = array('o.entity IN ('.getEntity('dolistoreextract_order').')');

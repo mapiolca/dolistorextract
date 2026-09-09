@@ -70,7 +70,7 @@ function dolistoreextractOrderPrepareHead($object)
 	$id = (int) $object->id;
 
 	$head[$h][0] = dol_buildpath('/dolistorextract/card.php', 1).'?id='.$id;
-	$head[$h][1] = img_picto('', 'order', 'class="pictofixedwidth"').' '.$langs->trans('DolistoreOrderCard');
+	$head[$h][1] = $langs->trans('DolistoreOrderCard');
 	$head[$h][2] = 'card';
 	$h++;
 
@@ -371,16 +371,18 @@ function dolistoreextractPrintNoRecordLine($colspan)
  * @param array<string,array<string,mixed>> $arrayfields List arrayfields
  * @param array<string,string>              $totals      HTML totals indexed by field key
  * @param int                              $extra        Extra empty columns not declared in arrayfields
+ * @param bool                             $extraLeft    Put action columns before the data columns
  * @return void
  */
-function dolistoreextractPrintTotalRow($arrayfields, $totals, $extra = 0)
+function dolistoreextractPrintTotalRow($arrayfields, $totals, $extra = 0, $extraLeft = false)
 {
 	global $langs;
 
 	print '<tr class="liste_total">';
+	if ($extraLeft) print str_repeat('<td></td>', $extra);
 	$labelPrinted = false;
 	foreach ($arrayfields as $key => $val) {
-		if (empty($val['checked'])) {
+		if (empty($val['checked']) || empty($val['enabled'])) {
 			continue;
 		}
 		$class = !empty($val['align']) ? ' class="'.$val['align'].'"' : '';
@@ -393,7 +395,7 @@ function dolistoreextractPrintTotalRow($arrayfields, $totals, $extra = 0)
 		}
 		print '</td>';
 	}
-	for ($i = 0; $i < $extra; $i++) {
+	for ($i = 0; !$extraLeft && $i < $extra; $i++) {
 		print '<td></td>';
 	}
 	print '</tr>';
