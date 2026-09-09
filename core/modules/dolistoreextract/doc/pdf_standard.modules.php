@@ -70,7 +70,7 @@ class pdf_standard extends ModelePDFDolistoreOrder
 	{
 		global $langs, $mysoc, $user, $conf;
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'order', 'read') || !$user->hasRight('dolistorextract', 'order', 'write')) return 0;
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read')) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'write'))) return 0;
 		if (!is_object($outputlangs)) $outputlangs = $langs;
 		$outputlangs->loadLangs(array('main', 'products', 'dict', 'companies', 'dolistorextract@dolistorextract'));
 		$dir = dolistoreextractGetOrderUploadDir($object);

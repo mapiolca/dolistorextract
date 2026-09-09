@@ -288,7 +288,7 @@ class DolistoreOrderLine extends CommonObject
 		global $langs;
 		$langs->loadLangs(array('main', 'dolistorextract@dolistorextract'));
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| (!$user->hasRight('dolistorextract', 'order', 'write') && !$user->hasRight('dolistorextract', 'order', 'import'))) {
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'write') && !$user->hasRight('dolistorextract', 'order', 'import'))) {
 			$this->error = $langs->trans('NotEnoughPermissions'); return -1;
 		}
 		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE rowid = '.(int) $this->fk_order

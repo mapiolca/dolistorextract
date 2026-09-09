@@ -354,7 +354,9 @@ class DolistoreOrder extends CommonObject
 		global $langs;
 		$langs->loadLangs(array('main', 'dolistorextract@dolistorextract'));
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| (!$user->hasRight('dolistorextract', 'order', 'write') && !$user->hasRight('dolistorextract', 'order', 'import') && !(($this->context['trigger_reason'] ?? '') === 'invoice_link' && $user->hasRight('dolistorextract', 'invoice', 'generate')))
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'write')
+				&& !$user->hasRight('dolistorextract', 'order', 'import')
+				&& !(($this->context['trigger_reason'] ?? '') === 'invoice_link' && $user->hasRight('dolistorextract', 'invoice', 'generate')))
 			|| !in_array((int) $this->entity, array_map('intval', explode(',', getEntity($this->element))), true)) {
 			$this->error = $langs->trans('DolistoreWelcomeAccessDenied');
 			return -1;
@@ -392,7 +394,7 @@ class DolistoreOrder extends CommonObject
 	public function delete($user, $notrigger = 0)
 	{
 		global $langs;
-		if (!isModEnabled('dolistorextract') || !empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'delete') || $this->fetch((int) $this->id) <= 0) {
+		if (!isModEnabled('dolistorextract') || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'delete')) || $this->fetch((int) $this->id) <= 0) {
 			$this->error = $langs->trans('NotEnoughPermissions'); return -1;
 		}
 		require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
@@ -462,7 +464,7 @@ class DolistoreOrder extends CommonObject
 	public function completePurchaseImport($user, string $lang, array $buyerData): int
 	{
 		global $langs;
-		if (!$user->hasRight('dolistorextract', 'order', 'import') || !empty($user->socid) || $this->db->transaction_opened <= 0 || (int) $this->id <= 0) {
+		if (!isModEnabled('dolistorextract') || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'import')) || !empty($user->socid) || $this->db->transaction_opened <= 0 || (int) $this->id <= 0) {
 			$this->error = $langs->trans('DolistoreWelcomeAccessDenied');
 			return -1;
 		}
@@ -535,7 +537,7 @@ class DolistoreOrder extends CommonObject
 	{
 		global $user, $langs, $conf;
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'order', 'read') || !$user->hasRight('dolistorextract', 'order', 'write')
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read')) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'write'))
 			|| !in_array((int) $this->entity, array_map('intval', explode(',', getEntity($this->element))), true)) {
 			$this->error = $langs->trans('NotEnoughPermissions');
 			return -1;
@@ -620,7 +622,7 @@ class DolistoreOrder extends CommonObject
 	public function markAsInvoiced($fkFacture, $invoiceDate, $user, $notrigger = 0)
 	{
 		global $langs;
-		if (!$user->hasRight('dolistorextract', 'invoice', 'generate') || !empty($user->socid) || $this->fetch((int) $this->id) <= 0 || !$this->isInvoiceable()) {
+		if (!isModEnabled('dolistorextract') || (empty($user->admin) && !$user->hasRight('dolistorextract', 'invoice', 'generate')) || !empty($user->socid) || $this->fetch((int) $this->id) <= 0 || !$this->isInvoiceable()) {
 			$this->error = $langs->trans('NotEnoughPermissions');
 			return -1;
 		}
@@ -766,7 +768,7 @@ class DolistoreOrder extends CommonObject
 			return $result;
 		}
 		global $user;
-		if (!isModEnabled('invoice') || !$user->hasRight('facture', 'lire')) {
+		if (!isModEnabled('facture') || (empty($user->admin) && !$user->hasRight('facture', 'lire'))) {
 			return $result;
 		}
 		if (empty($loadalsoobjects) || (!is_numeric($loadalsoobjects) && $loadalsoobjects !== 'facture')) {
@@ -803,7 +805,7 @@ class DolistoreOrder extends CommonObject
 		global $conf, $user;
 
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'order', 'read')
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))
 			|| !in_array((int) $this->entity, array_map('intval', explode(',', getEntity($this->table_element))), true)) {
 			return '';
 		}
@@ -841,7 +843,7 @@ class DolistoreOrder extends CommonObject
 	{
 		global $langs, $user;
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'order', 'read')
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))
 			|| !in_array((int) $this->entity, array_map('intval', explode(',', getEntity($this->table_element))), true)) {
 			return array();
 		}

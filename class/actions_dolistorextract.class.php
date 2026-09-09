@@ -254,9 +254,9 @@ class ActionsDolistorextract
 		if (($parameters['elementtype'] ?? '') !== 'dolistoreextract_order@dolistorextract') return 0;
 		$this->resprints = '';
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'order', 'read') || !$user->hasRight('agenda', 'myactions', 'read')) {
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read')) || (!isModEnabled('agenda') || (empty($user->admin) && !$user->hasRight('agenda', 'myactions', 'read')))) {
 			$this->resprints = ' AND 1 = 0';
-		} elseif (!$user->hasRight('agenda', 'allactions', 'read')) {
+		} elseif ((!isModEnabled('agenda') || (empty($user->admin) && !$user->hasRight('agenda', 'allactions', 'read')))) {
 			$this->resprints = ' AND (a.fk_user_action = '.(int) $user->id.' OR EXISTS (SELECT 1 FROM '.MAIN_DB_PREFIX."actioncomm_resources ar WHERE ar.fk_actioncomm = a.id AND ar.element_type = 'user' AND ar.fk_element = ".(int) $user->id.'))';
 		}
 		return 0;
@@ -277,8 +277,8 @@ class ActionsDolistorextract
 		if (!in_array($parameters['modulepart'] ?? '', array('dolistorextract', 'dolistoreextract'), true)) return 0;
 		$actor = $parameters['fuser'] ?? null;
 		if (!isModEnabled('dolistorextract') || !is_object($actor) || !empty($actor->socid)
-			|| !$actor->hasRight('dolistorextract', 'order', 'read')) accessforbidden();
-		if (($parameters['mode'] ?? 'read') !== 'read' && !$actor->hasRight('dolistorextract', 'order', 'write')) accessforbidden();
+			|| (empty($actor->admin) && !$actor->hasRight('dolistorextract', 'order', 'read'))) accessforbidden();
+		if (($parameters['mode'] ?? 'read') !== 'read' && (empty($actor->admin) && !$actor->hasRight('dolistorextract', 'order', 'write'))) accessforbidden();
 		$entity = (int) ($parameters['entity'] ?? 0);
 		$base = $conf->dolistorextract->multidir_output[$entity] ?? '';
 		$path = (string) ($parameters['original_file'] ?? '');
@@ -322,7 +322,7 @@ class ActionsDolistorextract
 		}
 		$this->results = array('result' => 0);
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'order', 'read')) return 1;
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))) return 1;
 		$id = $parameters['objectid'] ?? 0;
 		if (!ctype_digit((string) $id) || (int) $id <= 0) return 1;
 		require_once __DIR__.'/dolistoreOrder.class.php';
@@ -405,7 +405,7 @@ class ActionsDolistorextract
 	public function newCustomerFromDatas(User $user, dolistoreMail $dolistoreMail) : int
 	{
 		global $conf, $langs;
-		if (!empty($user->socid) || !$user->hasRight('societe', 'creer')) return -1;
+		if (!empty($user->socid) || (!isModEnabled('societe') || (empty($user->admin) && !$user->hasRight('societe', 'creer')))) return -1;
 
 		$socStatic = new Societe($this->db);
 
@@ -1070,7 +1070,7 @@ class ActionsDolistorextract
 			return -1;
 		}
 		$user->getrights();
-		if (!isModEnabled('dolistorextract') || !empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'import')) {
+		if (!isModEnabled('dolistorextract') || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'import'))) {
 			$this->error = $langs->trans('DolistoreWelcomeAccessDenied');
 			return -1;
 		}
@@ -1687,7 +1687,7 @@ class ActionsDolistorextract
 			'message_key' => 'DolistoreServiceManualCreateError'
 		);
 
-		if (!$user->hasRight('produit', 'creer')) {
+		if ((!isModEnabled('product') || (empty($user->admin) && !$user->hasRight('produit', 'creer')))) {
 			$result['code'] = 'permission_denied';
 			$result['message_key'] = 'DolistoreServiceManualCreateDenied';
 			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateDenied") . '</span>';
@@ -1792,7 +1792,7 @@ class ActionsDolistorextract
 			'message_key' => 'DolistoreServiceManualLinkError'
 		);
 
-		if (!$user->hasRight('produit', 'creer')) {
+		if ((!isModEnabled('product') || (empty($user->admin) && !$user->hasRight('produit', 'creer')))) {
 			$result['code'] = 'permission_denied';
 			$result['message_key'] = 'DolistoreServiceManualLinkDenied';
 			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkDenied") . '</span>';
@@ -2049,7 +2049,7 @@ class ActionsDolistorextract
 	private function getOrCreateCustomer(User $user, array $buyerData): int
 	{
 		global $langs;
-		if (!empty($user->socid) || !$user->hasRight('societe', 'lire')) return -1;
+		if (!empty($user->socid) || (!isModEnabled('societe') || (empty($user->admin) && !$user->hasRight('societe', 'lire')))) return -1;
 		$company = new Societe($this->db);
 		$companyId = 0;
 
@@ -2146,7 +2146,7 @@ class ActionsDolistorextract
 				$contact->firstname = $buyerData['buyer_firstname'];
 				$contact->email     = $buyerData['buyer_email'];
 
-				$result = $user->hasRight('societe', 'contact', 'creer') ? $contact->create($user) : -1;
+				$result = (isModEnabled('societe') && (!empty($user->admin) || $user->hasRight('societe', 'contact', 'creer'))) ? $contact->create($user) : -1;
 				if ($result < 0) {
 					$this->logOutput .= '<br/>-> <span class="error">'.$langs->trans("DolistoreContactCreationError").'</span>';
 				} else {
@@ -2311,9 +2311,9 @@ class ActionsDolistorextract
 		$langs->loadLangs(array('main', 'agenda', 'bills', 'dolistorextract@dolistorextract'));
 
 		if (!isModEnabled('dolistorextract') || !isModEnabled('facture') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'invoice', 'generate') || !$user->hasRight('facture', 'creer')
-			|| !$user->hasRight('societe', 'lire')
-			|| (getDolGlobalString('DOLISTOREXTRACT_INVOICE_STATUS') === 'validated' && !$user->hasRight('facture', 'valider'))) {
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'invoice', 'generate')) || (!isModEnabled('facture') || (empty($user->admin) && !$user->hasRight('facture', 'creer')))
+			|| (!isModEnabled('societe') || (empty($user->admin) && !$user->hasRight('societe', 'lire')))
+			|| (getDolGlobalString('DOLISTOREXTRACT_INVOICE_STATUS') === 'validated' && (!isModEnabled('facture') || (empty($user->admin) && !$user->hasRight('facture', 'valider'))))) {
 			$this->error = $langs->trans('NotEnoughPermissions'); return -1;
 		}
 

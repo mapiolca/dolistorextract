@@ -93,7 +93,7 @@ function dolistoreextractOrderPrepareHead($object)
 	$head[$h][2] = 'documents';
 	$h++;
 
-	if (isModEnabled('agenda') && $user->hasRight('agenda', 'myactions', 'read')) {
+	if (isModEnabled('agenda') && (!empty($user->admin) || $user->hasRight('agenda', 'myactions', 'read'))) {
 		$head[$h][0] = dol_buildpath('/dolistorextract/agenda.php', 1).'?id='.$id;
 		$head[$h][1] = $langs->trans('Module2400Name');
 		$head[$h][2] = 'agenda';

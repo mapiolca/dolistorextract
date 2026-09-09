@@ -13,7 +13,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/dolgraph.class.php';
 
 $langs->loadLangs(array('dolistorextract@dolistorextract', 'bills', 'products', 'orders'));
-if (!isModEnabled('dolistorextract') || !empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'read')) accessforbidden();
+if (!isModEnabled('dolistorextract') || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))) accessforbidden();
 
 $form = new Form($db);
 $productIdentity = new DolistoreProductIdentity($db);
@@ -142,7 +142,7 @@ $amountInvoiceable = dolistoreextractScalar($db, 'SELECT SUM(billable_total_ht) 
 $waitingRelease = dolistoreextractScalar($db, 'SELECT COUNT(rowid) as v FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere.' AND status = '.DolistoreOrder::STATUS_WAITING_RELEASE);
 $errors = dolistoreextractScalar($db, 'SELECT COUNT(rowid) as v FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE '.$entityWhere.' AND status = '.DolistoreOrder::STATUS_ERROR);
 $lastInvoice = '';
-$resqlLastInvoice = $user->hasRight('facture', 'lire') ? $db->query('SELECT f.ref FROM '.MAIN_DB_PREFIX.'dolistoreextract_invoice_batch b INNER JOIN '.MAIN_DB_PREFIX.'facture f ON f.rowid = b.fk_facture AND f.entity = b.entity AND f.entity IN ('.getEntity('facture').') WHERE b.entity IN ('.getEntity('dolistoreextract_order').') ORDER BY b.rowid DESC LIMIT 1') : false;
+$resqlLastInvoice = (isModEnabled('facture') && (!empty($user->admin) || $user->hasRight('facture', 'lire'))) ? $db->query('SELECT f.ref FROM '.MAIN_DB_PREFIX.'dolistoreextract_invoice_batch b INNER JOIN '.MAIN_DB_PREFIX.'facture f ON f.rowid = b.fk_facture AND f.entity = b.entity AND f.entity IN ('.getEntity('facture').') WHERE b.entity IN ('.getEntity('dolistoreextract_order').') ORDER BY b.rowid DESC LIMIT 1') : false;
 if ($resqlLastInvoice && ($obj = $db->fetch_object($resqlLastInvoice))) $lastInvoice = $obj->ref;
 if ($resqlLastInvoice) $db->free($resqlLastInvoice);
 

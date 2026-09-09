@@ -47,7 +47,8 @@ $db = new NativeTestDB();
 $hookmanager = new HookManager($db);
 class NativeTestUser extends User {
 	public $testAllowed = true;
-	public function hasRight($module, $level1, $level2 = null) { return $this->testAllowed; }
+	public $testPermissions = array();
+	public function hasRight($module, $level1, $level2 = null) { return $this->testPermissions[implode('.', array($module, $level1, $level2))] ?? $this->testAllowed; }
 }
 $user = new NativeTestUser($db);
 $user->login = 'test'; $user->email = 'actor@example.invalid'; $user->signature = ''; $user->civility_code = '';
@@ -214,9 +215,12 @@ $parameters = array('features'=>'dolistorextract','tableandshare'=>'dolistoreext
 $action = ''; $unused = null;
 $access->restrictedArea($parameters, $unused, $action, $hookmanager);
 verifyNative($access->results['result'] === 1, 'Native access hook accepts authorized order');
-$user->testAllowed = false; $user->admin = 1;
+$user->testAllowed = false; $user->admin = 0;
 $access->restrictedArea($parameters, $unused, $action, $hookmanager);
-verifyNative($access->results['result'] === 0 && $sampleOrder->getNomUrl(1) === '' && $sampleOrder->getTooltipContentArray(array()) === array(), 'Administrator without functional rights denied');
+verifyNative($access->results['result'] === 0 && $sampleOrder->getNomUrl(1) === '' && $sampleOrder->getTooltipContentArray(array()) === array(), 'Standard user without rights denied');
+$user->admin = 1;
+$access->restrictedArea($parameters, $unused, $action, $hookmanager);
+verifyNative($access->results['result'] === 1 && $sampleOrder->getNomUrl(1) !== '' && $sampleOrder->getTooltipContentArray(array()) !== array(), 'Administrator without individual rights can read links and Ajax tooltip');
 $user->testAllowed = true; $user->socid = 12;
 $access->restrictedArea($parameters, $unused, $action, $hookmanager);
 verifyNative($access->results['result'] === 0, 'External user denied by native access hook');

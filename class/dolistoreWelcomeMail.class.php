@@ -41,7 +41,7 @@ class DolistoreWelcomeMail
 			|| ($order->context['trigger_reason'] ?? '') !== 'purchase_import_complete') {
 			return 0;
 		}
-		if (!empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'import')
+		if (!empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'import'))
 			|| $this->db->transaction_opened <= 0 || (int) $order->id <= 0 || (int) $order->entity !== (int) $conf->entity) {
 			$this->error = 'DolistoreWelcomeAccessDenied';
 			return -1;
@@ -82,7 +82,7 @@ class DolistoreWelcomeMail
 		if (!isModEnabled('dolistorextract') || getDolGlobalInt('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU')) {
 			return 0;
 		}
-		if (!empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'import') || $this->db->transaction_opened > 0) {
+		if (!empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'import')) || $this->db->transaction_opened > 0) {
 			$this->error = $langs->trans('DolistoreWelcomeAccessDenied');
 			return -1;
 		}
@@ -269,7 +269,7 @@ class DolistoreWelcomeMail
 	public function retry(int $orderId, $user, bool $verifiedUnsent = false): int
 	{
 		global $conf, $langs;
-		if (!isModEnabled('dolistorextract') || getDolGlobalInt('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU') || $this->db->transaction_opened > 0 || !empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'import')) {
+		if (!isModEnabled('dolistorextract') || getDolGlobalInt('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU') || $this->db->transaction_opened > 0 || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'import'))) {
 			$this->error = $langs->trans('DolistoreWelcomeAccessDenied');
 			return -1;
 		}

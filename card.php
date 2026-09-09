@@ -17,7 +17,7 @@ require_once __DIR__.'/lib/dolistoreextract.lib.php';
 
 $langs->loadLangs(array('dolistorextract@dolistorextract', 'agenda', 'bills', 'companies', 'products'));
 
-if (!isModEnabled('dolistorextract') || !empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'read')) {
+if (!isModEnabled('dolistorextract') || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))) {
 	accessforbidden();
 }
 
@@ -31,7 +31,7 @@ if ($id <= 0 || $object->fetch($id) <= 0) {
 
 $welcome = new DolistoreWelcomeMail($db);
 if ($action === 'confirm_retry_welcome' && GETPOST('confirm', 'alpha') === 'yes') {
-	if (!$user->hasRight('dolistorextract', 'order', 'import') || (int) $object->entity !== (int) $conf->entity) {
+	if ((empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'import')) || (int) $object->entity !== (int) $conf->entity) {
 		accessforbidden();
 	}
 	$result = $welcome->retry((int) $object->id, $user, GETPOSTINT('verified_unsent') === 1);
@@ -41,7 +41,7 @@ if ($action === 'confirm_retry_welcome' && GETPOST('confirm', 'alpha') === 'yes'
 }
 $welcomeStatus = $welcome->getStatus((int) $object->id);
 
-if ($action === 'confirm_delete' && GETPOST('confirm', 'alpha') === 'yes' && $user->hasRight('dolistorextract', 'order', 'delete')) {
+if ($action === 'confirm_delete' && GETPOST('confirm', 'alpha') === 'yes' && (!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'delete'))) {
 	if (GETPOST('token', 'alphanohtml') === '') {
 		accessforbidden('Invalid token');
 	}
@@ -57,9 +57,9 @@ $documentContext = dolistoreextractGetOrderDocumentContext($object);
 $uploadDir = $documentContext['upload_dir'];
 if ($uploadDir === '') accessforbidden($object->error);
 $upload_dir = $uploadDir;
-$permissiontoadd = $user->hasRight('dolistorextract', 'order', 'write');
-$permissiontodelete = $user->hasRight('dolistorextract', 'order', 'delete');
-$usercangeneretedoc = $user->hasRight('dolistorextract', 'order', 'write');
+$permissiontoadd = (!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'write'));
+$permissiontodelete = (!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'delete'));
+$usercangeneretedoc = (!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'write'));
 $usercangeneratedoc = $usercangeneretedoc;
 $modelselected = !empty($object->model_pdf) ? $object->model_pdf : getDolGlobalString('DOLISTOREXTRACT_ORDER_ADDON_PDF', 'standard');
 include DOL_DOCUMENT_ROOT.'/core/actions_builddoc.inc.php';
@@ -70,7 +70,7 @@ $formactions = new FormActions($db);
 
 $customerThirdparty = null;
 $customerHtml = dol_escape_htmltag($object->customer_name);
-if (!empty($object->fk_soc_customer) && $user->hasRight('societe', 'lire')) {
+if (!empty($object->fk_soc_customer) && (isModEnabled('societe') && (!empty($user->admin) || $user->hasRight('societe', 'lire')))) {
 	$customerThirdparty = new Societe($db);
 	if ($customerThirdparty->fetch((int) $object->fk_soc_customer) > 0 && in_array((int) $customerThirdparty->entity, array_map('intval', explode(',', getEntity('societe'))), true)) {
 		$object->socid = (int) $customerThirdparty->id;
@@ -83,9 +83,9 @@ $entityOptions = dolistoreextractGetEntityOptions($db);
 $entityLabel = $entityOptions[(int) $object->entity] ?? '';
 
 llxHeader('', $langs->trans('DolistoreOrder'));
-if ($action === 'delete' && $user->hasRight('dolistorextract', 'order', 'delete')) print $form->formconfirm($_SERVER['PHP_SELF'].'?id='.(int) $object->id, $langs->trans('Delete'), $langs->trans('ConfirmDeleteObject'), 'confirm_delete', '', 'no', 1);
+if ($action === 'delete' && (!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'delete'))) print $form->formconfirm($_SERVER['PHP_SELF'].'?id='.(int) $object->id, $langs->trans('Delete'), $langs->trans('ConfirmDeleteObject'), 'confirm_delete', '', 'no', 1);
 
-if ($action === 'retry_welcome' && $user->hasRight('dolistorextract', 'order', 'import') && is_array($welcomeStatus)) {
+if ($action === 'retry_welcome' && (!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'import')) && is_array($welcomeStatus)) {
 	$uncertain = $welcomeStatus['status'] === 'uncertain';
 	print $form->formconfirm($_SERVER['PHP_SELF'].'?id='.(int) $object->id, $langs->trans('DolistoreWelcomeRetry'), $langs->trans($uncertain ? 'DolistoreWelcomeConfirmUnsent' : 'DolistoreWelcomeConfirmRetry'), 'confirm_retry_welcome', array(array('type' => 'hidden', 'name' => 'verified_unsent', 'value' => $uncertain ? 1 : 0)), 'no', 1);
 }
@@ -173,11 +173,11 @@ print dol_get_fiche_end();
 
 print '<div class="tabsAction">';
 if (is_array($welcomeStatus) && in_array($welcomeStatus['status'], array('failed', 'uncertain'), true)
-	&& $user->hasRight('dolistorextract', 'order', 'import') && (int) $object->entity === (int) $conf->entity
+	&& (!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'import')) && (int) $object->entity === (int) $conf->entity
 	&& !getDolGlobalInt('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU')) {
 	print '<a class="butAction" href="'.$_SERVER['PHP_SELF'].'?id='.(int) $object->id.'&action=retry_welcome&token='.newToken().'">'.$langs->trans('DolistoreWelcomeRetry').'</a>';
 }
-if ($user->hasRight('dolistorextract', 'order', 'delete')) {
+if ((!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'delete'))) {
 	print '<a class="butActionDelete" href="'.$_SERVER['PHP_SELF'].'?id='.(int) $object->id.'&action=delete&token='.newToken().'">'.$langs->trans('Delete').'</a>';
 }
 print '</div>';
@@ -187,12 +187,12 @@ print '<div class="fichecenter">';
 print '<div class="fichehalfleft">';
 print '<a name="builddoc"></a>';
 $urlsource = $_SERVER['PHP_SELF'].'?id='.(int) $object->id;
-print $formfile->showdocuments($documentContext['modulepart_card'], $documentContext['modulesubdir'], $uploadDir, $urlsource, $usercangeneratedoc, $user->hasRight('dolistorextract', 'order', 'delete'), $modelselected, 1, 0, 0, 0, 0, '', '', '', $langs->defaultlang, '', $object);
+print $formfile->showdocuments($documentContext['modulepart_card'], $documentContext['modulesubdir'], $uploadDir, $urlsource, $usercangeneratedoc, (!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'delete')), $modelselected, 1, 0, 0, 0, 0, '', '', '', $langs->defaultlang, '', $object);
 print '<br>';
 $form->showLinkedObjectBlock($object);
 print '</div>';
 print '<div class="fichehalfright">';
-if (isModEnabled('agenda') && $user->hasRight('agenda', 'myactions', 'read')) {
+if (isModEnabled('agenda') && (!empty($user->admin) || $user->hasRight('agenda', 'myactions', 'read'))) {
 	$MAXEVENT = 10;
 	$morehtmlcenter = '';
 	$formactions->showactions($object, 'dolistoreextract_order@dolistorextract', 0, 1, '', $MAXEVENT, '', $morehtmlcenter);

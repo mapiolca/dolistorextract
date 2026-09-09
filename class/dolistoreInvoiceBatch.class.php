@@ -231,7 +231,7 @@ class DolistoreInvoiceBatch extends CommonObject
 		global $conf, $langs;
 		$langs->load('dolistorextract@dolistorextract');
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'invoice', 'generate') || (int) $this->entity !== (int) $conf->entity) {
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'invoice', 'generate')) || (int) $this->entity !== (int) $conf->entity) {
 			$this->error = $langs->trans('NotEnoughPermissions'); return false;
 		}
 		if ((int) $this->period_year < 1 || (int) $this->period_month < 1 || (int) $this->period_month > 12

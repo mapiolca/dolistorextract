@@ -15,7 +15,7 @@ require_once __DIR__.'/lib/dolistoreextract.lib.php';
 
 $langs->loadLangs(array('dolistorextract@dolistorextract', 'companies', 'other'));
 
-if (!isModEnabled('dolistorextract') || !empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'read')) {
+if (!isModEnabled('dolistorextract') || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))) {
 	accessforbidden();
 }
 
@@ -40,8 +40,8 @@ $documentContext = dolistoreextractGetOrderDocumentContext($object);
 $upload_dir = $documentContext['upload_dir'];
 if ($upload_dir === '') accessforbidden($object->error);
 $modulepart = $documentContext['modulepart_files'];
-$permissiontoadd = $user->hasRight('dolistorextract', 'order', 'write');
-$permissiontodelete = $user->hasRight('dolistorextract', 'order', 'delete');
+$permissiontoadd = (!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'write'));
+$permissiontodelete = (!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'delete'));
 $permtoedit = $permissiontoadd;
 if (in_array($action, array('remove_file', 'confirm_deletefile', 'deletefile', 'confirm_delete', 'delete'), true) && !$permissiontodelete) accessforbidden();
 $relativepathwithnofile = $documentContext['modulesubdir'];

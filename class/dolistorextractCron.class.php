@@ -110,7 +110,7 @@ class dolistorextractCron
 			return -1;
 		}
 		$user->getrights();
-		if (!empty($user->socid) || !$user->hasRight('dolistorextract', 'invoice', 'generate')) {
+		if (!empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'invoice', 'generate'))) {
 			$this->output .= $langs->trans('NotEnoughPermissions');
 			return -1;
 		}
@@ -173,7 +173,7 @@ class dolistorextractCron
 			return -1;
 		}
 		$user->getrights();
-		if (!empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'import')) {
+		if (!empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'import'))) {
 			$this->output = $langs->trans('NotEnoughPermissions');
 			return -1;
 		}

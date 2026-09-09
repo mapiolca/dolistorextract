@@ -1,5 +1,9 @@
 # Journal des modifications de DolistoreExtract
 
+## Correctif en préparation — 2026-09-10
+
+- Tous les droits fonctionnels du module sont accordés aux administrateurs, conformément à la consigne explicite du projet : menus, pages, API, infobulles, documents, imports, exports et traitements planifiés. Les autres comptes conservent leurs droits granulaires ; les restrictions d’entité, de compte externe, d’activation et de CSRF restent appliquées. Les conditions de menus utilisent le sélecteur natif des utilisateurs internes et une expression acceptée en v20 et v23, sans `empty()` ni `$user->socid` dans la formule. Réactiver le module après déploiement pour renouveler les menus, sans réinitialiser les attributions.
+
 ## Version 2.2.0 — 2026-09-09
 
 - Rétablissement de la bienvenue pour chaque nouvel achat importé : cinq modèles natifs FR/EN/ES/IT/DE conformes au modèle français fourni, file transactionnelle unique, envoi après commit, suivi fiche/journal/API et travail natif toutes les 15 minutes. Trois reprises à 1 h, 6 h et 24 h après un échec certain ; vérification manuelle obligatoire avant reprise d’un résultat incertain. Aucun rattrapage historique ni renvoi au réimport.

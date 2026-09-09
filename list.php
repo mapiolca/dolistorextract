@@ -30,7 +30,7 @@ $langs->loadLangs(array('dolistorextract@dolistorextract', 'bills', 'companies',
 if (!isModEnabled('dolistorextract')) {
 	accessforbidden();
 }
-if (!empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'read')) {
+if (!empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))) {
 	accessforbidden();
 }
 
@@ -442,7 +442,7 @@ if ($orderRows) {
 		$rowCount++;
 
 		$invoiceLink = '';
-		if (!empty($obj->invoice_ref) && $user->hasRight('facture', 'lire')) {
+		if (!empty($obj->invoice_ref) && (isModEnabled('facture') && (!empty($user->admin) || $user->hasRight('facture', 'lire')))) {
 			$invoice = new Facture($db);
 			$invoice->id = (int) $obj->fk_facture;
 			$invoice->ref = (string) $obj->invoice_ref;

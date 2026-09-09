@@ -34,6 +34,8 @@ include_once DOL_DOCUMENT_ROOT .'/core/modules/DolibarrModules.class.php';
  */
 class modDolistorextract extends DolibarrModules
 {
+	/** @var string Module license, also displayed on the About page. */
+	public $license;
 	/** @var array<string,bool> Existing constants in the current entity. */
 	private $configuredConstants = array();
 	/**
@@ -303,6 +305,8 @@ class modDolistorextract extends DolibarrModules
 		//							'user'=>2);				                // 0=Menu for internal users, 1=external users, 2=both
 		// $r++;
 
+		// Native user=0 excludes external users; the v23 evaluator rejects
+		// empty() and $user->socid inside permission expressions.
 		$this->menu[$r] = array(
 			'fk_menu' => 'fk_mainmenu=commercial',
 			'type' => 'left',
@@ -314,7 +318,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'dolistorextract@dolistorextract',
 			'position' => 100,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => 'empty($user->socid) && $user->hasRight("dolistorextract", "order", "read")',
+			'perms' => '$user->admin || $user->hasRight("dolistorextract", "order", "read")',
 			'target' => '',
 			'user' => 0
 		);
@@ -330,7 +334,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'dolistorextract@dolistorextract',
 			'position' => 101,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => 'empty($user->socid) && $user->hasRight("dolistorextract", "order", "read")',
+			'perms' => '$user->admin || $user->hasRight("dolistorextract", "order", "read")',
 			'target' => '',
 			'user' => 0
 		);
@@ -346,7 +350,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'dolistorextract@dolistorextract',
 			'position' => 102,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => 'empty($user->socid) && $user->hasRight("dolistorextract", "order", "read")',
+			'perms' => '$user->admin || $user->hasRight("dolistorextract", "order", "read")',
 			'target' => '',
 			'user' => 0
 		);
@@ -362,7 +366,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'dolistorextract@dolistorextract',
 			'position' => 103,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => 'empty($user->socid) && $user->hasRight("dolistorextract", "invoice", "generate")',
+			'perms' => '$user->admin || $user->hasRight("dolistorextract", "invoice", "generate")',
 			'target' => '',
 			'user' => 0
 		);
@@ -378,7 +382,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'dolistorextract@dolistorextract',
 			'position' => 104,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => 'empty($user->socid) && $user->hasRight("dolistorextract", "order", "read")',
+			'perms' => '$user->admin || $user->hasRight("dolistorextract", "order", "read")',
 			'target' => '',
 			'user' => 0
 		);
@@ -394,7 +398,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'admin',
 			'position' => 105,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => '$user->admin && empty($user->socid)',
+			'perms' => '$user->admin',
 			'target' => '',
 			'user' => 0
 		);
@@ -421,8 +425,10 @@ class modDolistorextract extends DolibarrModules
 			// $r++;
 			$this->export_code[$r] = $this->rights_class.'_orders';
 			$this->export_label[$r] = 'DolistoreOrders';
-			$this->export_enabled[$r] = 'isModEnabled("dolistorextract")';
-			$this->export_permission[$r] = array(array('dolistorextract', 'order', 'export'));
+			$this->export_enabled[$r] = empty($user->socid) ? 'isModEnabled("dolistorextract")' : '0';
+			// Administrators have every module permission (explicit project policy).
+			$this->export_permission[$r] = !empty($user->admin) && empty($user->socid)
+				? array() : array(array('dolistorextract', 'order', 'export'));
 			$this->export_fields_array[$r] = array(
 				'o.rowid' => 'Id',
 				'o.entity' => 'Entity',
@@ -479,7 +485,7 @@ class modDolistorextract extends DolibarrModules
 			);
 			$this->export_sql_start[$r] = 'SELECT DISTINCT ';
 			$this->export_sql_end[$r] = ' FROM '.MAIN_DB_PREFIX.'dolistoreextract_order as o';
-			$this->export_sql_end[$r] .= ' LEFT JOIN '.MAIN_DB_PREFIX.'facture as f ON f.rowid = o.fk_facture AND f.entity IN ('.$this->db->sanitize(getEntity('facture')).')'.(is_object($user) && $user->hasRight('facture', 'lire') ? '' : ' AND 1 = 0');
+			$this->export_sql_end[$r] .= ' LEFT JOIN '.MAIN_DB_PREFIX.'facture as f ON f.rowid = o.fk_facture AND f.entity IN ('.$this->db->sanitize(getEntity('facture')).')'.(is_object($user) && (isModEnabled('facture') && (!empty($user->admin) || $user->hasRight('facture', 'lire'))) ? '' : ' AND 1 = 0');
 			$this->export_sql_end[$r] .= ' WHERE o.entity IN ('.getEntity('dolistoreextract_order').')';
 			$this->export_sql_order[$r] = ' ORDER BY o.dolistore_order_date DESC, o.rowid DESC';
 			$r++;

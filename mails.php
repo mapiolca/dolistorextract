@@ -105,7 +105,7 @@ if (in_array($action, array('manual_create_service', 'manual_link_service', 'imp
 if (empty($action) && empty($id) && empty($ref)) $action='view';
 
 // Protection if external user
-if (!empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'read'))
+if (!empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read')))
 {
 	accessforbidden();
 }
@@ -187,7 +187,7 @@ if (!$imap) {
  * Import des données du message
  */
 if ($action == 'import' || $action == 'importnative') {
-	if (!$user->hasRight('dolistorextract', 'order', 'import')) {
+	if ((empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'import'))) {
 		accessforbidden();
 	}
 	$imap->selectFolder($mailFolder);
@@ -254,10 +254,10 @@ if ($action == 'read') {
 		print $langs->trans('DolistoreCustomerMgmtFailed');
 
 	} else {
-		if ($searchSoc > 0 && $user->hasRight('societe', 'lire') && in_array((int) $socStatic->entity, array_map('intval', explode(',', getEntity('societe'))), true)) print $langs->trans('DolistoreCustomerFinal').': '.$socStatic->getNomUrl(1).'<br />';
+		if ($searchSoc > 0 && (isModEnabled('societe') && (!empty($user->admin) || $user->hasRight('societe', 'lire'))) && in_array((int) $socStatic->entity, array_map('intval', explode(',', getEntity('societe'))), true)) print $langs->trans('DolistoreCustomerFinal').': '.$socStatic->getNomUrl(1).'<br />';
 	}
 	$listProduct = array();
-	$canManageServices = $user->hasRight('produit', 'creer');
+	$canManageServices = (isModEnabled('product') && (!empty($user->admin) || $user->hasRight('produit', 'creer')));
 	// Service mapping management
 	foreach ($dolistoreMail->items as $product) {
 	    // Save list of products for email message

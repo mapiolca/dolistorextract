@@ -17,6 +17,14 @@ This repository is the root of the external Dolibarr module `dolistorextract`.
 - Keep custom mutation trigger codes limited to `CREATE`, `UPDATE` and `DELETE`; carry business transition details in object context and `oldcopy`.
 - Use native CSRF tokens for every mutating POST or sensitive GET action.
 
+## Administrator access (explicit user instruction, 2026-09-10)
+
+- Administrators have all functional permissions in this module, including menus, pages, object methods, API, documents, imports, exports and scheduled processing.
+- Express this directly as `!empty($user->admin) || $user->hasRight(...)`, with parentheses. Do not introduce a permission wrapper or rewrite users' stored grants.
+- In native evaluated menu expressions, use `$user->admin || $user->hasRight(...)` and the native menu field `user => 0` to exclude external users. Dolibarr 23 rejects both `empty()` and `$user->socid` in these expressions; keep the external-user check in server entry points.
+- This explicit project policy supersedes the earlier rule denying administrators when `hasRight()` alone returns false. In Dolibarr 20 and 23.0.4, `hasRight()` checks assigned permissions and does not itself grant every permission to administrators.
+- Module activation, external-user exclusion, entity/sharing boundaries, object validation and CSRF remain separate mandatory checks, including for administrators. Do not expand access to other entities or modify core permissions.
+
 ## Multicompany and documents
 
 - Every business query and write must enforce the correct entity.

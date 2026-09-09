@@ -70,7 +70,7 @@ Les graphiques et regroupements additionnent quantités et montants sans modifie
 
 ## Droits, Multicompany et documents
 
-Tous les contrôles fonctionnels utilisent directement `hasRight()`, sans élévation administrateur ajoutée par le module. Les utilisateurs externes sont refusés. Lecture, import, modification, suppression, génération de facture, configuration, API et export sont distincts.
+Les administrateurs disposent de tous les droits fonctionnels du module, même sans attribution individuelle. Les contrôles utilisent directement le rôle administrateur ou `hasRight()` ; les autres utilisateurs restent soumis aux droits distincts de lecture, import, modification, suppression, génération de facture, configuration, API et export. Cette règle explicite du projet s’applique aussi aux menus, infobulles, documents et traitements planifiés. Les modules dépendants doivent être actifs ; les utilisateurs externes restent refusés et les restrictions d’entité, validations et tokens CSRF s’appliquent à tous. Aucun droit stocké ni contrôle du core n’est réécrit. Après déploiement de cette correction, réactiver le module dans les entités concernées pour actualiser les conditions des menus natifs.
 
 Les commandes utilisent le partage `dolistoreextract_order`, déclaré dans les options Multicompany avec sa numérotation. Les filtres SQL limitent les objets et les relations accessibles. Les colonnes Environnement utilisent les badges avec globe et classes natives, ainsi qu’un filtre multiselect2 alimenté par les mêmes libellés d’entité.
 

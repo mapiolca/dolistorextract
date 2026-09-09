@@ -20,7 +20,7 @@ class DolistoreDocumentMigration
 	{
 		global $conf, $langs;
 		$langs->load('dolistorextract@dolistorextract');
-		if (!isModEnabled('dolistorextract') || !empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'write')) {
+		if (!isModEnabled('dolistorextract') || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'write'))) {
 			$this->error = $langs->trans('DolistoreWelcomeAccessDenied');
 			return -1;
 		}

@@ -14,7 +14,7 @@ Branche de travail : `codex/dolistorextract-2-2-0`. Aucun commit, push, déploie
 | Produits | Référence DoliStore normalisée prioritaire ; libellé natif courant ou dernier instantané ; anciennes liaisons contradictoires signalées | Tests SQL des quantités, totaux, recherches historiques, références distinctes et entités |
 | Liens et listes | `getNomUrl(1)`, petit picto, infobulle Ajax native et résolution de l’objet ; `InvoiceRef`, statuts/origines traduits, titre de journal unique | Tests du lien et du hook d’accès ; revue des sources, pas de parcours d’instance déployée |
 | Multicompany | Partage déclaré, filtres SQL d’entité, badges globe/classes natives et multiselect2 avec source commune | Sources et entités synthétiques ; module tiers Multicompany non installé localement |
-| Droits | Appels directs à `hasRight()` ; refus des externes, de l’administrateur sans droit et des entités non autorisées | Tests de file, infobulles et hook ; comptes ERP réels restant à tester |
+| Droits | Administrateurs autorisés selon la consigne du 2026-09-10 ; autres utilisateurs contrôlés directement avec `hasRight()` ; externes et entités non autorisées refusés | Voir le [correctif administrateurs](admin-access-2026-09-10.md) ; comptes ERP réels restant à tester |
 | Objets | Métadonnées/validation CommonObject, propriétés, relations, transactions et préfixes CRUD | Création de commande, création de ligne, montants, parent absent et référence trop longue testés avec les classes natives |
 | Documents | Répertoire exclusivement propriétaire, retour natif absent/erroné refusé ; déplacement sans écrasement ; réconciliation ECM et `last_main_doc` rejouable | Tests fichiers réels temporaires + objets ECM natifs sur base synthétique : collision, déplacement, rejeu, interruption avant indexation |
 | PDF | Pied mesuré et réservé avant contenu, pieds intermédiaires/final, découpage de lignes/notes longues, langue et montants natifs, logo de l’émetteur lorsque configuré | Deux PDF de 5 pages, texte intégral extrait et contrôle visuel ; variantes avec modules de pied tiers non testées |
@@ -52,7 +52,7 @@ DOLIBARR_TEST_ROOT=/chemin/vers/dolibarr/htdocs python3 test/check_translations.
 
 `DOLIBARR_TEST_VERSION` doit correspondre au code réellement utilisé ; ce paramètre ne sélectionne pas une version à lui seul. Les sorties synthétiques sont écrites dans `test/.tmp/`, exclu de Git et de la livraison.
 
-Résultats :
+Résultats de la validation initiale du 2026-09-09 (antérieure à la correction des accès administrateurs, détaillée dans [son bilan](admin-access-2026-09-10.md)) :
 
 - `test/migrations.php` : **45 assertions métier + 28 assertions produits/migrations**. Il inclut `business.php` ; ne pas compter ces 45 assertions une seconde fois.
 - `test/native.php` : **54 assertions** passantes avec les bibliothèques du tag **20.0.0**, puis avec le checkout local **25.0.0-alpha**, sous PHP **8.5.7**. Préparation FormMail, HTML, traductions, PDF, validation d’objets, montants, migration documentaire/ECM et accès aux infobulles. Les deux exécutions reprennent les mêmes scénarios ; **127 assertions distinctes** au total avec la suite précédente.
@@ -83,7 +83,7 @@ Aucune instance locale configurée, base MySQL/MariaDB de test ou installation M
 
 À exécuter sur une instance de test servant effectivement ce code :
 
-1. Installation/réactivation dans deux entités, avec droits partiels et administrateur sans droit ; conservation des constantes, modèles, attributions et planifications ; migration documentaire avec objets partagés.
+1. Installation/réactivation dans deux entités, avec droits partiels et administrateur sans attribution individuelle (accès fonctionnel attendu) ; conservation des constantes, modèles, attributions et planifications ; migration documentaire avec objets partagés.
 2. Parcours FR/EN/ES/IT/DE du tableau de bord, commandes, fiches/lignes, contacts, notes, documents, Agenda, journaux, factures, emails sources et administration : résultats, listes vides, erreurs, confirmations, filtres, tri, colonnes et changement de limite. Confirmer dans le DOM que `#limit` a un parent formulaire, sans champ caché concurrent.
 3. Infobulles Ajax en URL directe, accès refusés aux externes/entités non accessibles, documents consultables avec lecture seule et mutations refusées sans les droits nécessaires ; soumissions avec/sans token CSRF.
 4. Achats neufs, client existant, réimport, rollback, exécutions simultanées réelles et langue inconnue avec serveur SMTP de capture ; confirmer absence de destinataires réels, reprises à 1/6/24 h et arrêt sur résultat incertain.

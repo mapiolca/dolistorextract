@@ -80,7 +80,7 @@ if (in_array($action, array('update', 'add', 'setmod', 'set', 'del', 'setdoc', '
 include DOL_DOCUMENT_ROOT.'/core/actions_setmoduleoptions.inc.php';
 
 if ($action === 'migratedocuments') {
-	if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !$user->hasRight('dolistorextract', 'order', 'write')) accessforbidden();
+	if ($_SERVER['REQUEST_METHOD'] !== 'POST' || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'write'))) accessforbidden();
 	require_once __DIR__.'/../class/dolistoreDocumentMigration.class.php';
 	$migration = new DolistoreDocumentMigration($db);
 	$count = $migration->run($user);
@@ -200,7 +200,7 @@ if ($action == 'update' || $action == 'add')
 
 		if ($categoryId > 0) {
 			$availableCategories = array();
-			if (isModEnabled('category') && $user->hasRight('categorie', 'lire')) {
+			if (isModEnabled('category') && (!empty($user->admin) || $user->hasRight('categorie', 'lire'))) {
 				$category = new Categorie($db);
 				$categoryTree = $category->get_full_arbo(Categorie::TYPE_CUSTOMER);
 				if (is_array($categoryTree)) {
@@ -600,7 +600,7 @@ if ($mode === 'orders') {
 	if (!isModEnabled('category')) {
 		print '<tr class="oddeven"><td>'.$langs->trans('DolistoreThirdpartyCategoryLabel').'</td>';
 		print '<td colspan="2"><span class="warning">'.img_warning().' '.$langs->trans('DolistoreThirdpartyCategoryModuleDisabled').'</span></td></tr>';
-	} elseif (!$user->hasRight('categorie', 'lire')) {
+	} elseif ((!isModEnabled('category') || (empty($user->admin) && !$user->hasRight('categorie', 'lire')))) {
 		print '<tr class="oddeven"><td>'.$langs->trans('DolistoreThirdpartyCategoryLabel').'</td>';
 		print '<td colspan="2"><span class="warning">'.img_warning().' '.$langs->trans('DolistoreThirdpartyCategoryReadDenied').'</span></td></tr>';
 	} else {
@@ -610,7 +610,7 @@ if ($mode === 'orders') {
 		$fieldThirdpartyCategory = img_picto('', 'category', 'class="pictofixedwidth"');
 		$fieldThirdpartyCategory .= $formother->select_categories(Categorie::TYPE_CUSTOMER, $selectedThirdpartyCategory, 'constvalue', 0, 1, 'minwidth300 widthcentpercentminusx');
 
-		if ($user->hasRight('categorie', 'creer')) {
+		if ((isModEnabled('category') && (!empty($user->admin) || $user->hasRight('categorie', 'creer')))) {
 			$backToOrdersSetup = $self.'?mode=orders';
 			$createCategoryUrl = DOL_URL_ROOT.'/categories/card.php?action=create&type=customer&backtopage='.urlencode($backToOrdersSetup);
 			$fieldThirdpartyCategory .= ' '.dolGetButtonTitle($langs->trans('NewCategory'), '', 'fa fa-plus-circle', $createCategoryUrl);
@@ -848,7 +848,7 @@ if ($action == 'test_connect') {
 
 // Page end
 print dol_get_fiche_end();
-if ($user->hasRight('dolistorextract', 'order', 'write') && $mode === 'orders') {
+if ((!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'write')) && $mode === 'orders') {
 	print '<form method="POST" action="'.dol_escape_htmltag($setupPageUrl).'">';
 	print '<input type="hidden" name="token" value="'.newToken().'">';
 	print '<input type="hidden" name="action" value="migratedocuments">';

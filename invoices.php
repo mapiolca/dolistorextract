@@ -13,7 +13,7 @@ require_once __DIR__.'/class/dolistoreInvoiceBatch.class.php';
 require_once __DIR__.'/lib/dolistoreextract.lib.php';
 
 $langs->loadLangs(array('dolistorextract@dolistorextract', 'bills'));
-if (!isModEnabled('dolistorextract') || !empty($user->socid) || !$user->hasRight('dolistorextract', 'invoice', 'generate')) accessforbidden();
+if (!isModEnabled('dolistorextract') || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'invoice', 'generate'))) accessforbidden();
 
 $form = new Form($db);
 $batchstatic = new DolistoreInvoiceBatch($db);
@@ -137,7 +137,7 @@ print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortor
 print '<input type="hidden" name="page" value="'.((int) $page).'">';
 
 $generateUrl = $_SERVER['PHP_SELF'].'?action=generate&token='.newToken();
-$newcardbutton = dolGetButtonTitle($langs->trans('DolistoreGenerateMonthlyInvoice'), '', 'fa fa-plus-circle', $generateUrl, '', $user->hasRight('facture', 'creer'));
+$newcardbutton = dolGetButtonTitle($langs->trans('DolistoreGenerateMonthlyInvoice'), '', 'fa fa-plus-circle', $generateUrl, '', (isModEnabled('facture') && (!empty($user->admin) || $user->hasRight('facture', 'creer'))));
 print_barre_liste($langs->trans('DolistoreInvoices'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', $num, $num, 'bill', 0, $newcardbutton, '', $limit);
 
 print '<div class="div-table-responsive">';
@@ -186,7 +186,7 @@ if ($resql) {
 		$batchstatic->status = $hasLinkedInvoice ? (int) $obj->status : DolistoreInvoiceBatch::STATUS_ERROR;
 
 		$invoiceLink = '';
-		if (!empty($obj->invoice_ref) && $user->hasRight('facture', 'lire')) {
+		if (!empty($obj->invoice_ref) && (isModEnabled('facture') && (!empty($user->admin) || $user->hasRight('facture', 'lire')))) {
 			$invoice = new Facture($db);
 			$invoice->id = (int) $obj->fk_facture;
 			$invoice->ref = (string) $obj->invoice_ref;

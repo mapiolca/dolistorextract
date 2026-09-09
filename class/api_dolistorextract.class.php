@@ -1,6 +1,8 @@
 <?php
 /* Copyright (C) 2026 Pierre Ardoin <developpeur@lesmetiersdubatiment.fr> */
 
+use Luracast\Restler\RestException;
+
 require_once DOL_DOCUMENT_ROOT.'/api/class/api.class.php';
 require_once __DIR__.'/dolistoreOrder.class.php';
 require_once __DIR__.'/dolistoreOrderLine.class.php';
@@ -40,8 +42,8 @@ class DolistoreextractApi extends DolibarrApi
 		global $langs;
 		$user = DolibarrApiAccess::$user;
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'api', 'read')
-			|| !$user->hasRight('dolistorextract', 'order', 'read')) {
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'api', 'read'))
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))) {
 			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
 		}
 		$limit = max(1, min(500, (int) $limit));
@@ -80,8 +82,8 @@ class DolistoreextractApi extends DolibarrApi
 		global $langs;
 		$user = DolibarrApiAccess::$user;
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'api', 'read')
-			|| !$user->hasRight('dolistorextract', 'order', 'read')) {
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'api', 'read'))
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))) {
 			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
 		}
 		$order = new DolistoreOrder($this->db);
@@ -114,8 +116,8 @@ class DolistoreextractApi extends DolibarrApi
 		global $langs;
 		$user = DolibarrApiAccess::$user;
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'api', 'read')
-			|| !$user->hasRight('dolistorextract', 'order', 'import')) {
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'api', 'read'))
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'import'))) {
 			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
 		}
 		$user = DolibarrApiAccess::$user;
@@ -149,8 +151,8 @@ class DolistoreextractApi extends DolibarrApi
 		global $langs;
 		$user = DolibarrApiAccess::$user;
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'api', 'read')
-			|| !$user->hasRight('dolistorextract', 'order', 'write')) {
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'api', 'read'))
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'write'))) {
 			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
 		}
 		$user = DolibarrApiAccess::$user;
@@ -180,8 +182,8 @@ class DolistoreextractApi extends DolibarrApi
 		global $langs;
 		$user = DolibarrApiAccess::$user;
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'api', 'read')
-			|| !$user->hasRight('dolistorextract', 'order', 'delete')) {
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'api', 'read'))
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'delete'))) {
 			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
 		}
 		$user = DolibarrApiAccess::$user;
@@ -208,8 +210,8 @@ class DolistoreextractApi extends DolibarrApi
 		global $langs;
 		$user = DolibarrApiAccess::$user;
 		if (!isModEnabled('dolistorextract') || !empty($user->socid)
-			|| !$user->hasRight('dolistorextract', 'api', 'read')
-			|| !$user->hasRight('dolistorextract', 'invoice', 'generate')) {
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'api', 'read'))
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'invoice', 'generate'))) {
 			throw new RestException(403, $langs->trans('NotEnoughPermissions'));
 		}
 		$actions = new ActionsDolistorextract($this->db);
@@ -247,7 +249,7 @@ class DolistoreextractApi extends DolibarrApi
 				$order->{$field} = (string) $data[$field];
 			}
 		}
-		if (array_key_exists('note_private', $data) && ($mode === 'create' || DolibarrApiAccess::$user->hasRight('dolistorextract', 'order', 'write'))) {
+		if (array_key_exists('note_private', $data) && ($mode === 'create' || (!empty(DolibarrApiAccess::$user->admin) || DolibarrApiAccess::$user->hasRight('dolistorextract', 'order', 'write')))) {
 			$order->note_private = (string) $data['note_private'];
 		}
 
@@ -330,7 +332,7 @@ class DolistoreextractApi extends DolibarrApi
 			'fk_user_creat' => (int) $order->fk_user_creat,
 			'fk_user_modif' => (int) $order->fk_user_modif,
 		);
-		if (DolibarrApiAccess::$user->hasRight('dolistorextract', 'order', 'write')) {
+		if ((!empty(DolibarrApiAccess::$user->admin) || DolibarrApiAccess::$user->hasRight('dolistorextract', 'order', 'write'))) {
 			$data['note_private'] = (string) $order->note_private;
 		}
 

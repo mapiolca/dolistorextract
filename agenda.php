@@ -18,7 +18,7 @@ require_once __DIR__.'/lib/dolistoreextract.lib.php';
 
 $langs->loadLangs(array('dolistorextract@dolistorextract', 'agenda', 'admin'));
 
-if (!isModEnabled('dolistorextract') || !empty($user->socid) || !$user->hasRight('dolistorextract', 'order', 'read')) {
+if (!isModEnabled('dolistorextract') || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))) {
 	accessforbidden();
 }
 
@@ -29,7 +29,7 @@ if ($id <= 0 || $object->fetch($id) <= 0) {
 }
 
 
-if (!isModEnabled('agenda') || !$user->hasRight('agenda', 'myactions', 'read')) accessforbidden();
+if (!isModEnabled('agenda') || (empty($user->admin) && !$user->hasRight('agenda', 'myactions', 'read'))) accessforbidden();
 require_once DOL_DOCUMENT_ROOT.'/comm/action/class/actioncomm.class.php';
 require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
 $form = new Form($db);
@@ -59,7 +59,7 @@ if (GETPOSTISSET('button_removefilter') || GETPOSTISSET('button_removefilter_x')
 }
 $where = ' WHERE a.fk_element = '.(int) $object->id." AND a.elementtype = 'dolistoreextract_order@dolistorextract'";
 $where .= ' AND a.entity IN ('.$db->sanitize(getEntity('agenda')).')';
-if (!$user->hasRight('agenda', 'allactions', 'read')) {
+if ((!isModEnabled('agenda') || (empty($user->admin) && !$user->hasRight('agenda', 'allactions', 'read')))) {
 	$where .= ' AND (a.fk_user_action = '.(int) $user->id.' OR EXISTS (SELECT 1 FROM '.MAIN_DB_PREFIX."actioncomm_resources ar WHERE ar.fk_actioncomm = a.id AND ar.element_type = 'user' AND ar.fk_element = ".(int) $user->id.'))';
 }
 if ($search_label !== '') $where .= ' AND '.natural_search('a.label', $search_label);
@@ -115,7 +115,7 @@ while ($resql && is_object($row = $db->fetch_object($resql))) {
 	$event->datep = $db->jdate($row->datep); $event->percentage = $row->percent; $event->userownerid = $row->fk_user_action;
 	$owner->id = (int) $row->owner_id; $owner->login = $row->login; $owner->firstname = $row->owner_firstname; $owner->lastname = $row->owner_lastname;
 	$contact->id = (int) $row->contact_id; $contact->firstname = $row->contact_firstname; $contact->lastname = $row->contact_lastname;
-	$cells = array('a.id' => $event->getNomUrl(1, -1), 'a.datep' => dol_print_date($event->datep, 'dayhour'), 'u.lastname' => $owner->id > 0 ? $owner->getNomUrl(1) : '', 'c.code' => $event->getTypePicto().dol_escape_htmltag($event->getTypeLabel()), 'a.label' => dol_escape_htmltag($row->label), 'sp.lastname' => $contact->id > 0 && $user->hasRight('societe', 'contact', 'lire') ? $contact->getNomUrl(1) : '', 'a.fk_element' => $object->getNomUrl(1), 'a.percent' => $event->getLibStatut(5));
+	$cells = array('a.id' => $event->getNomUrl(1, -1), 'a.datep' => dol_print_date($event->datep, 'dayhour'), 'u.lastname' => $owner->id > 0 ? $owner->getNomUrl(1) : '', 'c.code' => $event->getTypePicto().dol_escape_htmltag($event->getTypeLabel()), 'a.label' => dol_escape_htmltag($row->label), 'sp.lastname' => $contact->id > 0 && (isModEnabled('societe') && (!empty($user->admin) || $user->hasRight('societe', 'contact', 'lire'))) ? $contact->getNomUrl(1) : '', 'a.fk_element' => $object->getNomUrl(1), 'a.percent' => $event->getLibStatut(5));
 	print '<tr class="oddeven">';
 	foreach ($arrayfields as $field => $definition) if (dolistoreextractArrayFieldChecked($arrayfields, $field)) print '<td>'.$cells[$field].'</td>';
 	print '<td></td></tr>';
