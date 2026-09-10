@@ -94,7 +94,6 @@ if ($action === 'migratedocuments') {
 /**
  * Print one update row while keeping form tags inside table cells.
  *
- * @param string $rowClass Row class
  * @param string $label Label
  * @param string $constname Constant name
  * @param string $fieldHtml Field html
@@ -104,7 +103,7 @@ if ($action === 'migratedocuments') {
  * @param string $extraActionHtml Optional extra html in action cell
  * @return void
  */
-function dolistorextractPrintUpdateRow($rowClass, $label, $constname, $fieldHtml, $actionUrl, $mode, $token, $extraActionHtml = '')
+function dolistorextractPrintUpdateRow($label, $constname, $fieldHtml, $actionUrl, $mode, $token, $extraActionHtml = '')
 {
 	global $langs;
 	static $lineid = 0;
@@ -113,7 +112,7 @@ function dolistorextractPrintUpdateRow($rowClass, $label, $constname, $fieldHtml
 	$formid = 'dolistorextractsetupform'.$lineid;
 	$fieldHtml = preg_replace('/<select\b/i', '<select data-dolistorextract-select2="1" ', $fieldHtml);
 
-	print '<tr '.$rowClass.'><td>'.$label.'</td><td>';
+	print '<tr class="oddeven"><td>'.$label.'</td><td>';
 	print '<form id="'.$formid.'" action="'.dol_escape_htmltag($actionUrl).'" method="POST">';
 	print '<input type="hidden" name="token" value="'.$token.'">';
 	print '<input type="hidden" name="action" value="update">';
@@ -121,7 +120,7 @@ function dolistorextractPrintUpdateRow($rowClass, $label, $constname, $fieldHtml
 	print '<input type="hidden" name="constname" value="'.$constname.'">';
 	print $fieldHtml;
 	print '</form>';
-	print '</td><td align="center" width="80">';
+	print '</td><td class="center minwidth150">';
 	print '<a class="button" href="#" onclick="document.getElementById(\''.$formid.'\').submit(); return false;">'.$langs->trans("Update").'</a>';
 	if (!empty($extraActionHtml)) {
 		print '<br>'.$extraActionHtml;
@@ -363,22 +362,20 @@ if ($action == 'create_dolistore_association_thirdparty') {
 /*
  * View
  */
-$page_name = "DolistorextractSetup";
-$pageTitle = $langs->trans($page_name);
-if ($pageTitle === $page_name || strpos($pageTitle, 'mon module') !== false) {
-	$pageTitle = $langs->trans("Setup").' '.$langs->trans("Module450032Name");
-}
+$adminPages = dolistorextractAdminPages();
+$pageTitle = $langs->trans($adminPages[$mode]['label']);
+$pagePicto = $adminPages[$mode]['picto'];
 llxHeader('', $pageTitle);
 
-if (!function_exists('imap_open')) {
-	print '<div class="error">Extension IMAP manquante !</div>';
+if ($mode === 'emailsimap' && !function_exists('imap_open')) {
+	print '<div class="warning">'.$langs->trans('DolistoreImapExtensionMissing').'</div>';
 }
 
 // Subheader
 $linkback = '<a href="' . DOL_URL_ROOT . '/admin/modules.php?search_keyword='.urlencode('dolistorextract').'">'
 		. $langs->trans("BackToModuleList") . '</a>';
 
-print load_fiche_titre($pageTitle, $linkback);
+print load_fiche_titre($pageTitle, $linkback, $pagePicto);
 
 // Configuration header
 $head = dolistorextractAdminPrepareHead();
@@ -388,50 +385,43 @@ $formother = new FormOther($db);
 $formmail = new FormMail($db);
 $token = $_SESSION['newtoken'];
 
-print dol_get_fiche_head($head, $mode, $langs->trans("Module450032Name"), -1, "dolistore@dolistorextract");
+print dol_get_fiche_head($head, $mode, $langs->trans("Module450032Name"), -1);
 if ($mode !== 'orders') {
-	print '<table class="noborder" width="100%">';
+	print '<div class="div-table-responsive-no-min">';
+	print '<table id="dolistore-setup-'.dol_escape_htmltag($mode).'" class="noborder centpercent">';
 	print '<tr class="liste_titre">';
 	print '<td>'.$langs->trans("Description").'</td>';
 	print '<td>'.$langs->trans("Value").'</td>';
 	print '<td align="center">'.$langs->trans("Action").'</td>';
 	print "</tr>\n";
 }
-$var = true;
 
 if ($mode === 'settings') {
-	$var = !$var;
-	print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreLegacyV1Settings").'</td><td class="opacitymedium">'.$langs->trans("DolistoreLegacyNativeOrderSettingsObsolete").'</td><td align="center">&nbsp;</td></tr>';
+	print '<tr class="oddeven"><td>'.$langs->trans("DolistoreLegacyV1Settings").'</td><td class="opacitymedium">'.$langs->trans("DolistoreLegacyNativeOrderSettingsObsolete").'</td><td align="center">&nbsp;</td></tr>';
 
-	$var = !$var;
-	print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreAssociationThirdpartyLabel").'</td><td>'.$langs->trans("DolistoreAssociationThirdpartyDataHint").'</td><td align="center" width="80">';
+	print '<tr class="oddeven"><td>'.$langs->trans("DolistoreAssociationThirdpartyLabel").'</td><td>'.$langs->trans("DolistoreAssociationThirdpartyDataHint").'</td><td class="center minwidth150">';
 	print '<a class="button button-edit" href="'.$self.'?action=create_dolistore_association_thirdparty&token='.$token.'">'.$langs->trans("DolistoreAssociationThirdpartyCreateButton").'</a>';
 	print '</td></tr>';
 
-	$var = !$var;
 	$fieldBillingThirdparty = dolistorextractCaptureFieldHtml(function () use ($form) {
 		return $form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)');
 	});
-	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreBillingThirdpartyLabel"), 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', $fieldBillingThirdparty, $setupPageUrl, $mode, $token);
+	dolistorextractPrintUpdateRow($langs->trans("DolistoreBillingThirdpartyLabel"), 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', $fieldBillingThirdparty, $setupPageUrl, $mode, $token);
 
-	$var = !$var;
 	$fieldCommission = '<input type="text" class="text flat" name="constvalue" value="' . dol_escape_htmltag(getDolGlobalString('DOLISTOREXTRACT_COMMISSION_PERCENT')) .'" placeholder="0"><span class="opacitymedium"> %</span>';
-	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreCommissionPercentLabel"), 'DOLISTOREXTRACT_COMMISSION_PERCENT', $fieldCommission, $setupPageUrl, $mode, $token);
+	dolistorextractPrintUpdateRow($langs->trans("DolistoreCommissionPercentLabel"), 'DOLISTOREXTRACT_COMMISSION_PERCENT', $fieldCommission, $setupPageUrl, $mode, $token);
 
-	$var = !$var;
-	print '<tr '.$bc[$var].'><td>'.$langs->trans("DolistoreUnmappedServiceSettings").'</td><td class="opacitymedium">'.$langs->trans("DolistoreUnmappedServiceSettingsObsolete").'</td><td align="center">&nbsp;</td></tr>';
+	print '<tr class="oddeven"><td>'.$langs->trans("DolistoreUnmappedServiceSettings").'</td><td class="opacitymedium">'.$langs->trans("DolistoreUnmappedServiceSettingsObsolete").'</td><td align="center">&nbsp;</td></tr>';
 
-	$var = !$var;
 	$fieldUserForActions = $form->select_dolusers(getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS'), 'constvalue');
-	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistorExtractUserForActions"), 'DOLISTOREXTRACT_USER_FOR_ACTIONS', $fieldUserForActions, $setupPageUrl, $mode, $token);
+	dolistorextractPrintUpdateRow($langs->trans("DolistorExtractUserForActions"), 'DOLISTOREXTRACT_USER_FOR_ACTIONS', $fieldUserForActions, $setupPageUrl, $mode, $token);
 }
 
 if ($mode === 'billing') {
-	$var = !$var;
 	$fieldBillingThirdparty = dolistorextractCaptureFieldHtml(function () use ($form) {
 		return $form->select_company(getDolGlobalInt('DOLISTOREXTRACT_BILLING_THIRDPARTY_ID'), 'constvalue', '(s.client:IN:1,2,3)');
 	});
-	dolistorextractPrintUpdateRow($bc[$var], $langs->trans("DolistoreBillingThirdpartyLabel"), 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', $fieldBillingThirdparty, $setupPageUrl, $mode, $token);
+	dolistorextractPrintUpdateRow($langs->trans("DolistoreBillingThirdpartyLabel"), 'DOLISTOREXTRACT_BILLING_THIRDPARTY_ID', $fieldBillingThirdparty, $setupPageUrl, $mode, $token);
 
 	$textRows = array(
 		array('DOLISTOREXTRACT_INVOICE_EMAIL_TO', 'DolistoreInvoiceEmailTo', 'text'),
@@ -439,12 +429,10 @@ if ($mode === 'billing') {
 		array('DOLISTOREXTRACT_PAYMENT_RELEASE_DELAY_DAYS', 'DolistorePaymentReleaseDelayDays', 'text'),
 	);
 	foreach ($textRows as $textDefinition) {
-		$var = !$var;
 		$fieldText = '<input type="'.$textDefinition[2].'" class="text flat minwidth300" name="constvalue" value="'.dol_escape_htmltag(getDolGlobalString($textDefinition[0])).'">';
-		dolistorextractPrintUpdateRow($bc[$var], $langs->trans($textDefinition[1]), $textDefinition[0], $fieldText, $setupPageUrl, $mode, $token);
+		dolistorextractPrintUpdateRow($langs->trans($textDefinition[1]), $textDefinition[0], $fieldText, $setupPageUrl, $mode, $token);
 	}
 
-	$var = !$var;
 	$configuredInvoiceVatRate = getDolGlobalString('DOLISTOREXTRACT_INVOICE_TVA_RATE');
 	$selectedInvoiceVatRate = $configuredInvoiceVatRate;
 	if ($selectedInvoiceVatRate === '' && is_object($mysoc)) {
@@ -460,9 +448,8 @@ if ($mode === 'billing') {
 	if ($configuredInvoiceVatRate !== '' && strpos($fieldInvoiceVatRate, ' selected') === false) {
 		$fieldInvoiceVatRate .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreInvoiceVatRateUnavailable', dol_escape_htmltag($configuredInvoiceVatRate)).'</span>';
 	}
-	dolistorextractPrintUpdateRow($bc[$var], $langs->trans('DolistoreInvoiceTvaRate'), 'DOLISTOREXTRACT_INVOICE_TVA_RATE', $fieldInvoiceVatRate, $setupPageUrl, $mode, $token);
+	dolistorextractPrintUpdateRow($langs->trans('DolistoreInvoiceTvaRate'), 'DOLISTOREXTRACT_INVOICE_TVA_RATE', $fieldInvoiceVatRate, $setupPageUrl, $mode, $token);
 
-	$var = !$var;
 	$invoiceEmailTemplates = array();
 	$sql = 'SELECT rowid, module, label, lang';
 	$sql .= ' FROM '.MAIN_DB_PREFIX.'c_email_templates';
@@ -497,23 +484,21 @@ if ($mode === 'billing') {
 	}
 	$manageEmailTemplatesUrl = DOL_URL_ROOT.'/admin/mails_templates.php?search_type_template='.urlencode('facture_send');
 	$manageEmailTemplatesLink = '<a href="'.dol_escape_htmltag($manageEmailTemplatesUrl).'">'.img_picto('', 'email', 'class="pictofixedwidth"').$langs->trans('DolistoreManageEmailTemplates').'</a>';
-	dolistorextractPrintUpdateRow($bc[$var], $langs->trans('DolistoreInvoiceEmailTemplate'), 'DOLISTOREXTRACT_INVOICE_EMAIL_TEMPLATE_ID', $fieldInvoiceEmailTemplate, $setupPageUrl, $mode, $token, $manageEmailTemplatesLink);
+	dolistorextractPrintUpdateRow($langs->trans('DolistoreInvoiceEmailTemplate'), 'DOLISTOREXTRACT_INVOICE_EMAIL_TEMPLATE_ID', $fieldInvoiceEmailTemplate, $setupPageUrl, $mode, $token, $manageEmailTemplatesLink);
 
-	$var = !$var;
 	$selectedInvoiceStatus = getDolGlobalString('DOLISTOREXTRACT_INVOICE_STATUS');
 	if ($selectedInvoiceStatus === '') {
 		$selectedInvoiceStatus = 'draft';
 	}
 	$fieldInvoiceStatus = $form->selectarray('constvalue', array('draft' => $langs->trans('Draft'), 'validated' => $langs->trans('Validated')), $selectedInvoiceStatus);
-	dolistorextractPrintUpdateRow($bc[$var], $langs->trans('DolistoreInvoiceGeneratedStatus'), 'DOLISTOREXTRACT_INVOICE_STATUS', $fieldInvoiceStatus, $setupPageUrl, $mode, $token);
+	dolistorextractPrintUpdateRow($langs->trans('DolistoreInvoiceGeneratedStatus'), 'DOLISTOREXTRACT_INVOICE_STATUS', $fieldInvoiceStatus, $setupPageUrl, $mode, $token);
 
 	$binaryConstants = array(
 		'DOLISTOREXTRACT_AUTO_CREATE_INVOICE' => 'DolistoreAutoCreateInvoice',
 		'DOLISTOREXTRACT_AUTO_SEND_INVOICE' => 'DolistoreAutoSendInvoice',
 	);
 	foreach ($binaryConstants as $constName => $labelKey) {
-		$var = !$var;
-		print '<tr '.$bc[$var].'>';
+		print '<tr class="oddeven">';
 		print '<td>'.$langs->trans($labelKey).'</td>';
 		print '<td align="center">&nbsp;</td>';
 		print '<td align="right">';
@@ -538,17 +523,15 @@ if ($mode === 'emailsimap') {
 		array('DOLISTOREXTRACT_IMAP_FOLDER_ERROR', 'DolistorExtractImapFolderError', 'text', 'INBOX/ERRORS')
 	);
 	foreach ($textConstants as $textDefinition) {
-		$var = !$var;
 		$fieldText = '<input type="'.$textDefinition[2].'" class="text flat" name="constvalue" value="'.dol_escape_htmltag(getDolGlobalString($textDefinition[0])).'"';
 		if (!empty($textDefinition[3])) {
 			$fieldText .= ' placeholder="'.$textDefinition[3].'"';
 		}
 		$fieldText .= '>';
-		dolistorextractPrintUpdateRow($bc[$var], $langs->trans($textDefinition[1]), $textDefinition[0], $fieldText, $setupPageUrl, $mode, $token);
+		dolistorextractPrintUpdateRow($langs->trans($textDefinition[1]), $textDefinition[0], $fieldText, $setupPageUrl, $mode, $token);
 	}
 
-	$var = !$var;
-	print '<tr '.$bc[$var].'>';
+	print '<tr class="oddeven">';
 	print '<td>'.$langs->trans('DolistoreAutoImportEnabled').'</td>';
 	print '<td align="center">&nbsp;</td>';
 	print '<td align="right">';
@@ -560,8 +543,7 @@ if ($mode === 'emailsimap') {
 	print '</form></div>';
 	print '</td></tr>';
 
-	$var = !$var;
-	print '<tr '.$bc[$var].'><td>'.$langs->trans('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU').'</td><td>'.$langs->trans('DolistoreWelcomeDeliveryHelp').'</td><td>'.ajax_constantonoff('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU').'</td></tr>';
+	print '<tr class="oddeven"><td>'.$langs->trans('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU').'</td><td>'.$langs->trans('DolistoreWelcomeDeliveryHelp').'</td><td>'.ajax_constantonoff('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU').'</td></tr>';
 	require_once __DIR__.'/../class/dolistoreWelcomeMail.class.php';
 	$templatesByLanguage = array();
 	$ret = $formmail->fetchAllEMailTemplate('dolistore_extract', $user, $langs);
@@ -582,15 +564,15 @@ if ($mode === 'emailsimap') {
 		$field = str_replace('id="constvalue"', 'id="template_'.$suffix.'"', $field).ajax_combobox('template_'.$suffix);
 		if ($selected > 0 && !isset($options[$selected])) $field .= '<br>'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateUnavailable', $selected);
 		elseif (!$options) $field .= '<br>'.img_warning().' '.$langs->trans('DolistoreOrderEmailTemplateMissing', $language);
-		$var = !$var;
-		dolistorextractPrintUpdateRow($bc[$var], $langs->trans('DolistoreWelcomeTemplate', $langs->transnoentities('Language_'.$language)), $constant, $field, $setupPageUrl, $mode, $token, $manageLink);
+		dolistorextractPrintUpdateRow($langs->trans('DolistoreWelcomeTemplate', $langs->transnoentities('Language_'.$language)), $constant, $field, $setupPageUrl, $mode, $token, $manageLink);
 	}
 
 }
 
 if ($mode === 'orders') {
-	print load_fiche_titre($langs->trans('DolistoreThirdpartyCategorySettings'), '', '');
-	print '<table class="noborder centpercent">';
+	print load_fiche_titre($langs->trans('DolistoreThirdpartyCategorySettings'), '', 'category');
+	print '<div class="div-table-responsive-no-min">';
+	print '<table id="dolistore-setup-categories" class="noborder centpercent">';
 	print '<tr class="liste_titre">';
 	print '<td>'.$langs->trans('Description').'</td>';
 	print '<td>'.$langs->trans('Value').'</td>';
@@ -620,13 +602,14 @@ if ($mode === 'orders') {
 			$fieldThirdpartyCategory .= '<br><span class="warning">'.img_warning().' '.$langs->trans('DolistoreThirdpartyCategoryUnavailable', $selectedThirdpartyCategory).'</span>';
 		}
 
-		dolistorextractPrintUpdateRow('class="oddeven"', $langs->trans('DolistoreThirdpartyCategoryLabel'), 'DOLISTOREXTRACT_THIRDPARTY_CATEGORY_ID', $fieldThirdpartyCategory, $setupPageUrl, $mode, $token);
+		dolistorextractPrintUpdateRow($langs->trans('DolistoreThirdpartyCategoryLabel'), 'DOLISTOREXTRACT_THIRDPARTY_CATEGORY_ID', $fieldThirdpartyCategory, $setupPageUrl, $mode, $token);
 	}
-	print '</table>';
+	print '</table></div>';
 	print '<br>';
 
-	print load_fiche_titre($langs->trans('DolistoreOrderNumberingModules'), '', '');
-	print '<table class="noborder centpercent">';
+	print load_fiche_titre($langs->trans('DolistoreOrderNumberingModules'), '', 'hashtag');
+	print '<div class="div-table-responsive-no-min">';
+	print '<table id="dolistore-setup-numbering" class="noborder centpercent">';
 	print '<tr class="liste_titre">';
 	print '<td>'.$langs->trans('Name').'</td>';
 	print '<td>'.$langs->trans('Description').'</td>';
@@ -701,10 +684,10 @@ if ($mode === 'orders') {
 	if (!$foundNumberingModule) {
 		print '<tr class="oddeven"><td colspan="5"><span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span></td></tr>';
 	}
-	print '</table>';
+	print '</table></div>';
 	print '<br>';
 
-	print load_fiche_titre($langs->trans('DolistoreOrderDocumentModels'), '', '');
+	print load_fiche_titre($langs->trans('DolistoreOrderDocumentModels'), '', 'pdf');
 	$activeDocumentModels = array();
 	$sql = 'SELECT nom FROM '.MAIN_DB_PREFIX.'document_model';
 	$sql .= " WHERE type = '".$db->escape($type)."'";
@@ -719,7 +702,8 @@ if ($mode === 'orders') {
 		dol_print_error($db);
 	}
 
-	print '<table class="noborder centpercent">';
+	print '<div class="div-table-responsive-no-min">';
+	print '<table id="dolistore-setup-documents" class="noborder centpercent">';
 	print '<tr class="liste_titre">';
 	print '<td>'.$langs->trans('Name').'</td>';
 	print '<td>'.$langs->trans('Description').'</td>';
@@ -797,11 +781,11 @@ if ($mode === 'orders') {
 	if (!$foundDocumentModel) {
 		print '<tr class="oddeven"><td colspan="5"><span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span></td></tr>';
 	}
-	print '</table>';
+	print '</table></div>';
 }
 
 if ($mode !== 'orders') {
-	print '</table>';
+	print '</table></div>';
 }
 print '<br>';
 
@@ -820,7 +804,7 @@ $(document).ready(function () {
 </script>';
 
 if ($mode === 'emailsimap') {
-	print '<a class="butActions" href="'.$_SERVER['PHP_SELF'].'?mode=emailsimap&action=test_connect&token='.$token.'">Test IMAP</a>';
+	print '<a class="butActions" href="'.$_SERVER['PHP_SELF'].'?mode=emailsimap&action=test_connect&token='.$token.'">'.$langs->trans('TestConnection').'</a>';
 }
 
 
@@ -837,7 +821,7 @@ if ($action == 'test_connect') {
 		$imap = new Imap($mailbox, $username, $password, $encryption);
 		// You can also check out example-connect.php for more connection options
 
-		print '<div class="confirm">OK!</div>';
+		print '<div class="confirm">'.$langs->trans('Success').'</div>';
 
 	}catch (ImapClientException $error){
 		print '<div class="error">';

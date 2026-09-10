@@ -20,24 +20,27 @@ if (empty($user->admin) || !empty($user->socid)) {
 	accessforbidden();
 }
 
-$title = $langs->trans('DolistorextractCompatibility');
+$adminPage = dolistorextractAdminPages()['compatibility'];
+$title = $langs->trans($adminPage['label']);
 llxHeader('', $title);
 
 $linkback = '<a href="'.DOL_URL_ROOT.'/admin/modules.php?search_keyword='.urlencode('dolistorextract').'">'.$langs->trans('BackToModuleList').'</a>';
-print load_fiche_titre($title, $linkback, 'technic');
+print load_fiche_titre($title, $linkback, $adminPage['picto']);
 
 $head = dolistorextractAdminPrepareHead();
-print dol_get_fiche_head($head, 'compatibility', $langs->trans('DolistorextractSetup'), -1, 'dolistore@dolistorextract');
+print dol_get_fiche_head($head, 'compatibility', $langs->trans('DolistorextractSetup'), -1);
 
-print '<table class="noborder centpercent">';
+print '<div class="div-table-responsive-no-min">';
+print '<table id="dolistore-compatibility-environment" class="noborder centpercent">';
 print '<tr class="liste_titre"><th colspan="2">'.$langs->trans('DolistoreCompatibilityEnvironment').'</th></tr>';
 print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('DolistoreCompatibilityPhpDetected').'</td><td>'.dol_escape_htmltag(PHP_VERSION).'</td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('DolistoreCompatibilityDolibarrDetected').'</td><td>'.(defined('DOL_VERSION') ? dol_escape_htmltag(DOL_VERSION) : '').'</td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('DolistoreCompatibilityPhpMin').'</td><td>'.DolistoreextractCompatibility::MIN_PHP.'</td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('DolistoreCompatibilityDolibarrMin').'</td><td>'.DolistoreextractCompatibility::MIN_DOLIBARR.'</td></tr>';
-print '</table><br>';
+print '</table></div><br>';
 
-print '<table class="noborder centpercent">';
+print '<div class="div-table-responsive-no-min">';
+print '<table id="dolistore-compatibility-features" class="noborder centpercent">';
 print '<tr class="liste_titre"><th>'.$langs->trans('Feature').'</th><th>'.$langs->trans('Description').'</th><th>Dolibarr / PHP</th><th>'.$langs->trans('Status').'</th><th>'.$langs->trans('Reason').'</th></tr>';
 foreach (DolistoreextractCompatibility::getFeatures() as $feature) {
 	$available = !empty($feature['available']);
@@ -51,7 +54,7 @@ foreach (DolistoreextractCompatibility::getFeatures() as $feature) {
 	print '<td>'.($available ? '' : dol_escape_htmltag($langs->trans($feature['reason']))).'</td>';
 	print '</tr>';
 }
-print '</table>';
+print '</table></div>';
 
 print dol_get_fiche_end();
 llxFooter();

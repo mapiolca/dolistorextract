@@ -8,7 +8,24 @@
  */
 
 /**
- * Prepare admin pages header.
+ * Settings contexts shared by page titles and navigation tabs.
+ *
+ * @return array<string,array{url:string,label:string,picto:string}>
+ */
+function dolistorextractAdminPages()
+{
+	return array(
+		'settings' => array('url' => 'setup.php', 'label' => 'Settings', 'picto' => 'dolistore@dolistorextract'),
+		'orders' => array('url' => 'setup.php?mode=orders', 'label' => 'DolistoreOrdersSetup', 'picto' => 'order'),
+		'billing' => array('url' => 'setup.php?mode=billing', 'label' => 'DolistoreBilling', 'picto' => 'bill'),
+		'emailsimap' => array('url' => 'setup.php?mode=emailsimap', 'label' => 'DolistorextractEmailsImap', 'picto' => 'email'),
+		'compatibility' => array('url' => 'compatibility.php', 'label' => 'DolistorextractCompatibility', 'picto' => 'technic'),
+		'about' => array('url' => 'about.php', 'label' => 'DolistorextractAbout', 'picto' => 'info'),
+	);
+}
+
+/**
+ * Prepare admin pages header. Each tab owns its icon, including on mobile.
  *
  * @return array<int,array<int,string>>
  */
@@ -17,39 +34,14 @@ function dolistorextractAdminPrepareHead()
 	global $langs;
 
 	$langs->loadLangs(array('dolistorextract@dolistorextract', 'admin', 'agenda', 'bills', 'companies'));
-
 	$head = array();
-	$h = 0;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php', 1);
-	$head[$h][1] = $langs->trans('Settings');
-	$head[$h][2] = 'settings';
-	$h++;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php?mode=orders', 1);
-	$head[$h][1] = $langs->trans('DolistoreOrdersSetup');
-	$head[$h][2] = 'orders';
-	$h++;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php?mode=billing', 1);
-	$head[$h][1] = $langs->trans('DolistoreBilling');
-	$head[$h][2] = 'billing';
-	$h++;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php?mode=emailsimap', 1);
-	$head[$h][1] = $langs->trans('DolistorextractEmailsImap');
-	$head[$h][2] = 'emailsimap';
-	$h++;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/compatibility.php', 1);
-	$head[$h][1] = $langs->trans('DolistorextractCompatibility');
-	$head[$h][2] = 'compatibility';
-	$h++;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/about.php', 1);
-	$head[$h][1] = $langs->trans('DolistorextractAbout');
-	$head[$h][2] = 'about';
-
+	foreach (dolistorextractAdminPages() as $code => $page) {
+		$head[] = array(
+			dol_buildpath('/dolistorextract/admin/'.$page['url'], 1),
+			img_picto('', $page['picto'], '', 0, 0, 0, '', 'imgTabTitle pictofixedwidth').$langs->trans($page['label']),
+			$code,
+		);
+	}
 	return $head;
 }
 
