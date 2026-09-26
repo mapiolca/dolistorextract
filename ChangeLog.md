@@ -1,5 +1,9 @@
 # Journal des modifications de DolistoreExtract
 
+## Non publié
+
+- Les nouvelles factures DoliStore reprennent le compte bancaire par défaut du tiers facturé, selon les réglages natifs de l’entité courante. Sans compte défini, le comportement existant est conservé ; les factures déjà créées ne sont pas modifiées lors d’une reprise du traitement.
+
 ## Version 2.1.0 — 5 août 2026
 
 - Ajout, par entité, d’une catégorie native configurable pour les nouveaux tiers créés depuis les commandes DoliStore, avec Select2, accès direct à la création d’une catégorie et avertissements non bloquants journalisés.
