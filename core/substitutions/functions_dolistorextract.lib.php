@@ -51,7 +51,9 @@ function dolistorextract_completesubstitutionarray(&$substitutionarray, $langs, 
 	$id = !empty($object->id) ? (int) $object->id : (!empty($object->rowid) ? (int) $object->rowid : 0);
 	$statusLabel = '';
 	if (method_exists($object, 'LibStatut')) {
-		$statusLabel = dol_string_nohtmltag($object->LibStatut((int) $object->status, 0));
+		// Use the message language, not the current administrator's language.
+		$statusKeys = array(0 => 'DolistoreOrderStatusDraft', 1 => 'DolistoreOrderStatusImported', 2 => 'DolistoreOrderStatusWaitingRelease', 3 => 'DolistoreOrderStatusInvoiceable', 4 => 'DolistoreOrderStatusInvoiced', 9 => 'DolistoreOrderStatusError');
+		$statusLabel = $langs->transnoentities($statusKeys[(int) $object->status] ?? 'Unknown');
 	}
 
 	$substitutionarray['__DOLISTOREEXTRACT_ORDER_ID__'] = $id > 0 ? (string) $id : '';
@@ -61,5 +63,16 @@ function dolistorextract_completesubstitutionarray(&$substitutionarray, $langs, 
 	$substitutionarray['__DOLISTOREEXTRACT_ORDER_CUSTOMER_EMAIL__'] = !empty($object->customer_email) ? (string) $object->customer_email : '';
 	$substitutionarray['__DOLISTOREEXTRACT_ORDER_STATUS__'] = $statusLabel;
 	$substitutionarray['__DOLISTOREEXTRACT_ORDER_URL__'] = $id > 0 ? dol_buildpath('/dolistorextract/card.php', 2).'?id='.$id : '';
-	$substitutionarray['__DOLISTOREEXTRACT_ORDER_BILLABLE_HT__'] = isset($object->billable_total_ht) ? price((float) $object->billable_total_ht) : '';
+	$substitutionarray['__DOLISTOREEXTRACT_ORDER_BILLABLE_HT__'] = isset($object->billable_total_ht) ? price((float) $object->billable_total_ht, 0, $langs, 1, -1, -1, $object->currency_code) : '';
+	// Historical 1.x placeholders remain available without repeating PRODUCTS blocks.
+	$substitutionarray['__DOLISTORE_ORDER_NAME__'] = (string) $object->dolistore_order_ref;
+	$substitutionarray['__DOLISTORE_INVOICE_FIRSTNAME__'] = (string) ($object->context['purchase_firstname'] ?? '');
+	$substitutionarray['__DOLISTORE_INVOICE_LASTNAME__'] = (string) ($object->context['purchase_lastname'] ?? '');
+	$substitutionarray['__DOLISTORE_INVOICE_COMPANY__'] = (string) $object->customer_name;
+	$labels = array();
+	if ($object instanceof DolistoreOrder) {
+		foreach ($object->getGroupedLinesForDisplay() as $line) $labels[] = (string) $line['product_label'];
+	}
+	$substitutionarray['__DOLISTORE_LIST_PRODUCTS__'] = implode(', ', $labels);
+
 }

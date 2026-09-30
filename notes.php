@@ -10,14 +10,14 @@ require_once __DIR__.'/class/dolistoreOrder.class.php';
 require_once __DIR__.'/lib/dolistoreextract.lib.php';
 
 $langs->loadLangs(array('dolistorextract@dolistorextract', 'companies'));
-if (!isModEnabled('dolistorextract') || !dolistoreextractUserHasRight($user, 'order', 'read')) accessforbidden();
+if (!isModEnabled('dolistorextract') || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))) accessforbidden();
 
 $id = GETPOST('id', 'int');
 $action = GETPOST('action', 'aZ09');
 $object = new DolistoreOrder($db);
 if ($id <= 0 || $object->fetch($id) <= 0) accessforbidden();
 
-$permissionnote = dolistoreextractUserHasRight($user, 'order', 'write');
+$permissionnote = (!empty($user->admin) || $user->hasRight('dolistorextract', 'order', 'write'));
 $permissiontoadd = $permissionnote;
 include DOL_DOCUMENT_ROOT.'/core/actions_setnotes.inc.php';
 

@@ -34,6 +34,10 @@ include_once DOL_DOCUMENT_ROOT .'/core/modules/DolibarrModules.class.php';
  */
 class modDolistorextract extends DolibarrModules
 {
+	/** @var string Module license, also displayed on the About page. */
+	public $license;
+	/** @var array<string,bool> Existing constants in the current entity. */
+	private $configuredConstants = array();
 	/**
 	 * Constructor. Define names, constants, directories, boxes, permissions
 	 *
@@ -41,13 +45,13 @@ class modDolistorextract extends DolibarrModules
 	 */
 	public function __construct($db)
 	{
-        global $langs,$conf;
+        global $langs, $conf, $user;
 
         $this->db = $db;
 
 		// Id for module (must be unique).
 		// Use here a free id (See in Home -> System information -> Dolibarr for list of used modules id).
-		$this->numero = 104976;
+		$this->numero = 450032;
 		// Key text used to identify module (for permissions, menus, etc...)
 		$this->rights_class = 'dolistorextract';
 
@@ -57,18 +61,19 @@ class modDolistorextract extends DolibarrModules
 		// Module position in the family
 		$this->module_position = 500;
 		// Gives the possibility to the module, to provide his own family info and position of this family (Overwrite $this->family and $this->module_position. Avoid this)
-		//$this->familyinfo = array('myownfamily' => array('position' => '001', 'label' => $langs->trans("MyOwnFamily")));
 
 		// Module label (no space allowed), used if translation string 'ModuleXXXName' not found (where XXX is value of numeric property 'numero' of module)
 		$this->name = 'Dolistorextract';
 		// Module description, used if translation string 'ModuleXXXDesc' not found (where XXX is value of numeric property 'numero' of module)
-		$this->description = "Module d'archivage et de facturation des commandes DoliStore";
+		$langs->load('dolistorextract@dolistorextract');
+		$this->description = $langs->trans('DolistoreModuleDescription');
 		$this->descriptionlong = "";
 		$this->editor_name = 'Les Métiers du Bâtiment';
 		$this->editor_url = 'https://www.lesmetiersdubatiment.fr';
 
 		// Possible values for version are: 'development', 'experimental', 'dolibarr', 'dolibarr_deprecated' or a version string like 'x.y.z'
-		$this->version = '2.1.0';
+		$this->version = '2.2.0';
+		$this->license = 'GPL-3.0-or-later';
 		// Key used in the Dolibarr constants table to save module status enabled/disabled (where MYMODULE is value of property name of module in uppercase)
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		// Name of image file used for this module.
@@ -104,8 +109,12 @@ class modDolistorextract extends DolibarrModules
 				'data' => array(
 					'admin',
 					'agenda',
+					'agendadao',
 					'emailtemplates',
 					'notification',
+					'elementproperties',
+					'fileslib',
+					'main',
 					'multicompanyexternalmodulesharing',
 					'multicompanyexternalmodules',
 					'multicompanysharingoptions',
@@ -138,8 +147,6 @@ class modDolistorextract extends DolibarrModules
 		$this->const = array();
 
 		// Array to add new pages in new tabs
-		// Example: $this->tabs = array('objecttype:+tabname1:Title1:mylangfile@dolistorextract:$user->rights->dolistorextract->read:/dolistorextract/mynewtab1.php?id=__ID__',  					// To add a new tab identified by code tabname1
-        //                              'objecttype:+tabname2:SUBSTITUTION_Title2:mylangfile@dolistorextract:$user->rights->othermodule->read:/dolistorextract/mynewtab2.php?id=__ID__',  	// To add another new tab identified by code tabname2. Label will be result of calling all substitution functions on 'Title2' key.
         //                              'objecttype:-tabname:NU:conditiontoremove');                                                     										// To remove an existing tab identified by code tabname
 		// where objecttype can be
 		// 'categories_x'	  to add a tab in category view (replace 'x' by type of category (0=product, 1=supplier, 2=customer, 3=member)
@@ -200,7 +207,7 @@ class modDolistorextract extends DolibarrModules
 		$this->cronjobs = array(
 			0 => array('label' => 'DolistoreCronImportLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runImport', 'parameters' => '', 'comment' => 'DolistoreCronImportComment', 'frequency' => 1, 'unitfrequency' => 3600, 'status' => 1, 'test' => 'isModEnabled("dolistorextract")', 'priority' => 50),
 			1 => array('label' => 'DolistoreCronInvoiceLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runInvoice', 'parameters' => '', 'comment' => 'DolistoreCronInvoiceComment', 'frequency' => 1, 'unitfrequency' => 86400, 'status' => 1, 'test' => 'isModEnabled("dolistorextract")', 'priority' => 55),
-			2 => array('label' => 'DolistoreCronDailyNotificationLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runDailyNotification', 'parameters' => '', 'comment' => 'DolistoreCronDailyNotificationComment', 'frequency' => 1, 'unitfrequency' => 86400, 'status' => 1, 'test' => 'isModEnabled("dolistorextract")', 'priority' => 90),
+			3 => array('label' => 'DolistoreWelcomeCronLabel', 'jobtype' => 'method', 'class' => '/dolistorextract/class/dolistorextractCron.class.php', 'objectname' => 'dolistorextractCron', 'method' => 'runWelcome', 'parameters' => '', 'comment' => 'DolistoreWelcomeCronComment', 'frequency' => 15, 'unitfrequency' => 60, 'status' => 1, 'test' => 'isModEnabled("dolistorextract")', 'priority' => 60),
 		);
 
 		// Permissions
@@ -280,7 +287,6 @@ class modDolistorextract extends DolibarrModules
 		//							'langs'=>'mylangfile@dolistorextract',	        // Lang file to use (without .lang) by module. File must be in langs/code_CODE/ directory.
 		//							'position'=>100,
 		//							'enabled'=>'$conf->dolistorextract->enabled',	// Define condition to show or hide menu entry. Use '$conf->dolistorextract->enabled' if entry must be visible if module is enabled.
-		//							'perms'=>'1',			                // Use 'perms'=>'$user->rights->dolistorextract->level1->level2' if you want your menu with a permission rules
 		//							'target'=>'',
 		//							'user'=>2);				                // 0=Menu for internal users, 1=external users, 2=both
 		// $r++;
@@ -295,11 +301,12 @@ class modDolistorextract extends DolibarrModules
 		//							'langs'=>'mylangfile@dolistorextract',	        // Lang file to use (without .lang) by module. File must be in langs/code_CODE/ directory.
 		//							'position'=>100,
 		//							'enabled'=>'$conf->dolistorextract->enabled',  // Define condition to show or hide menu entry. Use '$conf->dolistorextract->enabled' if entry must be visible if module is enabled. Use '$leftmenu==\'system\'' to show if leftmenu system is selected.
-		//							'perms'=>'1',			                // Use 'perms'=>'$user->rights->dolistorextract->level1->level2' if you want your menu with a permission rules
 		//							'target'=>'',
 		//							'user'=>2);				                // 0=Menu for internal users, 1=external users, 2=both
 		// $r++;
 
+		// Native user=0 excludes external users; the v23 evaluator rejects
+		// empty() and $user->socid inside permission expressions.
 		$this->menu[$r] = array(
 			'fk_menu' => 'fk_mainmenu=commercial',
 			'type' => 'left',
@@ -391,7 +398,7 @@ class modDolistorextract extends DolibarrModules
 			'langs' => 'admin',
 			'position' => 105,
 			'enabled' => 'isModEnabled("dolistorextract")',
-			'perms' => '$user->admin || $user->hasRight("dolistorextract", "setup", "write")',
+			'perms' => '$user->admin',
 			'target' => '',
 			'user' => 0
 		);
@@ -418,8 +425,10 @@ class modDolistorextract extends DolibarrModules
 			// $r++;
 			$this->export_code[$r] = $this->rights_class.'_orders';
 			$this->export_label[$r] = 'DolistoreOrders';
-			$this->export_enabled[$r] = 'isModEnabled("dolistorextract")';
-			$this->export_permission[$r] = array(array('dolistorextract', 'order', 'export'));
+			$this->export_enabled[$r] = empty($user->socid) ? 'isModEnabled("dolistorextract")' : '0';
+			// Administrators have every module permission (explicit project policy).
+			$this->export_permission[$r] = !empty($user->admin) && empty($user->socid)
+				? array() : array(array('dolistorextract', 'order', 'export'));
 			$this->export_fields_array[$r] = array(
 				'o.rowid' => 'Id',
 				'o.entity' => 'Entity',
@@ -476,7 +485,7 @@ class modDolistorextract extends DolibarrModules
 			);
 			$this->export_sql_start[$r] = 'SELECT DISTINCT ';
 			$this->export_sql_end[$r] = ' FROM '.MAIN_DB_PREFIX.'dolistoreextract_order as o';
-			$this->export_sql_end[$r] .= ' LEFT JOIN '.MAIN_DB_PREFIX.'facture as f ON f.rowid = o.fk_facture';
+			$this->export_sql_end[$r] .= ' LEFT JOIN '.MAIN_DB_PREFIX.'facture as f ON f.rowid = o.fk_facture AND f.entity IN ('.$this->db->sanitize(getEntity('facture')).')'.(is_object($user) && (isModEnabled('facture') && (!empty($user->admin) || $user->hasRight('facture', 'lire'))) ? '' : ' AND 1 = 0');
 			$this->export_sql_end[$r] .= ' WHERE o.entity IN ('.getEntity('dolistoreextract_order').')';
 			$this->export_sql_order[$r] = ' ORDER BY o.dolistore_order_date DESC, o.rowid DESC';
 			$r++;
@@ -492,60 +501,83 @@ class modDolistorextract extends DolibarrModules
 	 */
 	public function init($options='')
 	{
+		global $conf;
+		$this->configuredConstants = array();
+		$resql = $this->db->query('SELECT name FROM '.MAIN_DB_PREFIX.'const WHERE entity = '.((int) $conf->entity));
+		if (!$resql) {
+			return 0;
+		}
+		while (is_object($row = $this->db->fetch_object($resql))) {
+			$this->configuredConstants[(string) $row->name] = true;
+		}
+		$this->db->free($resql);
 		$sql = array();
 
-		$this->_load_tables('/dolistorextract/sql/');
-
-		$result = $this->_init($sql, $options);
-		if ($result <= 0) {
-			return $result;
-		}
-
-		$result = $this->activateDeclaredScheduledJobs();
-		if ($result < 0) {
+		if ($this->_load_tables('/dolistorextract/sql/') < 0) {
 			return 0;
 		}
 
+		// MySQL ALTER TABLE commits implicitly: finish schema changes before DML.
+		if ($this->createDolistoreServiceExtraField() < 0 || $this->migrateNativeOrderReferenceField() < 0) return 0;
+		$this->db->begin();
 		$result = $this->migrateLegacyPermissionIds();
-		if ($result < 0) {
-			return 0;
-		}
+		if ($result < 0) { $this->db->rollback(); return 0; }
+		$result = $this->_init($sql, $options);
+		if ($result <= 0) { $this->db->rollback(); return 0; }
 
 		$result = $this->setDefaultConfigurationConstants();
 		if ($result < 0) {
+			$this->db->rollback();
 			return 0;
 		}
 
 		$result = $this->initializeDolistoreEmailTemplates();
 		if ($result < 0) {
+			$this->db->rollback();
 			return 0;
 		}
 
 		$result = $this->initializeOrderDocumentModel();
 		if ($result < 0) {
+			$this->db->rollback();
 			return 0;
 		}
 
 		$result = $this->persistMulticompanySharingDefinition();
 		if ($result < 0) {
-			return 0;
-		}
-
-		$result = $this->createDolistoreServiceExtraField();
-		if ($result < 0) {
+			$this->db->rollback();
 			return 0;
 		}
 
 		$result = $this->registerDolistoreActionTriggers();
 		if ($result < 0) {
+			$this->db->rollback();
 			return 0;
 		}
 
 		$result = $this->cleanupLegacyActionTriggers();
 		if ($result < 0) {
+			$this->db->rollback();
 			return 0;
 		}
 
+		return $this->db->commit() ? 1 : 0;
+	}
+
+	/** Dolibarr 20's native FK validator selects ref_ext even for ID lookups.
+	 * Keep this standard field empty; dolistore_order_ref remains authoritative.
+	 * @return int
+	 */
+	private function migrateNativeOrderReferenceField()
+	{
+		$table = MAIN_DB_PREFIX.'dolistoreextract_order';
+		$result = $this->db->DDLDescTable($table, 'ref_ext');
+		if (!$result) { $this->error = $this->db->lasterror(); return -1; }
+		$exists = $this->db->num_rows($result) > 0;
+		$this->db->free($result);
+		if (!$exists && $this->db->DDLAddField($table, 'ref_ext', array('type' => 'varchar', 'value' => '255', 'null' => 'NULL', 'default' => 'null')) <= 0) {
+			$this->error = $this->db->lasterror(); return -1;
+		}
 		return 1;
 	}
 
@@ -570,7 +602,8 @@ class modDolistorextract extends DolibarrModules
 				'default_for_type' => 1,
 				'join_files' => 0,
 				'topic' => 'Bienvenue ! Merci pour votre achat',
-				'content' => $this->getDolistoreOrderEmailTemplateFrContent(),
+				'content' => (string) file_get_contents(__DIR__.'/../tpl/welcome/fr_FR.html'),
+				'legacy_content' => $this->getDolistoreOrderEmailTemplateFrContent(),
 			),
 			array(
 				'constant' => 'DOLISTOREXTRACT_EMAIL_TEMPLATE_EN',
@@ -581,7 +614,8 @@ class modDolistorextract extends DolibarrModules
 				'default_for_type' => 1,
 				'join_files' => 0,
 				'topic' => 'Welcome! Thank you for your purchase',
-				'content' => $this->getDolistoreOrderEmailTemplateEnContent(),
+				'content' => (string) file_get_contents(__DIR__.'/../tpl/welcome/en_US.html'),
+				'legacy_content' => $this->getDolistoreOrderEmailTemplateEnContent(),
 			),
 			array(
 				'constant' => 'DOLISTOREXTRACT_INVOICE_EMAIL_TEMPLATE_ID',
@@ -596,8 +630,16 @@ class modDolistorextract extends DolibarrModules
 			),
 		);
 
+		foreach (array(
+			'es_ES' => array('ES', 'Bienvenida tras la compra', '¡Bienvenido! Gracias por su compra'),
+			'it_IT' => array('IT', 'Benvenuto dopo l’acquisto', 'Benvenuto! Grazie per il suo acquisto'),
+			'de_DE' => array('DE', 'Willkommen nach dem Kauf', 'Willkommen! Vielen Dank für Ihren Kauf'),
+		) as $language => $definition) {
+			$templates[] = array('constant' => 'DOLISTOREXTRACT_EMAIL_TEMPLATE_'.$definition[0], 'label' => 'DoliStore Extract - '.$definition[1], 'type' => 'dolistore_extract', 'lang' => $language, 'position' => 20 + count($templates), 'default_for_type' => 1, 'join_files' => 0, 'topic' => $definition[2], 'content' => (string) file_get_contents(__DIR__.'/../tpl/welcome/'.$language.'.html'));
+		}
 		$this->db->begin();
 		foreach ($templates as $template) {
+			if (trim($template['content']) === '') { $this->db->rollback(); return -1; }
 			$configuredTemplateId = getDolGlobalInt((string) $template['constant']);
 			$templateId = 0;
 			if ($configuredTemplateId > 0) {
@@ -611,6 +653,29 @@ class modDolistorextract extends DolibarrModules
 				return -1;
 			}
 
+			if ($templateId > 0 && $template['type'] === 'dolistore_extract') {
+				$resql = $this->db->query('SELECT content, topic FROM '.MAIN_DB_PREFIX.'c_email_templates WHERE rowid = '.$templateId.' AND entity = '.((int) $conf->entity));
+				$row = $resql ? $this->db->fetch_object($resql) : null;
+				if ($resql) $this->db->free($resql);
+				if (!is_object($row)) {
+					$this->db->rollback();
+					return -1;
+				}
+				if (isset($template['legacy_content']) && $row->content === $template['legacy_content'] && $row->topic === $template['topic']) {
+					$sql = 'UPDATE '.MAIN_DB_PREFIX.'c_email_templates SET content = '."'".$this->db->escape($template['content'])."'";
+					$sql .= ' WHERE rowid = '.$templateId.' AND entity = '.((int) $conf->entity);
+					$sql .= " AND content = '".$this->db->escape($template['legacy_content'])."' AND topic = '".$this->db->escape($template['topic'])."'";
+					if (!$this->db->query($sql)) {
+						$this->db->rollback();
+						return -1;
+					}
+				} elseif ($row->content !== $template['content']) {
+					// Preserve customized selection and provide the supplied design separately.
+					$template['label'] .= ' (2.2)';
+					$templateId = $this->findDolistoreEmailTemplate($template['label'], $template['type'], $template['lang']);
+					if ($templateId < 0) { $this->db->rollback(); return -1; }
+				}
+			}
 			if ($templateId === 0) {
 				$templateId = $this->createDolistoreEmailTemplate($template);
 				if ($templateId < 0) {
@@ -619,7 +684,7 @@ class modDolistorextract extends DolibarrModules
 				}
 			}
 
-			if ($templateId > 0 && getDolGlobalString((string) $template['constant']) === '') {
+			if ($templateId > 0 && !isset($this->configuredConstants[$template['constant']])) {
 				$result = dolibarr_set_const(
 					$this->db,
 					(string) $template['constant'],
@@ -656,7 +721,7 @@ class modDolistorextract extends DolibarrModules
 	{
 		global $conf;
 
-		$sql = 'SELECT rowid, module, type_template';
+		$sql = 'SELECT rowid, module, type_template, lang';
 		$sql .= ' FROM '.MAIN_DB_PREFIX.'c_email_templates';
 		$sql .= ' WHERE entity = '.((int) $conf->entity);
 		if ($templateId > 0) {
@@ -680,7 +745,7 @@ class modDolistorextract extends DolibarrModules
 			return 0;
 		}
 
-		if ((string) $obj->module !== 'dolistorextract' || (string) $obj->type_template !== $type) {
+		if ((string) $obj->module !== 'dolistorextract' || (string) $obj->type_template !== $type || (string) $obj->lang !== $lang) {
 			if ($templateId > 0) {
 				return 0;
 			}
@@ -782,51 +847,32 @@ class modDolistorextract extends DolibarrModules
 	}
 
 	/**
-	 * Activate this module's existing scheduled jobs in the current entity.
-	 *
-	 * Only the native status is changed so administrator scheduling choices are preserved.
-	 *
-	 * @return int 1 if OK, -1 if KO
-	 */
-	private function activateDeclaredScheduledJobs()
-	{
-		global $conf;
-
-		$methods = array('runImport', 'runInvoice', 'runDailyNotification');
-		$quotedMethods = array();
-		foreach ($methods as $method) {
-			$quotedMethods[] = "'".$this->db->escape($method)."'";
-		}
-
-		$sql = 'UPDATE '.MAIN_DB_PREFIX.'cronjob SET status = 1';
-		$sql .= " WHERE module_name = '".$this->db->escape($this->rights_class)."'";
-		$sql .= ' AND entity = '.((int) $conf->entity);
-		$sql .= ' AND methodename IN ('.implode(',', $quotedMethods).')';
-		if (!$this->db->query($sql)) {
-			$this->error = $this->db->lasterror();
-			return -1;
-		}
-
-		return 1;
-	}
-
-	/**
 	 * Migrate old permission identifiers to the module-id based range.
 	 *
 	 * @return int 1 if OK, -1 if KO
 	 */
 	private function migrateLegacyPermissionIds()
 	{
-		$permissionIdMap = array(
-			104977 => $this->numero * 100 + 1,
-			104978 => $this->numero * 100 + 2,
-			104979 => $this->numero * 100 + 3,
-			104980 => $this->numero * 100 + 4,
-			104981 => $this->numero * 100 + 5,
-			104982 => $this->numero * 100 + 6,
-			104983 => $this->numero * 100 + 7,
-			104984 => $this->numero * 100 + 8,
-		);
+		global $langs;
+		$permissionIdMap = array();
+		foreach ($this->rights as $r => $definition) {
+			$permissionIdMap[104976 + $r] = (int) $definition[0];
+			$permissionIdMap[104976 * 100 + $r] = (int) $definition[0];
+		}
+		$allIds = array_unique(array_merge(array_keys($permissionIdMap), array_values($permissionIdMap)));
+		$resql = $this->db->query('SELECT id FROM '.MAIN_DB_PREFIX.'rights_def WHERE id IN ('.implode(',', $allIds).") AND module <> 'dolistorextract'");
+		if (!$resql) { $this->error = $this->db->lasterror(); return -1; }
+		$collision = $this->db->num_rows($resql) > 0;
+		$this->db->free($resql);
+		if ($collision) { $this->error = $langs->trans('DolistorePermissionIdCollision'); return -1; }
+		// Copy definitions in every historical entity before moving its assignments.
+		foreach ($permissionIdMap as $oldId => $newId) {
+			$sql = 'INSERT INTO '.MAIN_DB_PREFIX.'rights_def (id, entity, libelle, module, module_origin, type, bydefault, perms, subperms, enabled)'
+				.' SELECT '.$newId.', source.entity, source.libelle, source.module, source.module_origin, source.type, source.bydefault, source.perms, source.subperms, source.enabled'
+				.' FROM '.MAIN_DB_PREFIX.'rights_def source WHERE source.id = '.$oldId." AND source.module = 'dolistorextract'"
+				.' AND NOT EXISTS (SELECT 1 FROM '.MAIN_DB_PREFIX.'rights_def target WHERE target.id = '.$newId.' AND target.entity = source.entity)';
+			if (!$this->db->query($sql)) { $this->error = $this->db->lasterror(); return -1; }
+		}
 
 		foreach ($permissionIdMap as $oldId => $newId) {
 			$result = $this->copyLegacyPermissionRows('user_rights', 'fk_user', (int) $oldId, (int) $newId);
@@ -906,7 +952,7 @@ class modDolistorextract extends DolibarrModules
 	{
 		global $langs;
 
-		dol_include_once('/core/class/extrafields.class.php');
+		require_once DOL_DOCUMENT_ROOT.'/core/class/extrafields.class.php';
 
 		$extrafields = new ExtraFields($this->db);
 		$langs->load('dolistorextract@dolistorextract');
@@ -944,7 +990,7 @@ class modDolistorextract extends DolibarrModules
 		$langs->load('dolistorextract@dolistorextract');
 		dol_include_once('/dolistorextract/class/actions_dolistorextract.class.php');
 		if (!class_exists('ActionsDolistorextract')) {
-			$this->error = 'ActionsDolistorextract class not found';
+			$this->error = $langs->trans('DolistoreModuleDisabled');
 			return -1;
 		}
 
@@ -983,15 +1029,9 @@ class modDolistorextract extends DolibarrModules
 	 */
 	private function cleanupLegacyActionTriggers()
 	{
-		$legacyActionCode = 'DOLISTOREEXTRACT_ORDER_'.'INVOICE';
-
-		$sql = 'DELETE FROM '.MAIN_DB_PREFIX.'c_action_trigger';
-		$sql .= " WHERE code = '".$this->db->escape($legacyActionCode)."'";
-
-		if (!$this->db->query($sql)) {
-			$this->error = $this->db->lasterror();
-			return -1;
-		}
+		// Keep the historical, inactive event and administrator subscriptions intact.
+		// It is no longer emitted or advertised by notifsupported. Do not silently
+		// transfer its invoice-only subscriptions to the broader UPDATE event.
 
 		return 1;
 	}
@@ -1040,6 +1080,7 @@ class modDolistorextract extends DolibarrModules
 			'DOLISTOREXTRACT_INVOICE_MIN_AMOUNT_HT' => '100.00',
 			'DOLISTOREXTRACT_INVOICE_TVA_RATE' => $defaultInvoiceVatRate,
 			'DOLISTOREXTRACT_AUTO_IMPORT_ENABLED' => '0',
+			'DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU' => '0',
 			'DOLISTOREXTRACT_AUTO_CREATE_INVOICE' => '0',
 			'DOLISTOREXTRACT_AUTO_SEND_INVOICE' => '0',
 			'DOLISTOREXTRACT_INVOICE_STATUS' => 'draft',
@@ -1049,7 +1090,7 @@ class modDolistorextract extends DolibarrModules
 		);
 
 		foreach ($defaults as $name => $value) {
-			if (getDolGlobalString($name) !== '') {
+			if (isset($this->configuredConstants[$name])) {
 				continue;
 			}
 			$constantType = $name === 'DOLISTOREXTRACT_THIRDPARTY_CATEGORY_ID' ? 'entier' : 'chaine';
@@ -1094,7 +1135,7 @@ class modDolistorextract extends DolibarrModules
 		$this->db->free($resql);
 
 		if (!$exists) {
-			$result = addDocumentModel($model, $type, 'Standard', 'dolistoreextract/core/modules/dolistoreextract/doc');
+			$result = addDocumentModel($model, $type, 'Standard', 'dolistorextract/core/modules/dolistoreextract/doc');
 			if ($result <= 0) {
 				return -1;
 			}
@@ -1127,13 +1168,20 @@ class modDolistorextract extends DolibarrModules
 		$currentRaw = getDolGlobalString('MULTICOMPANY_EXTERNAL_MODULES_SHARING');
 		if (!empty($currentRaw)) {
 			$decoded = json_decode($currentRaw, true);
-			if (is_array($decoded)) {
-				$current = $decoded;
-			}
+			if (!is_array($decoded)) return -1;
+			$current = $decoded;
 		}
 
 		$definition = ActionsDolistorextract::getMulticompanySharingDefinition();
-		$merged = array_replace_recursive($current, $definition);
+		if (isset($current['dolistoreextract'])) {
+			$current['dolistorextract'] = array_replace_recursive($current['dolistoreextract'], $current['dolistorextract'] ?? array());
+			unset($current['dolistoreextract']);
+		}
+		$merged = array_replace_recursive($definition, $current);
+		foreach ($definition['dolistorextract']['sharingelements'] ?? array() as $element => $sharing) {
+			$merged['dolistorextract']['sharingelements'][$element]['enable'] = $sharing['enable'];
+			$merged['dolistorextract']['sharingmodulename'][$element] = 'dolistorextract';
+		}
 		$json = json_encode($merged);
 		if ($json === false) {
 			return -1;

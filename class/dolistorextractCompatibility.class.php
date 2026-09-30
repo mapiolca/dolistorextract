@@ -40,10 +40,11 @@ class DolistoreextractCompatibility
 	/**
 	 * Return feature matrix.
 	 *
-	 * @return array<string,array<string,mixed>>
+	 * @return array<string,array{label:string,description:string,min_dolibarr:string,min_php:string,available:bool,reason:string}>
 	 */
 	public static function getFeatures()
 	{
+		$base = self::isDolibarrVersionAtLeast(self::MIN_DOLIBARR) && self::isPhpVersionAtLeast(self::MIN_PHP);
 		$features = array(
 			'v2_orders' => array(
 				'label' => 'DolistoreCompatibilityV2Orders',
@@ -58,7 +59,7 @@ class DolistoreextractCompatibility
 				'description' => 'DolistoreCompatibilityNativeInvoiceDesc',
 				'min_dolibarr' => self::MIN_DOLIBARR,
 				'min_php' => self::MIN_PHP,
-				'available' => class_exists('Facture') || is_readable(DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php'),
+				'available' => $base && isModEnabled('facture') && is_readable(DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php'),
 				'reason' => 'DolistoreCompatibilityInvoiceClassMissing',
 			),
 			'multicompany_documents' => array(
@@ -66,11 +67,13 @@ class DolistoreextractCompatibility
 				'description' => 'DolistoreCompatibilityMulticompanyDocumentsDesc',
 				'min_dolibarr' => self::MIN_DOLIBARR,
 				'min_php' => self::MIN_PHP,
-				'available' => function_exists('getMultidirOutput') || is_readable(DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php'),
+				'available' => $base && function_exists('getMultidirOutput'),
 				'reason' => 'DolistoreCompatibilityFilesHelperMissing',
 			),
 		);
 
+		$features['daily_notification'] = array('label' => 'DolistoreDailyNotificationEnabled', 'description' => 'DolistoreDailyNotificationNotImplemented', 'min_dolibarr' => self::MIN_DOLIBARR, 'min_php' => self::MIN_PHP, 'available' => false, 'reason' => 'DolistoreDailyNotificationNotImplemented');
+		$features['welcome'] = array('label' => 'DolistoreWelcomeCronLabel', 'description' => 'DolistoreWelcomeDeliveryHelp', 'min_dolibarr' => self::MIN_DOLIBARR, 'min_php' => self::MIN_PHP, 'available' => $base && !getDolGlobalInt('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU'), 'reason' => 'DolistoreWelcomeAccessDenied');
 		return $features;
 	}
 
@@ -89,7 +92,7 @@ class DolistoreextractCompatibility
 	/**
 	 * Return unavailable features.
 	 *
-	 * @return array<string,array<string,mixed>>
+	 * @return array<string,array{label:string,description:string,min_dolibarr:string,min_php:string,available:bool,reason:string}>
 	 */
 	public static function getUnavailableFeatures()
 	{

@@ -10,7 +10,7 @@ require_once __DIR__.'/class/dolistoreOrder.class.php';
 require_once __DIR__.'/lib/dolistoreextract.lib.php';
 
 $langs->loadLangs(array('dolistorextract@dolistorextract', 'products'));
-if (!isModEnabled('dolistorextract') || !dolistoreextractUserHasRight($user, 'order', 'read')) accessforbidden();
+if (!isModEnabled('dolistorextract') || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))) accessforbidden();
 
 $id = GETPOST('id', 'int');
 $object = new DolistoreOrder($db);

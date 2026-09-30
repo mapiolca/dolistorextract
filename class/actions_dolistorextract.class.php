@@ -39,33 +39,13 @@ use SSilence\ImapClient\ImapClientException;
 use SSilence\ImapClient\ImapConnect;
 use SSilence\ImapClient\ImapClient as Imap;
 
-if (!class_exists('CommonHookActions')) {
-	// EN: Load the native Dolibarr CommonHookActions class when it exists.
-	// FR: Charger la classe native Dolibarr CommonHookActions lorsqu'elle existe.
-	dol_include_once('/core/class/commonhookactions.class.php');
-}
-
-if (!class_exists('CommonHookActions')) {
-	/**
-	 * EN: Compatibility fallback for Dolibarr versions that do not provide CommonHookActions.
-	 * FR: Fallback de compatibilité pour les versions Dolibarr qui ne fournissent pas CommonHookActions.
-	 */
-	class CommonHookActions
-	{
-		public $resprints = '';
-		public $results = array();
-		public $errors = array();
-	}
-}
-
-
 /**
  * Class ActionsDolistorextract
  *
  * Provides hooks and main processing logic for the Dolistore Extract Dolibarr module.
  * Handles automated extraction of orders from Dolistore emails and integration in Dolibarr (thirdparties, contacts, events, archived DoliStore orders).
  */
-class ActionsDolistorextract extends CommonHookActions
+class ActionsDolistorextract
 {
 	/**
 	 * Dolistore items are always business services in Dolibarr.
@@ -89,8 +69,12 @@ class ActionsDolistorextract extends CommonHookActions
 	public $db;
 	public $dao;
 	public $mesg;
-	public $error;
-	public $nbErrors;
+	public $error = '';
+	public $resprints = '';
+	public $results = array();
+	/** @var list<string> Files created by the current import only. */
+	private $createdSourceFiles = array();
+	public $nbErrors = 0;
 	public $errors = array();
 	//! Numero de l'erreur
 	public $errno = 0;
@@ -127,7 +111,7 @@ class ActionsDolistorextract extends CommonHookActions
 	public static function getMulticompanySharingDefinition(): array
 	{
 		return array(
-			'dolistoreextract' => array(
+			'dolistorextract' => array(
 				'sharingelements' => array(
 					'dolistoreextract_order' => array(
 						'type' => 'element',
@@ -159,8 +143,8 @@ class ActionsDolistorextract extends CommonHookActions
 					),
 				),
 				'sharingmodulename' => array(
-					'dolistoreextract_order' => 'dolistoreextract',
-					'dolistoreextract_ordernumber' => 'dolistoreextract',
+					'dolistoreextract_order' => 'dolistorextract',
+					'dolistoreextract_ordernumber' => 'dolistorextract',
 				),
 			),
 		);
@@ -257,6 +241,96 @@ class ActionsDolistorextract extends CommonHookActions
 		return 0;
 	}
 
+	/** Limit the native latest-events block to the current user's Agenda scope.
+	 * @param array<string, int|string> $parameters Native DAO context
+	 * @param object|null $object Current object
+	 * @param string $action Current action
+	 * @param HookManager $hookmanager Hook manager
+	 * @return int
+	 */
+	public function getActionsListWhere($parameters, &$object, &$action, $hookmanager)
+	{
+		global $user;
+		if (($parameters['elementtype'] ?? '') !== 'dolistoreextract_order@dolistorextract') return 0;
+		$this->resprints = '';
+		if (!isModEnabled('dolistorextract') || !empty($user->socid)
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read')) || (!isModEnabled('agenda') || (empty($user->admin) && !$user->hasRight('agenda', 'myactions', 'read')))) {
+			$this->resprints = ' AND 1 = 0';
+		} elseif ((!isModEnabled('agenda') || (empty($user->admin) && !$user->hasRight('agenda', 'allactions', 'read')))) {
+			$this->resprints = ' AND (a.fk_user_action = '.(int) $user->id.' OR EXISTS (SELECT 1 FROM '.MAIN_DB_PREFIX."actioncomm_resources ar WHERE ar.fk_actioncomm = a.id AND ar.element_type = 'user' AND ar.fk_element = ".(int) $user->id.'))';
+		}
+		return 0;
+	}
+
+	/**
+	 * Native document.php / preview / API access for the archive only.
+	 * v20 ignores an accessallowed=0 hook result, so denial must stop explicitly.
+	 * @param array<string, int|string|object> $parameters Native document context
+	 * @param object|null $object Current object
+	 * @param string $action Current action
+	 * @param HookManager $hookmanager Hook manager
+	 * @return int
+	 */
+	public function checkSecureAccess($parameters, &$object, &$action, $hookmanager)
+	{
+		global $conf;
+		if (!in_array($parameters['modulepart'] ?? '', array('dolistorextract', 'dolistoreextract'), true)) return 0;
+		$actor = $parameters['fuser'] ?? null;
+		if (!isModEnabled('dolistorextract') || !is_object($actor) || !empty($actor->socid)
+			|| (empty($actor->admin) && !$actor->hasRight('dolistorextract', 'order', 'read'))) accessforbidden();
+		if (($parameters['mode'] ?? 'read') !== 'read' && (empty($actor->admin) && !$actor->hasRight('dolistorextract', 'order', 'write'))) accessforbidden();
+		$entity = (int) ($parameters['entity'] ?? 0);
+		$base = $conf->dolistorextract->multidir_output[$entity] ?? '';
+		$path = (string) ($parameters['original_file'] ?? '');
+		if (!is_string($base) || $base === '' || strpos($path, rtrim($base, '/').'/') !== 0) accessforbidden();
+		$relative = substr($path, strlen(rtrim($base, '/')) + 1);
+		$parts = explode('/', $relative);
+		if (($parts[0] ?? '') === 'dolistoreextract_order') array_shift($parts); // old links
+		$ref = array_shift($parts);
+		if (!$ref || !$parts || in_array('..', $parts, true) || in_array('.', $parts, true) || strpos($relative, "\\") !== false) accessforbidden();
+		$resql = $this->db->query('SELECT rowid FROM '.MAIN_DB_PREFIX."dolistoreextract_order WHERE ref = '".$this->db->escape($ref)."' AND entity = ".$entity);
+		$row = $resql ? $this->db->fetch_object($resql) : null;
+		if ($resql) $this->db->free($resql);
+		require_once __DIR__.'/dolistoreOrder.class.php';
+		$archive = new DolistoreOrder($this->db);
+		if (!is_object($row) || $archive->fetch((int) $row->rowid) <= 0 || (int) $archive->entity !== $entity) accessforbidden();
+		$directory = dolistoreextractGetOrderUploadDir($archive);
+		if ($directory === '') accessforbidden();
+		$file = $directory.'/'.implode('/', $parts);
+		$realDirectory = realpath($directory);
+		$realFile = realpath($file);
+		if ($realDirectory === false || $realFile === false || !is_file($realFile)
+			|| strpos($realFile, $realDirectory.'/') !== 0 || is_link($file)) accessforbidden();
+		$this->results = array('accessallowed' => 1, 'original_file' => $realFile);
+		return 1;
+	}
+
+	/**
+	 * Adapt native read checks exclusively to this module's order object.
+	 * @param array<string, int|string|object> $parameters Native access context
+	 * @param object|null $object Current object
+	 * @param string $action Current action
+	 * @param HookManager $hookmanager Hook manager
+	 * @return int
+	 */
+	public function restrictedArea($parameters, &$object, &$action, $hookmanager)
+	{
+		global $user;
+		if (($parameters['features'] ?? '') !== 'dolistorextract'
+			|| ($parameters['tableandshare'] ?? '') !== 'dolistoreextract_order') {
+			return 0;
+		}
+		$this->results = array('result' => 0);
+		if (!isModEnabled('dolistorextract') || !empty($user->socid)
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read'))) return 1;
+		$id = $parameters['objectid'] ?? 0;
+		if (!ctype_digit((string) $id) || (int) $id <= 0) return 1;
+		require_once __DIR__.'/dolistoreOrder.class.php';
+		$archive = new DolistoreOrder($this->db);
+		if ($archive->fetch((int) $id) > 0) $this->results['result'] = 1;
+		return 1;
+	}
+
 	/**
 	 * Describe the custom object to generic Dolibarr element resolvers.
 	 *
@@ -331,6 +405,7 @@ class ActionsDolistorextract extends CommonHookActions
 	public function newCustomerFromDatas(User $user, dolistoreMail $dolistoreMail) : int
 	{
 		global $conf, $langs;
+		if (!empty($user->socid) || (!isModEnabled('societe') || (empty($user->admin) && !$user->hasRight('societe', 'creer')))) return -1;
 
 		$socStatic = new Societe($this->db);
 
@@ -995,6 +1070,10 @@ class ActionsDolistorextract extends CommonHookActions
 			return -1;
 		}
 		$user->getrights();
+		if (!isModEnabled('dolistorextract') || !empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'import'))) {
+			$this->error = $langs->trans('DolistoreWelcomeAccessDenied');
+			return -1;
+		}
 
 		// 2. Data extraction (read-only)
 		$ordersData = $this->extractOrdersData($emails);
@@ -1003,11 +1082,17 @@ class ActionsDolistorextract extends CommonHookActions
 			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreNoValidOrderFound").'</span>';
 			return 0;
 		}
-		// 3. Order-by-order processing
-		foreach ($ordersData as $orderRef => $orderDetails) {
-			// The entire processing of an order is delegated to a dedicated method.
-			$success = $this->processSingleOrder($user, $orderRef, $orderDetails);
-			$orderResults[$orderRef] = $success;
+		$lockName = 'dse_orders_'.substr(hash('sha256', MAIN_DB_PREFIX), 0, 16);
+		if (!$this->acquireSqlLock($lockName)) {
+			$this->error = $langs->trans('DolistoreImportLockUnavailable');
+			return -1;
+		}
+		try {
+			foreach ($ordersData as $orderRef => $orderDetails) {
+				$orderResults[$orderRef] = $this->processSingleOrder($user, $orderRef, $orderDetails);
+			}
+		} finally {
+			$this->releaseSqlLock($lockName);
 		}
 		return $orderResults;
 	}
@@ -1025,10 +1110,15 @@ class ActionsDolistorextract extends CommonHookActions
 		$this->logOutput .= '<br/><strong>' . $langs->trans("DolistoreProcessingOrder", $orderRef) . '</strong>';
 		$this->lastOrderImportStatus = '';
 		$this->pendingCustomerCategoryWarning = '';
+		$this->createdSourceFiles = array();
 
+		$initialTransactionDepth = (int) $this->db->transaction_opened;
+		$committing = false;
+		try {
 		$this->db->begin();
 
 		$existingDolistoreOrder = $this->findExistingDolistoreOrder($orderRef, $orderDetails);
+		if ($existingDolistoreOrder < 0) { $this->db->rollback(); return false; }
 		if ($existingDolistoreOrder > 0) {
 			$this->db->rollback();
 			$this->logOutput .= '<br/><span class="warning">' . $langs->trans("DolistoreOrderAlreadyImportedSkip", $orderRef, $existingDolistoreOrder) . '</span>';
@@ -1047,12 +1137,24 @@ class ActionsDolistorextract extends CommonHookActions
 		$dolistoreOrder = $this->createDolistoreOrderArchive($user, $orderRef, $orderDetails, $companyId);
 		if ($dolistoreOrder <= 0) {
 			$this->db->rollback();
+			foreach ($this->createdSourceFiles as $path) dol_delete_file($path, 0, 0, 0);
 			$this->nbErrors++;
 			return false;
 		}
 
-		$this->db->commit();
+		$committing = true;
+		if (!$this->db->commit()) {
+			// Commit outcome is unknown: keep sources and never send here.
+			$this->error = $langs->trans('DolistoreImportCommitFailed');
+			return false;
+		}
+		$this->createdSourceFiles = array();
 		$this->logOutput .= '<br/><span class="ok">'.$langs->trans("DolistoreOrderImported", $orderRef).'</span>';
+		require_once __DIR__.'/dolistoreWelcomeMail.class.php';
+		$welcome = new DolistoreWelcomeMail($this->db);
+		if ($welcome->process($user, $dolistoreOrder) < 0) {
+			$this->logOutput .= '<br/><span class="warning">'.dol_escape_htmltag($welcome->error).'</span>';
+		}
 		if ($this->pendingCustomerCategoryWarning !== '') {
 			DolistoreImportLog::add(
 				$this->db,
@@ -1071,8 +1173,18 @@ class ActionsDolistorextract extends CommonHookActions
 		DolistoreImportLog::add($this->db, 'success', $langs->transnoentitiesnoconv("DolistoreOrderImported", $orderRef), $dolistoreOrder, 'import', array('order_ref' => $orderRef), $user);
 
 		return true;
+		} catch (Throwable $e) {
+			// SMTP and commit uncertainty must never be turned into a re-import.
+			if (!$committing) {
+				while ($this->db->transaction_opened > $initialTransactionDepth) $this->db->rollback();
+				foreach ($this->createdSourceFiles as $path) dol_delete_file($path, 0, 0, 0);
+			}
+			$this->error = $langs->trans($committing ? 'DolistoreImportCommitFailed' : 'DolistoreArchiveWriteFailed');
+			$this->nbErrors++;
+			dol_syslog(__METHOD__.' import failed; transaction outcome checked', LOG_ERR);
+			return false;
+		}
 	}
-
 	/**
 	 * Find an existing archived DoliStore order using the V2 duplicate rules.
 	 *
@@ -1083,27 +1195,30 @@ class ActionsDolistorextract extends CommonHookActions
 	private function findExistingDolistoreOrder(string $orderRef, array $orderDetails): int
 	{
 		$order = new DolistoreOrder($this->db);
-		if ($orderRef !== '' && $order->fetchByDolistoreRef($orderRef) > 0) {
+		$found = 0;
+		if ($orderRef !== '' && ($found = $order->fetchByDolistoreRef($orderRef)) > 0) {
 			return (int) $order->id;
 		}
 
+		if ($found < 0) return -1;
 		$messageId = (string) ($orderDetails['email_metadata']['message_id'] ?? '');
 		if ($messageId !== '') {
 			$order = new DolistoreOrder($this->db);
-			if ($order->fetchByEmailMessageId($messageId) > 0) {
+			if (($found = $order->fetchByEmailMessageId($messageId)) > 0) {
 				return (int) $order->id;
 			}
 		}
 
+		if ($found < 0) return -1;
 		$rawHash = (string) ($orderDetails['raw_hash'] ?? '');
 		if ($rawHash !== '') {
 			$order = new DolistoreOrder($this->db);
-			if ($order->fetchByRawHash($rawHash) > 0) {
+			if (($found = $order->fetchByRawHash($rawHash)) > 0) {
 				return (int) $order->id;
 			}
 		}
 
-		return 0;
+		return $found < 0 ? -1 : 0;
 	}
 
 	/**
@@ -1117,16 +1232,13 @@ class ActionsDolistorextract extends CommonHookActions
 	 */
 	private function createDolistoreOrderArchive(User $user, string $orderRef, array $orderDetails, int $companyId): int
 	{
-		global $langs;
+		global $langs, $conf;
 
 		$buyerData = (array) ($orderDetails['buyer_data'] ?? array());
 		$items = (array) ($orderDetails['items'] ?? array());
 		$emailMetadata = (array) ($orderDetails['email_metadata'] ?? array());
 		$orderDate = !empty($orderDetails['order_date']) ? (int) $orderDetails['order_date'] : dol_now();
-		$releaseDelayDays = (int) getDolGlobalInt('DOLISTOREXTRACT_PAYMENT_RELEASE_DELAY_DAYS');
-		if ($releaseDelayDays <= 0) {
-			$releaseDelayDays = 30;
-		}
+		$releaseDelayDays = max(0, getDolGlobalInt('DOLISTOREXTRACT_PAYMENT_RELEASE_DELAY_DAYS', 30));
 		$releaseDate = dol_time_plus_duree($orderDate, $releaseDelayDays, 'd');
 		$commissionRate = $this->getDolistoreCommissionRate();
 
@@ -1134,9 +1246,9 @@ class ActionsDolistorextract extends CommonHookActions
 		$order->dolistore_order_ref = $orderRef;
 		$order->dolistore_order_date = $orderDate;
 		$order->release_date = $releaseDate;
-		$order->currency_code = strtoupper((string) ($buyerData['order_currency'] ?? $buyerData['currency'] ?? 'EUR'));
+		$order->currency_code = strtoupper((string) ($buyerData['order_currency'] ?? $buyerData['currency'] ?? $conf->currency));
 		if ($order->currency_code === '') {
-			$order->currency_code = 'EUR';
+			$order->currency_code = (string) $conf->currency;
 		}
 		$order->commission_percent = $commissionRate;
 		$order->customer_name = trim((string) ($buyerData['buyer_company'] ?? ''));
@@ -1160,7 +1272,7 @@ class ActionsDolistorextract extends CommonHookActions
 			'buyer_email' => $order->customer_email,
 		));
 
-		$orderId = $order->create($user);
+		$orderId = $order->create($user, 1);
 		if ($orderId <= 0) {
 			$this->logOutput .= '<br/>-> <span class="error">'.$langs->trans("DolistoreArchiveOrderCreateError", dol_escape_htmltag($orderRef), dol_escape_htmltag($order->error)).'</span>';
 			DolistoreImportLog::add($this->db, 'error', $langs->transnoentitiesnoconv("DolistoreArchiveOrderCreateError", $orderRef, $order->error), 0, 'import', array('order_ref' => $orderRef), $user);
@@ -1176,9 +1288,12 @@ class ActionsDolistorextract extends CommonHookActions
 			$createdLines++;
 		}
 
-		$order->fetch($orderId);
-		$order->updateTotalsFromLines($user);
-		$this->storeOrderSourceEmails($order, $orderDetails);
+		if ($order->fetch($orderId) <= 0 || $order->updateTotalsFromLines($user) < 0
+			|| $this->storeOrderSourceEmails($order, $orderDetails) < 0
+			|| $order->completePurchaseImport($user, (string) ($orderDetails['lang'] ?? ''), $buyerData) < 0) {
+			$this->error = $order->error ?: $langs->trans('DolistoreArchiveWriteFailed');
+			return -1;
+		}
 
 		if ($createdLines === 0) {
 			DolistoreImportLog::add($this->db, 'warning', $langs->transnoentitiesnoconv("DolistoreNoItemsFound"), $orderId, 'import', array('order_ref' => $orderRef), $user);
@@ -1281,23 +1396,27 @@ class ActionsDolistorextract extends CommonHookActions
 	 *
 	 * @param DolistoreOrder $order        Order
 	 * @param array          $orderDetails Extracted order details
-	 * @return void
+	 * @return int 1 on success, -1 on failure
 	 */
-	private function storeOrderSourceEmails(DolistoreOrder $order, array $orderDetails): void
+	private function storeOrderSourceEmails(DolistoreOrder $order, array $orderDetails): int
 	{
+		global $langs;
 		$emails = (array) ($orderDetails['source_emails'] ?? array());
 		if (empty($emails) || empty($order->id) || empty($order->ref)) {
-			return;
+			return 1;
 		}
 
 		$uploadDir = dolistoreextractGetOrderUploadDir($order);
-		dol_mkdir($uploadDir);
+		if ($uploadDir === '' || dol_mkdir($uploadDir) < 0) {
+			return -1;
+		}
 
 		$index = 0;
 		foreach ($emails as $sourceEmail) {
 			$index++;
 			$filename = dol_sanitizeFileName($order->ref.'-source-'.$index.'.eml');
 			$filepath = $uploadDir.'/'.$filename;
+			if (is_link($filepath)) { $this->error = $langs->trans('DolistoreSourceEmailWriteFailed'); return -1; }
 			if (is_file($filepath)) {
 				continue;
 			}
@@ -1305,8 +1424,12 @@ class ActionsDolistorextract extends CommonHookActions
 			if ($content === '') {
 				continue;
 			}
-			file_put_contents($filepath, $content);
+			$this->createdSourceFiles[] = $filepath;
+			if (is_link($filepath) || file_put_contents($filepath, $content, LOCK_EX) !== strlen($content)) {
+				return -1;
+			}
 		}
+		return 1;
 	}
 
 	/**
@@ -1564,7 +1687,7 @@ class ActionsDolistorextract extends CommonHookActions
 			'message_key' => 'DolistoreServiceManualCreateError'
 		);
 
-		if (!$this->hasServiceManagementPermission($user)) {
+		if ((!isModEnabled('product') || (empty($user->admin) && !$user->hasRight('produit', 'creer')))) {
 			$result['code'] = 'permission_denied';
 			$result['message_key'] = 'DolistoreServiceManualCreateDenied';
 			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualCreateDenied") . '</span>';
@@ -1669,7 +1792,7 @@ class ActionsDolistorextract extends CommonHookActions
 			'message_key' => 'DolistoreServiceManualLinkError'
 		);
 
-		if (!$this->hasServiceManagementPermission($user)) {
+		if ((!isModEnabled('product') || (empty($user->admin) && !$user->hasRight('produit', 'creer')))) {
 			$result['code'] = 'permission_denied';
 			$result['message_key'] = 'DolistoreServiceManualLinkDenied';
 			$this->logOutput .= '<br/>-> <span class="error">' . $langs->trans("DolistoreServiceManualLinkDenied") . '</span>';
@@ -1845,7 +1968,8 @@ class ActionsDolistorextract extends CommonHookActions
 		if ($hasIddolistoreColumn) {
 			$sql .= ' INNER JOIN ' . $this->db->prefix() . 'product_extrafields as pe ON pe.fk_object = p.rowid';
 		}
-		$sql .= ' WHERE ' . $allowedFields[$fieldName] . ' = "' . $this->db->escape($fieldValue) . '"';
+		require_once __DIR__.'/dolistoreProductIdentity.class.php';
+		$sql .= ' WHERE '.DolistoreProductIdentity::referenceSql($allowedFields[$fieldName])." = '".$this->db->escape(DolistoreProductIdentity::normalizeReference($fieldValue))."'";
 		$sql .= ' AND p.fk_product_type = ' . ((int) Product::TYPE_SERVICE);
 		$sql .= ' AND p.entity IN (' . getEntity('product') . ')';
 		$sql .= ' ORDER BY p.rowid ASC';
@@ -1887,24 +2011,6 @@ class ActionsDolistorextract extends CommonHookActions
 	}
 
 	/**
-	 * Checks if user can create/manage services.
-	 *
-	 * @param User $user User context
-	 * @return bool      True when permission is granted
-	 */
-	private function hasServiceManagementPermission(User $user): bool
-	{
-		if (!empty($user->admin)) {
-			return true;
-		}
-
-		if (method_exists($user, 'hasRight')) {
-			return (bool) $user->hasRight('produit', 'creer');
-		}
-
-		return !empty($user->rights->produit->creer);
-	}
-	/**
 	 * Converts a formatted string representing a monetary amount to a float.
 	 *
 	 * @param string $formattedString The formatted amount (e.g., '2 356 156,00 €').
@@ -1943,6 +2049,7 @@ class ActionsDolistorextract extends CommonHookActions
 	private function getOrCreateCustomer(User $user, array $buyerData): int
 	{
 		global $langs;
+		if (!empty($user->socid) || (!isModEnabled('societe') || (empty($user->admin) && !$user->hasRight('societe', 'lire')))) return -1;
 		$company = new Societe($this->db);
 		$companyId = 0;
 
@@ -2039,7 +2146,7 @@ class ActionsDolistorextract extends CommonHookActions
 				$contact->firstname = $buyerData['buyer_firstname'];
 				$contact->email     = $buyerData['buyer_email'];
 
-				$result = $contact->create($user);
+				$result = (isModEnabled('societe') && (!empty($user->admin) || $user->hasRight('societe', 'contact', 'creer'))) ? $contact->create($user) : -1;
 				if ($result < 0) {
 					$this->logOutput .= '<br/>-> <span class="error">'.$langs->trans("DolistoreContactCreationError").'</span>';
 				} else {
@@ -2203,6 +2310,13 @@ class ActionsDolistorextract extends CommonHookActions
 
 		$langs->loadLangs(array('main', 'agenda', 'bills', 'dolistorextract@dolistorextract'));
 
+		if (!isModEnabled('dolistorextract') || !isModEnabled('facture') || !empty($user->socid)
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'invoice', 'generate')) || (!isModEnabled('facture') || (empty($user->admin) && !$user->hasRight('facture', 'creer')))
+			|| (!isModEnabled('societe') || (empty($user->admin) && !$user->hasRight('societe', 'lire')))
+			|| (getDolGlobalString('DOLISTOREXTRACT_INVOICE_STATUS') === 'validated' && (!isModEnabled('facture') || (empty($user->admin) && !$user->hasRight('facture', 'valider'))))) {
+			$this->error = $langs->trans('NotEnoughPermissions'); return -1;
+		}
+
 		if (!$force && !getDolGlobalInt('DOLISTOREXTRACT_AUTO_CREATE_INVOICE')) {
 			$this->logOutput .= '<br/><span class="warning">'.$langs->trans("DolistoreInvoiceAutoDisabled").'</span>';
 			return 0;
@@ -2273,6 +2387,7 @@ class ActionsDolistorextract extends CommonHookActions
 		foreach ($orders as $order) {
 			$amountHt += (float) $order->billable_total_ht;
 			$linesCount += count($order->getLines());
+			if ($order->error) return $this->recordInvoiceFailure($langs->trans('DolistoreInvoiceReloadError'), $user, $existingBatch);
 		}
 		$amountHt = (float) price2num($amountHt, 'MT');
 
@@ -2293,7 +2408,7 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 
 		$societe = new Societe($this->db);
-		if ($societe->fetch($socid) <= 0) {
+		if ($societe->fetch($socid) <= 0 || !in_array((int) $societe->entity, array_map('intval', explode(',', getEntity('societe'))), true)) {
 			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceThirdpartyMissing'), $user, $existingBatch);
 		}
 
@@ -2366,7 +2481,7 @@ class ActionsDolistorextract extends CommonHookActions
 		}
 		$batchId = (int) $batch->id;
 
-		$this->db->commit();
+		if (!$this->db->commit()) return $this->recordInvoiceFailure($langs->trans('DolistoreInvoiceReloadError'), $user, $batch, $batchId);
 
 		if ($invoice->fetch($invoiceId) <= 0) {
 			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceReloadError'), $user, $batch, $batchId);
@@ -2395,7 +2510,7 @@ class ActionsDolistorextract extends CommonHookActions
 		require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 
 		$societe = new Societe($this->db);
-		if ($societe->fetch($socid) <= 0) {
+		if ($societe->fetch($socid) <= 0 || !in_array((int) $societe->entity, array_map('intval', explode(',', getEntity('societe'))), true)) {
 			return 0;
 		}
 
@@ -2485,7 +2600,7 @@ class ActionsDolistorextract extends CommonHookActions
 		require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 
 		$societe = new Societe($this->db);
-		if ($societe->fetch($socid) <= 0) {
+		if ($societe->fetch($socid) <= 0 || !in_array((int) $societe->entity, array_map('intval', explode(',', getEntity('societe'))), true)) {
 			return $this->recordInvoiceFailure($langs->transnoentitiesnoconv('DolistoreInvoiceThirdpartyMissing'), $user, $batch);
 		}
 
@@ -2938,20 +3053,14 @@ class ActionsDolistorextract extends CommonHookActions
 			return '';
 		}
 
-		$entity = !empty($invoice->entity) ? (int) $invoice->entity : (int) $conf->entity;
-		$baseDir = !empty($conf->facture->multidir_output[$entity]) ? $conf->facture->multidir_output[$entity] : $conf->facture->dir_output;
-		$invoiceRef = dol_sanitizeFileName($invoice->ref);
-		$candidates = array(
-			$baseDir.'/'.$invoice->last_main_doc,
-			$baseDir.'/'.$invoiceRef.'/'.$invoice->last_main_doc,
-			$baseDir.'/'.$invoiceRef.'/'.basename($invoice->last_main_doc),
-		);
-
-		foreach ($candidates as $candidate) {
-			if (is_readable($candidate)) {
-				return $candidate;
-			}
-		}
+		$entity = (int) $invoice->entity;
+		if ($entity <= 0 || empty($conf->facture->multidir_output[$entity])) return '';
+		$dir = getMultidirOutput($invoice, 'facture', 1);
+		if (!is_string($dir) || $dir === '' || strpos($dir, 'error-') === 0) return '';
+		$root = realpath($dir);
+		$file = $dir.'/'.basename($invoice->last_main_doc);
+		$resolved = realpath($file);
+		if ($root && $resolved && !is_link($file) && strpos($resolved, $root.DIRECTORY_SEPARATOR) === 0 && is_readable($resolved)) return $resolved;
 
 		return '';
 	}
@@ -3007,19 +3116,6 @@ class ActionsDolistorextract extends CommonHookActions
 
 		return $itemData;
 	}
-	/**
-	 * Legacy V1 thank-you email entry point kept disabled in V2.
-	 *
-	 * @param User  $user         Dolibarr user object.
-	 * @param array  $orderDetails Array containing buyer data and language.
-	 * @param array  $productList  List of valid product names to include in the email.
-	 * @return void
-	 */
-	private function sendThankYouEmail(User $user, array $orderDetails, array $productList): void
-	{
-		dol_syslog(__METHOD__ . ' skipped obsolete final customer thank-you email in DoliStore Extract V2', LOG_INFO);
-	}
-
 	/**
 	 * Notify configured internal user about an unmapped Dolistore service workflow.
 	 *
