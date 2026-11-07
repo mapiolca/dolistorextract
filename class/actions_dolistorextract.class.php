@@ -2416,6 +2416,9 @@ class ActionsDolistorextract
 		$invoice = new Facture($this->db);
 		$invoice->entity = (int) $conf->entity;
 		$invoice->socid = $socid;
+		if ($societe->fk_account > 0) {
+			$invoice->fk_account = (int) $societe->fk_account;
+		}
 		$invoice->date = dol_now();
 		$invoice->datef = dol_now();
 		$invoice->type = Facture::TYPE_STANDARD;

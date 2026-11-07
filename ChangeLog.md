@@ -1,5 +1,9 @@
 # Journal des modifications de DolistoreExtract
 
+## Version 2.2.1 — 2026-11-07
+
+- La facturation automatique reprend le compte bancaire par défaut du tiers facturé lors de la création de la facture.
+
 ## Version 2.2.0 — 2026-09-10
 
 - Rétablissement de la bienvenue pour chaque nouvel achat importé : cinq modèles natifs FR/EN/ES/IT/DE conformes au modèle français fourni, file transactionnelle unique, envoi après commit, suivi fiche/journal/API et travail natif toutes les 15 minutes. Trois reprises à 1 h, 6 h et 24 h après un échec certain ; vérification manuelle obligatoire avant reprise d’un résultat incertain. Aucun rattrapage historique ni renvoi au réimport.

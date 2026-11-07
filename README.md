@@ -1,6 +1,6 @@
 # DolistoreExtract
 
-Version **2.2.0** — module externe `dolistorextract` — Dolibarr **20+**, PHP **8.0+**, MySQL/MariaDB.
+Version **2.2.1** — module externe `dolistorextract` — Dolibarr **20+**, PHP **8.0+**, MySQL/MariaDB.
 
 Le module archive les achats reçus par email DoliStore, envoie un message de bienvenue à chaque nouvel achat importé et prépare la facturation mensuelle avec l’objet natif `Facture`. Il fournit un tableau de bord, des commandes avec lignes et documents, des journaux et une API REST. L’interface et les modèles de bienvenue sont disponibles en français, anglais, espagnol, italien et allemand.
 
@@ -79,6 +79,8 @@ Chaque archive utilise exclusivement `multidir_output[entity propriétaire]/REF`
 Les fiches conservent les blocs natifs Fichiers joints, Objets liés et derniers événements, ainsi que les onglets Notes, Fichiers joints et Événements/Agenda dans cet ordre. Les préfixes CRUD et la résolution native de l’objet servent aux infobulles Ajax, à l’Agenda et aux notifications. Le PDF standard respecte la langue de sortie, les montants natifs, l’entité émettrice et une zone de pied mesurée avant contenu, avec découpage des textes longs.
 
 ## Facturation et catégories
+
+À la création, la facture reprend le compte bancaire par défaut du tiers facturé, par exemple « Association Dolibarr ». Si aucun compte n’est défini, le module laisse ce champ vide. Une reprise conserve le compte de la facture existante.
 
 La facturation crée au plus une facture mensuelle par entité pour le tiers DoliStore configuré, à partir des commandes libérées et du seuil HT. Elle conserve le détail des lignes, utilise les arrondis natifs `MU`/`MT`, contrôle les droits natifs et réutilise une facture déjà liée lors d’une reprise. L’envoi optionnel utilise un modèle `facture_send` compatible et le PDF vérifié ; le trigger core `BILL_SENTBYMAIL` conserve l’intégration Agenda native.
 
