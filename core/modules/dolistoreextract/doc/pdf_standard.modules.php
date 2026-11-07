@@ -36,7 +36,8 @@ class pdf_standard extends ModelePDFDolistoreOrder
 
 		$this->db = $db;
 		$this->name = 'standard';
-		$this->description = is_object($langs) ? $langs->trans('DolistoreOrderPdfStandardDescription') : 'Standard DoliStore order PDF';
+		$langs->load('dolistorextract@dolistorextract');
+		$this->description = $langs->trans('DolistoreOrderPdfStandardDescription');
 		$this->type = 'pdf';
 
 		$formatarray = pdf_getFormat();
@@ -49,197 +50,195 @@ class pdf_standard extends ModelePDFDolistoreOrder
 		$this->marge_basse = getDolGlobalInt('MAIN_PDF_MARGIN_BOTTOM', 10);
 	}
 
-	/**
-	 * Build PDF onto disk.
-	 *
-	 * @param DolistoreOrder $object Object
-	 * @param Translate     $outputlangs Output language
-	 * @param string        $srctemplatepath Source template path
-	 * @param int           $hidedetails Hide details
-	 * @param int           $hidedesc Hide description
-	 * @param int           $hideref Hide reference
+	/** @var float Reserved footer height, measured before content. */
+	private $heightforfooter = 0;
+	/** @var Societe */
+	private $issuer;
+	/** @var array<string,string> */
+	public $result = array();
+
+	/** Generate with native headers/footers and measured, splittable rows.
+	 * @param DolistoreOrder $object Order
+	 * @param Translate $outputlangs Output language
+	 * @param string $srctemplatepath Template
+	 * @param int $hidedetails Hide lines
+	 * @param int $hidedesc Hide labels
+	 * @param int $hideref Hide product references
 	 * @return int
 	 */
 	public function write_file($object, $outputlangs, $srctemplatepath = '', $hidedetails = 0, $hidedesc = 0, $hideref = 0)
 	{
-		global $langs;
-
-		if (!is_object($outputlangs)) {
-			$outputlangs = $langs;
-		}
-		if (getDolGlobalString('MAIN_USE_FPDF')) {
-			$outputlangs->charset_output = 'ISO-8859-1';
-		}
+		global $langs, $mysoc, $user, $conf;
+		if (!isModEnabled('dolistorextract') || !empty($user->socid)
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'read')) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'write'))) return 0;
+		if (!is_object($outputlangs)) $outputlangs = $langs;
 		$outputlangs->loadLangs(array('main', 'products', 'dict', 'companies', 'dolistorextract@dolistorextract'));
-
 		$dir = dolistoreextractGetOrderUploadDir($object);
-		$objectref = dol_sanitizeFileName($object->ref);
-		$file = $dir.'/'.$objectref.'.pdf';
-		if (!file_exists($dir) && dol_mkdir($dir) < 0) {
-			$this->error = $langs->transnoentities('ErrorCanNotCreateDir', $dir);
+		if ($dir === '' || dol_mkdir($dir) < 0) {
+			$this->error = $langs->trans('DolistoreDocumentDirectoryUnavailable');
 			return 0;
 		}
-
-		$pdf = pdf_getInstance($this->format);
-		if (class_exists('TCPDF')) {
-			$pdf->setPrintHeader(false);
-			$pdf->setPrintFooter(false);
+		$file = $dir.'/'.dol_sanitizeFileName($object->ref).'.pdf';
+		if (is_link($file)) { $this->error = $langs->trans('DolistoreDocumentMigrationConflict'); return 0; }
+		$originalConf = $conf;
+		$conf = clone $conf;
+		$conf->global = clone $conf->global;
+		try {
+		if ((int) $object->entity !== (int) $conf->entity) {
+			// Native owner configuration; never persist changes in the consultation entity.
+			$ownerConf = new Conf();
+			$ownerConf->db = clone $conf->db;
+			$ownerConf->file = clone $conf->file;
+			if (isset($conf->multicompany)) $ownerConf->multicompany = clone $conf->multicompany;
+			$ownerConf->entity = (int) $conf->entity;
+			if ($ownerConf->setEntityValues($this->db, (int) $object->entity) < 0) throw new RuntimeException('owner configuration');
+			$conf = $ownerConf;
 		}
-		$pdf->SetCreator('Dolibarr '.(defined('DOL_VERSION') ? DOL_VERSION : ''));
-		$pdf->SetTitle($this->pdfText($outputlangs, $object->ref));
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		$this->issuer = new Societe($this->db);
+		$this->issuer->setMysoc($conf);
+		// The native plain-text footer intentionally measures at width 20000.
+		// Use its HTML measuring mode locally, escaping plain text first. This
+		// preserves content and stored preferences while allowing actual wrapping.
+		if (!getDolGlobalInt('PDF_ALLOW_HTML_FOR_FREE_TEXT')) {
+			$conf->global->MAIN_PDF_FREETEXT = dol_htmlentitiesbr(getDolGlobalString('MAIN_PDF_FREETEXT'), 0);
+			$conf->global->PDF_ALLOW_HTML_FOR_FREE_TEXT = 1;
+		}
+		$conf->global->PDF_FREETEXT_DISABLE_PAGEBREAK = 1;
+		$conf->global->PDF_FOOTER_DISABLE_PAGEBREAK = 1;
+		$pdf = pdf_getInstance($this->format);
+		$pdf->setPrintHeader(false);
+		$pdf->setPrintFooter(false);
+		$pdf->SetCreator('Dolibarr '.DOL_VERSION);
+		$pdf->SetTitle($outputlangs->convToOutputCharset($object->ref));
 		$pdf->SetMargins($this->marge_gauche, $this->marge_haute, $this->marge_droite);
-		$pdf->SetAutoPageBreak(1, $this->marge_basse);
+		$pdf->SetFont(pdf_getPDFFont($outputlangs), '', pdf_getPDFFontSize($outputlangs));
 		$pdf->AddPage();
-
-		$defaultFont = pdf_getPDFFont($outputlangs);
-		$defaultFontSize = pdf_getPDFFontSize($outputlangs);
-		$right = $this->page_largeur - $this->marge_droite;
-		$y = $this->marge_haute;
-
-		$pdf->SetFont($defaultFont, 'B', $defaultFontSize + 4);
-		$pdf->SetXY($this->marge_gauche, $y);
-		$pdf->MultiCell($right - $this->marge_gauche, 8, $this->pdfText($outputlangs, $outputlangs->trans('DolistoreOrder').' '.$object->ref), 0, 'L');
-		$y += 12;
-
-		$pdf->SetFont($defaultFont, '', $defaultFontSize);
-		$this->writeInfoLine($pdf, $outputlangs, $y, $outputlangs->trans('DolistoreOrderRef'), $object->dolistore_order_ref);
-		$this->writeInfoLine($pdf, $outputlangs, $y, $outputlangs->trans('DolistoreOrderDate'), $object->dolistore_order_date ? dol_print_date($object->dolistore_order_date, 'day') : '');
-		$this->writeInfoLine($pdf, $outputlangs, $y, $outputlangs->trans('DolistoreReleaseDate'), $object->release_date ? dol_print_date($object->release_date, 'day') : '');
-		$this->writeInfoLine($pdf, $outputlangs, $y, $outputlangs->trans('DolistoreCustomerFinal'), $object->customer_name);
-		$this->writeInfoLine($pdf, $outputlangs, $y, $outputlangs->trans('AmountHT'), price($object->total_ht).' '.$object->currency_code);
-		$this->writeInfoLine($pdf, $outputlangs, $y, $outputlangs->trans('DolistoreBillableAmountHT'), price($object->billable_total_ht).' '.$object->currency_code);
-
-		$y += 6;
-		$this->writeLinesTable($pdf, $outputlangs, $object, $y, $defaultFont, $defaultFontSize);
-
+		// Measure the native final footer (including HTML and pdf_pagefoot hooks)
+		// on an isolated PDF clone. No final pass repaints existing page footers.
+		$probe = clone $pdf;
+		$probe->SetAutoPageBreak(false, 0);
+		$this->heightforfooter = max($this->marge_basse, (float) $this->_pagefoot($probe, $outputlangs, $object, 0)) + 6;
+		unset($probe);
+		if ($this->heightforfooter > $this->page_hauteur - $this->marge_haute - 45) {
+			$this->error = $langs->trans('DolistorePdfFooterTooLarge');
+			return 0;
+		}
+		$pdf->setPageOrientation('', true, $this->heightforfooter);
+		$this->pageHeader($pdf, $outputlangs, $object);
+		$width = $this->page_largeur - $this->marge_gauche - $this->marge_droite;
+		$info = array('DolistoreOrderRef' => $object->dolistore_order_ref,
+			'DolistoreOrderDate' => dol_print_date($object->dolistore_order_date, 'day', false, $outputlangs),
+			'DolistoreReleaseDate' => dol_print_date($object->release_date, 'day', false, $outputlangs),
+			'DolistoreCustomerFinal' => $object->customer_name,
+			'AmountHT' => price($object->total_ht, 0, $outputlangs).' '.$object->currency_code,
+			'DolistoreBillableAmountHT' => price($object->billable_total_ht, 0, $outputlangs).' '.$object->currency_code);
+		foreach ($info as $label => $value) {
+			$this->writeRow($pdf, $outputlangs, $object, array($outputlangs->trans($label), (string) $value), array($width * 0.38, $width * 0.62));
+		}
+		if (!$hidedetails) {
+			$columns = array($width * 0.18, $width * 0.42, $width * 0.10, $width * 0.15, $width * 0.15);
+			$this->writeRow($pdf, $outputlangs, $object, array($outputlangs->trans('DolistoreProductRef'), $outputlangs->trans('Label'), $outputlangs->trans('Qty'), $outputlangs->trans('AmountHT'), $outputlangs->trans('DolistoreBillableAmountHT')), $columns);
+			$lines = $object->getGroupedLinesForDisplay();
+			if ($object->error) { $this->error = $object->error; return 0; }
+			if (!$lines) $this->writeRow($pdf, $outputlangs, $object, array($outputlangs->trans('NoRecordFound')), array($width));
+			foreach ($lines as $line) {
+				$this->writeRow($pdf, $outputlangs, $object, array($hideref ? '' : $line['product_dolistore_ref'], $hidedesc ? '' : $line['product_label'], price($line['qty'], 0, $outputlangs), price($line['total_ht'], 0, $outputlangs), price($line['billable_total_ht'], 0, $outputlangs)), $columns);
+			}
+		}
+		if ($object->note_public) $this->writeRow($pdf, $outputlangs, $object, array(dol_string_nohtmltag($object->note_public)), array($width));
+		$pdf->SetAutoPageBreak(false, 0);
+		$this->_pagefoot($pdf, $outputlangs, $object, 0);
 		$pdf->Close();
-		$pdf->Output($file, 'F');
+		$temporary = $dir.'/.pdf-'.bin2hex(random_bytes(12));
+		$pdf->Output($temporary, 'F');
+		clearstatcache(true, $temporary);
+		if (!is_file($temporary) || filesize($temporary) <= 0 || !rename($temporary, $file)) {
+			throw new RuntimeException('PDF write failed');
+		}
 		dolChmod($file);
 		$this->result = array('fullpath' => $file);
-
 		return 1;
-	}
-
-	/**
-	 * Write one information line.
-	 *
-	 * @param TCPDF     $pdf PDF instance
-	 * @param Translate $outputlangs Output language
-	 * @param float     $y Current Y
-	 * @param string    $label Label
-	 * @param string    $value Value
-	 * @return void
-	 */
-	private function writeInfoLine(&$pdf, $outputlangs, &$y, $label, $value)
-	{
-		$pdf->SetXY($this->marge_gauche, $y);
-		$pdf->SetFont('', 'B');
-		$pdf->MultiCell(55, 6, $this->pdfText($outputlangs, $label), 0, 'L', 0, 0);
-		$pdf->SetFont('', '');
-		$pdf->MultiCell(120, 6, $this->pdfText($outputlangs, (string) $value), 0, 'L', 0, 1);
-		$y += 6;
-	}
-
-	/**
-	 * Write grouped order lines table.
-	 *
-	 * @param TCPDF          $pdf PDF instance
-	 * @param Translate      $outputlangs Output language
-	 * @param DolistoreOrder $object Object
-	 * @param float          $y Current Y
-	 * @param string         $defaultFont Default font
-	 * @param int            $defaultFontSize Default font size
-	 * @return void
-	 */
-	private function writeLinesTable(&$pdf, $outputlangs, $object, &$y, $defaultFont, $defaultFontSize)
-	{
-		$columns = array(
-			array('label' => 'DolistoreProductRef', 'width' => 30, 'align' => 'L'),
-			array('label' => 'Label', 'width' => 45, 'align' => 'L'),
-			array('label' => 'Product', 'width' => 32, 'align' => 'L'),
-			array('label' => 'Qty', 'width' => 14, 'align' => 'R'),
-			array('label' => 'UnitPriceHT', 'width' => 20, 'align' => 'R'),
-			array('label' => 'AmountHT', 'width' => 20, 'align' => 'R'),
-			array('label' => 'DolistoreBillableAmountHT', 'width' => 29, 'align' => 'R'),
-		);
-
-		$this->writeLinesHeader($pdf, $outputlangs, $y, $columns, $defaultFont, $defaultFontSize);
-		$pdf->SetFont($defaultFont, '', $defaultFontSize - 2);
-
-		$lines = $object->getGroupedLinesForDisplay();
-		if (empty($lines)) {
-			$pdf->SetXY($this->marge_gauche, $y);
-			$pdf->MultiCell(190, 6, $this->pdfText($outputlangs, $outputlangs->trans('NoRecordFound')), 1, 'L', 0, 1);
-			$y += 6;
-			return;
+		} catch (Throwable $e) {
+			if (isset($temporary) && is_file($temporary)) dol_delete_file($temporary, 0, 0, 0);
+			$this->error = $langs->trans('DolistoreArchiveWriteFailed');
+			dol_syslog(__METHOD__.' PDF generation failed for order='.(int) $object->id, LOG_ERR);
+			return 0;
+		} finally {
+			$conf = $originalConf;
 		}
+	}
 
-		foreach ($lines as $line) {
-			if ($y > ($this->page_hauteur - $this->marge_basse - 15)) {
+	/** @param TCPDF $pdf @param Translate $outputlangs @param DolistoreOrder $object @return void */
+	private function pageHeader($pdf, $outputlangs, $object)
+	{
+		global $conf;
+		pdf_pagehead($pdf, $outputlangs, $this->page_hauteur);
+		$top = $this->marge_haute;
+		$logoBase = $conf->mycompany->multidir_output[(int) $object->entity] ?? '';
+		$logoName = getDolGlobalInt('MAIN_PDF_USE_LARGE_LOGO') ? $this->issuer->logo : $this->issuer->logo_small;
+		if (is_string($logoBase) && $logoBase !== '' && is_string($logoName) && $logoName !== '' && dol_sanitizeFileName($logoName) === $logoName) {
+			$logo = $logoBase.'/logos/'.(getDolGlobalInt('MAIN_PDF_USE_LARGE_LOGO') ? '' : 'thumbs/').$logoName;
+			if (is_readable($logo) && !is_link($logo)) {
+				$height = pdf_getHeightForLogo($logo);
+				$pdf->Image($logo, $this->marge_gauche, $top, 0, $height);
+				$top += $height + 3;
+			}
+		}
+		$pdf->SetXY($this->marge_gauche, $top);
+		$pdf->SetFont(pdf_getPDFFont($outputlangs), 'B', pdf_getPDFFontSize($outputlangs) + 2);
+		$pdf->MultiCell(0, 7, $outputlangs->convToOutputCharset($outputlangs->trans('DolistoreOrder').' '.$object->ref), 0, 'L');
+		$pdf->SetFont('', '', pdf_getPDFFontSize($outputlangs));
+		$pdf->MultiCell(0, 6, $outputlangs->convToOutputCharset($this->issuer->name), 0, 'L');
+		$pdf->Ln(3);
+	}
+
+	/** @param TCPDF $pdf @param Translate $outputlangs @param DolistoreOrder $object @param int $hidefreetext @return float */
+	protected function _pagefoot(&$pdf, $outputlangs, $object, $hidefreetext)
+	{
+		return pdf_pagefoot($pdf, $outputlangs, 'MAIN_PDF_FREETEXT', $this->issuer, $this->marge_basse, $this->marge_gauche, $this->page_hauteur, $object, getDolGlobalInt('MAIN_GENERATE_DOCUMENTS_SHOW_FOOT_DETAILS', 1), $hidefreetext, $this->page_largeur);
+	}
+
+	/** Split oversized cells without truncation; all heights use native font metrics.
+	 * @param TCPDF $pdf @param Translate $outputlangs @param DolistoreOrder $object
+	 * @param list<string> $values @param list<float> $widths @return void
+	 */
+	private function writeRow($pdf, $outputlangs, $object, array $values, array $widths)
+	{
+		$remaining = array_map(array($outputlangs, 'convToOutputCharset'), $values);
+		do {
+			$space = $this->page_hauteur - $this->heightforfooter - $pdf->GetY() - 3;
+			if ($space < 12) {
+				$pdf->SetAutoPageBreak(false, 0);
+				$this->_pagefoot($pdf, $outputlangs, $object, 1);
 				$pdf->AddPage();
-				$y = $this->marge_haute;
-				$this->writeLinesHeader($pdf, $outputlangs, $y, $columns, $defaultFont, $defaultFontSize);
-				$pdf->SetFont($defaultFont, '', $defaultFontSize - 2);
+				$pdf->setPageOrientation('', true, $this->heightforfooter);
+				$this->pageHeader($pdf, $outputlangs, $object);
+				$space = $this->page_hauteur - $this->heightforfooter - $pdf->GetY() - 3;
 			}
-
-			$productRef = '';
-			if (!empty($line['product']) && is_object($line['product'])) {
-				$productRef = (string) $line['product']->ref;
+			$chunks = array();
+			$height = 6.0;
+			foreach ($remaining as $index => $text) {
+				$length = dol_strlen($text);
+				$low = 0; $high = $length;
+				while ($low < $high) {
+					$middle = (int) ceil(($low + $high) / 2);
+					$part = dol_substr($text, 0, $middle);
+					if ($pdf->getStringHeight($widths[$index], $part) + 2 <= $space) $low = $middle;
+					else $high = $middle - 1;
+				}
+				if ($length > 0 && $low === 0) throw new RuntimeException('PDF font exceeds available space');
+				$chunks[$index] = dol_substr($text, 0, $low);
+				$remaining[$index] = dol_substr($text, $low);
+				$height = max($height, $pdf->getStringHeight($widths[$index], $chunks[$index]) + 2);
 			}
-
-			$values = array(
-				dol_trunc($line['product_dolistore_ref'], 24),
-				dol_trunc($line['product_label'], 38),
-				dol_trunc($productRef, 26),
-				price($line['qty']),
-				price($line['unit_price_ht']),
-				price($line['total_ht']),
-				price($line['billable_total_ht']),
-			);
-
-			$x = $this->marge_gauche;
-			foreach ($columns as $index => $column) {
+			$x = $this->marge_gauche; $y = $pdf->GetY();
+			foreach ($chunks as $index => $text) {
 				$pdf->SetXY($x, $y);
-				$pdf->MultiCell($column['width'], 6, $this->pdfText($outputlangs, $values[$index]), 1, $column['align'], 0, 0);
-				$x += $column['width'];
+				$pdf->MultiCell($widths[$index], $height, $text, 1, 'L', false, 0);
+				$x += $widths[$index];
 			}
-			$y += 6;
-		}
-	}
-
-	/**
-	 * Write grouped lines table header.
-	 *
-	 * @param TCPDF     $pdf PDF instance
-	 * @param Translate $outputlangs Output language
-	 * @param float     $y Current Y
-	 * @param array<int,array<string,mixed>> $columns Columns
-	 * @param string    $defaultFont Default font
-	 * @param int       $defaultFontSize Default font size
-	 * @return void
-	 */
-	private function writeLinesHeader(&$pdf, $outputlangs, &$y, $columns, $defaultFont, $defaultFontSize)
-	{
-		$pdf->SetFillColor(230, 230, 230);
-		$pdf->SetFont($defaultFont, 'B', $defaultFontSize - 2);
-		$x = $this->marge_gauche;
-		foreach ($columns as $column) {
-			$pdf->SetXY($x, $y);
-			$pdf->MultiCell($column['width'], 7, $this->pdfText($outputlangs, $outputlangs->trans($column['label'])), 1, $column['align'], 1, 0);
-			$x += $column['width'];
-		}
-		$y += 7;
-	}
-
-	/**
-	 * Convert text to the PDF output charset.
-	 *
-	 * @param Translate $outputlangs Output language
-	 * @param string    $text Text
-	 * @return string
-	 */
-	private function pdfText($outputlangs, $text)
-	{
-		return $outputlangs->convToOutputCharset((string) $text);
+			$pdf->SetXY($this->marge_gauche, $y + $height);
+		} while (implode('', $remaining) !== '');
 	}
 }

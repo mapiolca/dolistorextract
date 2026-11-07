@@ -1,51 +1,19 @@
-# FR lang file for module dolistorextract
-# Copyright (C) 2017 Jean-François Ferry <jfefe@aternatik.fr>
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-#
-# Générique
-#
-
-# Module label 'ModuleXXXName'
-# (where XXX is value of numeric property 'numero' of module)
-Module500000Name = Dolistorextract
-Module104976Name = DolistoreExtract
-# Module description 'ModuleXXXDesc'
-# (where XXX is value of numeric property 'numero' of module)
-Module500000Desc = Dolistorextract module description
-Module104976Desc = Archivage et facturation des commandes DoliStore
-
-#
-# Page d'administration
-#
-DolistorextractSetup = Configuration du module Dolistorextract
-Settings = Réglages
-DolistorextractSetupPage = Page de réglage du module Dolistorextract
-DolistorextractAbout = À propos
-DolistorextractAboutPage = Informations sur le module Dolistorextract
-DolistorextractAboutGeneral = Informations générales
-DolistorextractAboutVersion = Version
-DolistorextractAboutFamily = Famille
-DolistorextractAboutDescription = Description
-DolistorextractAboutMaintainer = Mainteneur
-DolistorextractAboutResources = Ressources
-DolistorextractAboutDocumentation = Documentation
-DolistorextractAboutDocumentationLink = Voir les informations de licence
-DolistorextractAboutSupport = Support
-DolistorextractAboutSupportValue = Référez-vous à votre contact technique
-DolistorextractAboutContact = Contact
+# DolistoreExtract — fr_FR
+DolistorextractSetup=Configuration du module Dolistorextract
+DolistorextractSetupPage=Page de réglage du module Dolistorextract
+DolistorextractAbout=À propos
+DolistorextractAboutPage=Informations sur le module Dolistorextract
+DolistorextractAboutGeneral=Informations générales
+DolistorextractAboutVersion=Version
+DolistorextractAboutFamily=Famille
+DolistorextractAboutDescription=Description
+DolistorextractAboutMaintainer=Mainteneur
+DolistorextractAboutResources=Ressources
+DolistorextractAboutDocumentation=Documentation
+DolistorextractAboutDocumentationLink=Voir les informations de licence
+DolistorextractAboutSupport=Support
+DolistorextractAboutSupportValue=Référez-vous à votre contact technique
+DolistorextractAboutContact=Contact
 DolistorextractAboutCompatibility=Compatibilité
 DolistorextractCompatibility=Compatibilité
 DolistorextractAboutCompatibilityValue=Dolibarr 20+ et PHP 8.0+
@@ -54,14 +22,13 @@ DolistorextractAboutDependenciesValue=Facturation client, tâches planifiées, I
 DolistorextractAboutFeatures=Fonctionnalités principales
 DolistorextractAboutFeaturesValue=Import IMAP, commandes DoliStore archivées, lignes détaillées, lots de facturation mensuels, tableau de bord, journal et compatibilité Multicompany
 DolistorextractAboutLicense=Licence
-
-DolistorExtractImapServer = Serveur IMAP
-DolistorExtractImapServerPort = Port de connexion serveur imap
-DolistorExtractImapUser = Utilisateur IMAP
-DolistorExtractImapPassword = Mot de passe IMAP
-DolistorExtractUserForActions = Utilisateur assigné aux évènements crée par le module
-DolistorExtractEmailTemplateFr = Template email pour message en français
-DolistorExtractEmailTemplateEn = Template email pour message en anglais
+DolistorExtractImapServer=Serveur IMAP
+DolistorExtractImapServerPort=Port de connexion serveur imap
+DolistorExtractImapUser=Utilisateur IMAP
+DolistorExtractImapPassword=Mot de passe IMAP
+DolistorExtractUserForActions=Utilisateur assigné aux évènements crée par le module
+DolistorExtractEmailTemplateFr=Template email pour message en français
+DolistorExtractEmailTemplateEn=Template email pour message en anglais
 DolistorextractMessageToSendAfterDolistorePurchase=Commandes Dolistore
 DolistoreOrderEmailTemplateUnavailable=Le modèle de courriel des commandes Dolistore configuré (identifiant %s) n'est plus disponible pour cette langue. Sélectionnez un autre modèle.
 DolistoreOrderEmailTemplateMissing=Aucun modèle de courriel public et actif n'est disponible pour les commandes Dolistore en %s.
@@ -70,53 +37,37 @@ DolistoreManageEmailTemplates=Gérer les modèles de courriels
 DolistoreInvoiceEmailTemplateUnavailable=Le modèle de courriel configuré (identifiant %s) n'est plus disponible. Sélectionnez un autre modèle.
 DolistoreInvoiceEmailTemplateMissing=Aucun modèle de courriel public et actif n'est disponible pour l'envoi des factures clients.
 DolistoreInvoiceEmailTemplateRequired=Aucun modèle de courriel valide n'est sélectionné pour l'envoi de la facture.
-
-#
-# Menu
-#
-DolistorextractMenuTitle = Mails Dolistore
-
-#
-# Action agenda
-#
-DolistorextractLabelActionForSale = Achat module %s
-
-#
-# List emails
-#
-DolistoreMailsList = Liste des emails Dolistore
-DolistoreMailShow = Message Dolistore
-
-DolistorExtractImapFolder = Dossier de lecture des mails
-DolistorExtractImapFolderArchive = Dossier de stockage des mail traités (si vide reste à l'emplacement d'origine)
-DolistorExtractImapFolderError = Dossier de stockage des mail en erreur (si vide reste à l'emplacement d'origine)
-DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU = Obsolète V1 : l'email client final n'est plus envoyé
-DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER = Obsolète V1 : les commandes client natives ne sont plus créées
+DolistorextractMenuTitle=Mails Dolistore
+DolistorextractLabelActionForSale=Achat module %s
+DolistoreMailsList=Liste des emails Dolistore
+DolistoreMailShow=Message Dolistore
+DolistorExtractImapFolder=Dossier de lecture des mails
+DolistorExtractImapFolderArchive=Dossier de stockage des mail traités (si vide reste à l'emplacement d'origine)
+DolistorExtractImapFolderError=Dossier de stockage des mail en erreur (si vide reste à l'emplacement d'origine)
+DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU=Désactiver les mails de bienvenue
+DOLISTOREXTRACT_AUTO_VALIDATE_NATIVE_ORDER=Obsolète V1 : les commandes client natives ne sont plus créées
 DolistoreUnmappedBehaviorLabel=Comportement si un service DoliStore n'est pas mappé
 DolistoreUnmappedBehaviorBlock=Bloquer l'import
 DolistoreUnmappedBehaviorSkip=Ignorer la ligne
 DolistoreUnmappedBehaviorManual=Marquer pour traitement manuel (recommandé)
 ImportCSVData=Import CSV WebSale
-SelectFile=Selectionner le fichier
-ImportCSVDescription = Cette section vous permet d'importer des données dans le système à partir d'un fichier CSV. Le fichier doit être au format <strong>CSV</strong> et respecter la structure des colonnes spécifiées. Les colonnes doivent être les suivantes : <ul><li><strong>Module sell nb</strong> : Identifiant de la vente de module</li><li><strong>Customer</strong> : Nom du client</li><li><strong>Customer date creation</strong> : Date de création du client</li><li><strong>Customer email</strong> : Adresse e-mail du client</li><li><strong>Customer country</strong> : Pays du client</li><li><strong>Date sell</strong> : Date de la vente</li><li><strong>Product id</strong> : Identifiant du produit</li><li><strong>Product label</strong> : Libellé ou nom du produit</li><li><strong>Product ref</strong> : Référence du produit</li><li><strong>Amount earned</strong> : Montant gagné de la vente</li><li><strong>Amount origin</strong> : Montant d’origine avant tout ajustement</li><li><strong>Note</strong> : Notes supplémentaires relatives à la vente</li><li><strong>Année</strong> : Année de la vente</li><li><strong>Mois</strong> : Mois de la vente</li></ul> Ce fichier remplira les données de l'onglet vente d'un webmodule. Assurez-vous que les données sont correctement exportées de Dolistore pour éviter tout problème lors de l'importation. Cliquez sur "<strong>Choisir un fichier</strong>" pour sélectionner votre fichier Excel, puis cliquez sur "<strong>Importer</strong>" pour commencer le processus d'importation.
-FailedToGetSocieteFor = Impossible de trouver la société ou le contact avec l'email
-FileProcessedSuccessfully = Fichier importé avec succès
+ImportCSVDescription=Cette section vous permet d'importer des données dans le système à partir d'un fichier CSV. Le fichier doit être au format <strong>CSV</strong> et respecter la structure des colonnes spécifiées. Les colonnes doivent être les suivantes : <ul><li><strong>Module sell nb</strong> : Identifiant de la vente de module</li><li><strong>Customer</strong> : Nom du client</li><li><strong>Customer date creation</strong> : Date de création du client</li><li><strong>Customer email</strong> : Adresse e-mail du client</li><li><strong>Customer country</strong> : Pays du client</li><li><strong>Date sell</strong> : Date de la vente</li><li><strong>Product id</strong> : Identifiant du produit</li><li><strong>Product label</strong> : Libellé ou nom du produit</li><li><strong>Product ref</strong> : Référence du produit</li><li><strong>Amount earned</strong> : Montant gagné de la vente</li><li><strong>Amount origin</strong> : Montant d’origine avant tout ajustement</li><li><strong>Note</strong> : Notes supplémentaires relatives à la vente</li><li><strong>Année</strong> : Année de la vente</li><li><strong>Mois</strong> : Mois de la vente</li></ul> Ce fichier remplira les données de l'onglet vente d'un webmodule. Assurez-vous que les données sont correctement exportées de Dolistore pour éviter tout problème lors de l'importation. Cliquez sur "<strong>Choisir un fichier</strong>" pour sélectionner votre fichier Excel, puis cliquez sur "<strong>Importer</strong>" pour commencer le processus d'importation.
+FailedToGetSocieteFor=Impossible de trouver la société ou le contact avec l'email
+FileProcessedSuccessfully=Fichier importé avec succès
 RollbackCauseOfErrors=On annule l'import car il y a des erreurs : %s
 FailedToInsertDataFor=Impossible d'ajouter la donnée websale pour ref dolistore %s
 InvalidFileType=Le type de fichier attendu est CSV
 GenericDomainFoundFor=Société non trouvé & domaine de l'adresse mail générique %s
 ManyThirdpartiesFound=Plusieurs sociétés trouvés pour l'adresse mail %s
 SelectCompanyInitWebsale=Choisir le tiers qui sera utilisé si aucune société n'est trouvée (si non défini, déclenchera des erreurs et donc rollback de tout l'import)
-
 DolistoreNoValidOrderFound=Aucune commande valide trouvée.
-DolistoreCustomerMgmtFailed=Échec de la gestion client. Annulation de la transaction (Rollback).
+DolistoreCustomerMgmtFailed=La gestion du client a échoué.
 DolistoreOrderAlreadyExists=Commande %s déjà connue (Doublon ignoré).
 DolistoreOrderImported=Commande %s importée avec succès.
 DolistoreDuplicateSale=Doublon (Vente déjà existante) : %s
 DolistoreSaleCreationError=Erreur lors de la création de la vente : %s
 DolistoreImportErrorMetadata=Erreur d'import Dolistore liée aux métadonnées du mail.
 DolistoreSalesProcessed=ventes traitée(s)
-
 DolistoreContactCreationError=Erreur lors de la création du contact pour cette société.
 DolistoreContactCreated=Contact créé pour la société existante.
 DolistoreContactFound=Contact existant trouvé pour cette société.
@@ -132,7 +83,6 @@ DolistoreProductExtracted=Produit extrait : %s
 DolistoreIncompleteProductData=Données produit incomplètes, article ignoré
 DolistoreNoItemsFound=Aucun article trouvé dans cette commande
 DolistoreExtractionFailed=Échec de l'extraction des données de l'email : référence ou email acheteur manquant
-
 DolistoreThirdPartyCreatedWithID=Tier créé : %s (ID : %s)
 DolistoreContactCreatedWithID=Contact créé : %s %s (ID : %s)
 DolistoreMailsToProcess=E-mails à traiter : %s
@@ -144,7 +94,6 @@ DolistoreOrderProcessingFailed=Erreur : Le traitement de la commande %s a échou
 DolistoreProcessFail=ÉCHEC
 DolistoreProcessingOrder=Traitement de la commande : %s
 DolistoreCompanyFoundBySiret=Société trouvée par SIRET : %s
-
 DolistoreServiceRuleEnforced=Règle DoliStore service-only appliquée automatiquement pour %s (jamais un produit physique)
 DolistoreServiceMappingNotFound=Aucun mapping de service Dolibarr trouvé pour la référence %s (%s).
 DolistoreServiceMappingCandidatesFound=Aucun mapping exact de service Dolibarr pour la référence %s (%s). %s candidat(s) disponible(s) pour une sélection manuelle.
@@ -190,7 +139,7 @@ DolistoreNativeImportDone=Le traitement d'import en commande DoliStore a été e
 DolistoreNativeOrderImportObsolete=La création de commandes client Dolibarr depuis DoliStore est obsolète et désactivée en V2.
 DolistoreLegacyV1Settings=Réglages historiques V1
 DolistoreLegacyNativeOrderSettingsObsolete=Les réglages de création de commandes client natives sont conservés pour historique, mais la V2 archive désormais les commandes DoliStore et ne les utilise plus.
-DolistoreFinalCustomerEmailObsolete=Les emails de remerciement au client final sont obsolètes et ne sont plus envoyés par la V2.
+DolistoreFinalCustomerEmailObsolete=Les mails de bienvenue sont gérés par la file des achats importés.
 DolistoreUnmappedServiceSettings=Services DoliStore non mappés
 DolistoreUnmappedServiceSettingsObsolete=En V2, une ligne non mappée est archivée, signalée dans le journal et conservée sans service Dolibarr associé. Les anciens réglages d’abandon ou de création automatique ne pilotent plus l’import principal.
 DolistoreUnmappedPolicyBlockedOrder=Import bloqué pour la commande DoliStore %s car le service %s n'est pas mappé.
@@ -225,8 +174,8 @@ DolistoreAssociationThirdpartyCreateButton=Créer le tiers Association Dolibarr
 DolistoreAssociationThirdpartyCreated=Tiers Association Dolibarr créé (ID : %s).
 DolistoreAssociationThirdpartyExists=Le tiers Association Dolibarr existe déjà (ID : %s).
 DolistoreAssociationThirdpartyCreateError=Impossible de créer le tiers Association Dolibarr.
-DolistorextractEmailsImap = Courriels/IMAP
-DolistorextractCustomerOrders = Commandes client
+DolistorextractEmailsImap=Courriels/IMAP
+DolistorextractCustomerOrders=Commandes client
 DolistoreMenuRoot=DoliStore
 DolistoreDashboard=Tableau de bord
 DolistoreOrders=Commandes DoliStore
@@ -417,3 +366,63 @@ DolistoreOrderTriggerDescDelete=Événement déclenché lorsqu'une commande Doli
 Notify_DOLISTOREEXTRACT_ORDER_CREATE=Commande DoliStore créée
 Notify_DOLISTOREEXTRACT_ORDER_UPDATE=Commande DoliStore modifiée
 Notify_DOLISTOREEXTRACT_ORDER_DELETE=Commande DoliStore supprimée
+DolistoreModuleDescription=Archivage et facturation des commandes DoliStore
+DolistoreActionUserUnavailable=L’utilisateur configuré pour les traitements est indisponible ou ne possède pas les droits requis.
+DolistoreArchiveWriteFailed=L’archivage de la commande a échoué.
+DolistoreDocumentDirectoryUnavailable=Le répertoire documentaire de l’entité propriétaire est indisponible.
+DolistoreEnvironment=Environnement
+DolistoreImportCommitFailed=La validation de l’import en base n’a pas été confirmée. Vérifiez la commande avant de relancer.
+DolistoreInvalidRelation=L’objet lié est absent, inaccessible ou incompatible avec cette relation.
+DolistoreLogImport=Import
+DolistoreLogInfo=Information
+DolistoreLogInvoice=Facturation
+DolistoreLogWarning=Avertissement
+DolistoreLogWelcome=Bienvenue
+DolistorePermissionIdCollision=La plage de droits 450032 est déjà utilisée par un autre module. Migration annulée.
+DolistoreProductConflict=Cette référence DoliStore est rattachée à plusieurs produits Dolibarr. Les lignes historiques sont conservées.
+DolistoreProductReadFailed=Impossible de lire les produits DoliStore.
+DolistoreSourceEmailWriteFailed=Impossible d’archiver le courriel source.
+DolistoreStatusSuccess=Succès
+DolistoreWelcomeAccessDenied=Accès refusé au traitement de bienvenue.
+DolistoreWelcomeConfirmRetry=Relancer l’envoi du mail de bienvenue pour cette commande ?
+DolistoreWelcomeConfirmUnsent=Le résultat précédent est incertain. Confirmez avoir vérifié auprès du transport de messagerie que ce mail n’a pas été envoyé avant de le relancer.
+DolistoreWelcomeCronComment=Envoi et reprises des mails de bienvenue ; trois reprises après échec certain à 1 h, 6 h et 24 h.
+DolistoreWelcomeCronLabel=DolistoreExtract - Mails de bienvenue
+DolistoreWelcomeCronResult=Demandes de bienvenue traitées : %s
+DolistoreWelcomeDeliveryHelp=Un mail par nouvel achat importé, même pour un client existant. Les réimports et commandes historiques ne déclenchent aucun nouvel envoi. Les résultats incertains nécessitent une vérification manuelle.
+DolistoreWelcomeFailed=Échec certain
+DolistoreWelcomeInterrupted=Le traitement a été interrompu ; vérifiez le transport avant tout renvoi.
+DolistoreWelcomeMail=Mail de bienvenue
+DolistoreWelcomeNotScheduled=Aucun envoi prévu
+DolistoreWelcomeOrderUnavailable=La commande de cet envoi est absente ou inaccessible.
+DolistoreWelcomePending=En attente
+DolistoreWelcomePreparationFailed=La préparation du mail a échoué avant l’appel au transport.
+DolistoreWelcomeRecipientOrMailDisabled=Adresse destinataire invalide ou transport email désactivé dans Dolibarr.
+DolistoreWelcomeRetry=Relancer la bienvenue
+DolistoreWelcomeRetryRefused=Cette demande ne peut pas être relancée dans son état actuel.
+DolistoreWelcomeRetryRequested=Reprise du mail de bienvenue demandée.
+DolistoreWelcomeSenderInvalid=L’adresse d’expédition configurée est invalide.
+DolistoreWelcomeSending=En cours d’envoi
+DolistoreWelcomeSent=Envoyé
+DolistoreWelcomeStorageError=Impossible de mettre à jour le suivi du mail de bienvenue.
+DolistoreWelcomeTemplate=Modèle de bienvenue — %s
+DolistoreWelcomeTemplateUnavailable=Le modèle de bienvenue configuré est absent, désactivé ou incompatible avec cette langue ou ce type de message.
+DolistoreWelcomeTransportUncertain=Le transport ne permet pas de confirmer le résultat. Vérifiez avant tout renvoi.
+DolistoreWelcomeUncertain=Résultat incertain
+DolistoreDocumentMigrationConflict=Migration documentaire interrompue : un fichier existant, un lien symbolique ou une configuration invalide exige une vérification.
+DolistoreDocumentMigration=Migrer les anciens documents
+DolistoreDocumentMigrationDone=Documents migrés : %s
+Module450032Name=DolistoreExtract
+Module450032Desc=Archivage et facturation des commandes DoliStore
+DolistorePdfFooterTooLarge=Le pied de page est trop haut pour ce format. Réduisez son contenu dans les réglages PDF.
+DolistoreAgendaDisabled=Le module Agenda est désactivé.
+DolistoreApiInvalidValue=Valeur de champ invalide : %s
+Permission45003201=Lire les commandes DoliStore
+Permission45003202=Importer les commandes DoliStore
+Permission45003203=Modifier les commandes DoliStore
+Permission45003204=Supprimer les commandes DoliStore
+Permission45003205=Générer les factures DoliStore
+Permission45003206=Configurer DolistoreExtract
+Permission45003207=Utiliser l’API DolistoreExtract
+Permission45003208=Exporter les commandes DoliStore
+DolistoreOrderDeleteBlocked=Cette archive est facturée ou un envoi doit être vérifié avant sa suppression.

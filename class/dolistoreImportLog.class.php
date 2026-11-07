@@ -19,12 +19,12 @@ class DolistoreImportLog extends CommonObject
 	public $table_element = 'dolistoreextract_import_log';
 	public $ismultientitymanaged = 1;
 	public $fields = array(
-		'rowid' => array('type' => 'integer', 'label' => 'ID', 'enabled' => 1, 'visible' => -2, 'position' => 1, 'notnull' => 1),
+		'rowid' => array('type' => 'integer', 'label' => 'Ref', 'enabled' => 1, 'visible' => -2, 'position' => 1, 'notnull' => 1),
 		'entity' => array('type' => 'integer', 'label' => 'Entity', 'enabled' => 1, 'visible' => -2, 'position' => 5, 'notnull' => 1),
 		'fk_order' => array('type' => 'integer:DolistoreOrder:dolistorextract/class/dolistoreOrder.class.php', 'label' => 'DolistoreOrder', 'enabled' => 1, 'visible' => 1, 'position' => 10),
 		'fk_invoice_batch' => array('type' => 'integer:DolistoreInvoiceBatch:dolistorextract/class/dolistoreInvoiceBatch.class.php', 'label' => 'DolistoreInvoiceBatch', 'enabled' => 1, 'visible' => 1, 'position' => 20),
 		'source' => array('type' => 'varchar(64)', 'label' => 'Source', 'enabled' => 1, 'visible' => 1, 'position' => 30),
-		'level' => array('type' => 'varchar(32)', 'label' => 'Level', 'enabled' => 1, 'visible' => 1, 'position' => 40),
+		'level' => array('type' => 'varchar(32)', 'label' => 'Status', 'enabled' => 1, 'visible' => 1, 'position' => 40),
 		'message' => array('type' => 'text', 'label' => 'Message', 'enabled' => 1, 'visible' => 1, 'position' => 50),
 		'context' => array('type' => 'text', 'label' => 'Context', 'enabled' => 1, 'visible' => 0, 'position' => 60),
 		'datec' => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'visible' => 1, 'position' => 70),
@@ -41,6 +41,21 @@ class DolistoreImportLog extends CommonObject
 	public $context;
 	public $datec;
 	public $fk_user_creat;
+
+	/** @var array<string, string> Status translation keys, storage codes unchanged. */
+	public const STATUS_KEYS = array('info' => 'DolistoreLogInfo', 'warning' => 'DolistoreLogWarning', 'error' => 'Error', 'success' => 'DolistoreStatusSuccess');
+	/** @var array<string, string> Origin translation keys. */
+	public const SOURCE_KEYS = array('import' => 'DolistoreLogImport', 'invoice' => 'DolistoreLogInvoice', 'welcome' => 'DolistoreLogWelcome');
+
+	/** @param string $level Stored status @param int $mode Native display mode @return string */
+	public function LibStatut($level, $mode = 5)
+	{
+		global $langs;
+		$langs->load('dolistorextract@dolistorextract');
+		$classes = array('info' => 'status0', 'warning' => 'status1', 'error' => 'status9', 'success' => 'status4');
+		$label = isset(self::STATUS_KEYS[$level]) ? $langs->trans(self::STATUS_KEYS[$level]) : dol_escape_htmltag($level);
+		return dolGetStatus($label, '', '', $classes[$level] ?? 'status0', $mode);
+	}
 
 	/**
 	 * Constructor.

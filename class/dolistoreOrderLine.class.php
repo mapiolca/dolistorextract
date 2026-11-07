@@ -8,6 +8,7 @@
  */
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/commonobject.class.php';
+require_once DOL_DOCUMENT_ROOT.'/core/lib/price.lib.php';
 
 /**
  * DoliStore order line.
@@ -20,7 +21,7 @@ class DolistoreOrderLine extends CommonObject
 	public $picto = 'dolistore@dolistorextract';
 	public $ismultientitymanaged = 1;
 	public $fields = array(
-		'rowid' => array('type' => 'integer', 'label' => 'ID', 'enabled' => 1, 'visible' => -2, 'position' => 1, 'notnull' => 1),
+		'rowid' => array('type' => 'integer', 'label' => 'Ref', 'enabled' => 1, 'visible' => -2, 'position' => 1, 'notnull' => 1),
 		'entity' => array('type' => 'integer', 'label' => 'Entity', 'enabled' => 1, 'visible' => -2, 'position' => 5, 'notnull' => 1),
 		'fk_order' => array('type' => 'integer:DolistoreOrder:dolistorextract/class/dolistoreOrder.class.php', 'label' => 'DolistoreOrder', 'enabled' => 1, 'visible' => 1, 'position' => 10, 'notnull' => 1),
 		'product_dolistore_ref' => array('type' => 'varchar(128)', 'label' => 'DolistoreProductRef', 'enabled' => 1, 'visible' => 1, 'position' => 20),
@@ -117,7 +118,7 @@ class DolistoreOrderLine extends CommonObject
 	{
 		$lines = array();
 		$sql = 'SELECT l.* FROM '.MAIN_DB_PREFIX.$this->table_element.' as l';
-		$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'dolistoreextract_order as o ON o.rowid = l.fk_order';
+		$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'dolistoreextract_order as o ON o.rowid = l.fk_order AND o.entity = l.entity';
 		$sql .= ' WHERE l.fk_order = '.((int) $orderId);
 		$sql .= ' AND o.entity IN ('.getEntity('dolistoreextract_order').')';
 		$sql .= ' ORDER BY l.rowid ASC';
@@ -149,7 +150,8 @@ class DolistoreOrderLine extends CommonObject
 	{
 		global $conf;
 
-		$this->entity = !empty($this->entity) ? (int) $this->entity : (int) $conf->entity;
+		$this->entity = (int) $conf->entity;
+		if ($this->validateForWrite($user) < 0) return -1;
 		$this->calculateAmounts();
 		if (empty($this->raw_hash)) {
 			$this->raw_hash = $this->buildLineHash();
@@ -165,11 +167,11 @@ class DolistoreOrderLine extends CommonObject
 		$sql .= (!empty($this->fk_product) ? (int) $this->fk_product : 'NULL').',';
 		$sql .= price2num($this->qty, 'MU').',';
 		$sql .= price2num($this->unit_price_ht, 'MU').',';
-		$sql .= price2num($this->total_ht, 'MU').',';
-		$sql .= price2num($this->total_tva, 'MU').',';
-		$sql .= price2num($this->total_ttc, 'MU').',';
+		$sql .= price2num($this->total_ht, 'MT').',';
+		$sql .= price2num($this->total_tva, 'MT').',';
+		$sql .= price2num($this->total_ttc, 'MT').',';
 		$sql .= price2num($this->billable_unit_price_ht, 'MU').',';
-		$sql .= price2num($this->billable_total_ht, 'MU').',';
+		$sql .= price2num($this->billable_total_ht, 'MT').',';
 		$sql .= price2num($this->tax_rate, 'MU').',';
 		$sql .= $this->quoteNullableSqlValue($this->description).',';
 		$sql .= $this->quoteNullableSqlValue($this->raw_hash).',';
@@ -201,9 +203,11 @@ class DolistoreOrderLine extends CommonObject
 	public function update($user, $notrigger = 0)
 	{
 		if (empty($this->id)) {
-			$this->error = 'Missing line id';
+			global $langs;
+			$this->error = $langs->trans('ErrorRecordNotFound');
 			return -1;
 		}
+		if ($this->validateForWrite($user) < 0) return -1;
 		$this->calculateAmounts();
 
 		$sql = 'UPDATE '.MAIN_DB_PREFIX.$this->table_element.' SET';
@@ -212,11 +216,11 @@ class DolistoreOrderLine extends CommonObject
 		$sql .= ', fk_product = '.(!empty($this->fk_product) ? (int) $this->fk_product : 'NULL');
 		$sql .= ', qty = '.price2num($this->qty, 'MU');
 		$sql .= ', unit_price_ht = '.price2num($this->unit_price_ht, 'MU');
-		$sql .= ', total_ht = '.price2num($this->total_ht, 'MU');
-		$sql .= ', total_tva = '.price2num($this->total_tva, 'MU');
-		$sql .= ', total_ttc = '.price2num($this->total_ttc, 'MU');
+		$sql .= ', total_ht = '.price2num($this->total_ht, 'MT');
+		$sql .= ', total_tva = '.price2num($this->total_tva, 'MT');
+		$sql .= ', total_ttc = '.price2num($this->total_ttc, 'MT');
 		$sql .= ', billable_unit_price_ht = '.price2num($this->billable_unit_price_ht, 'MU');
-		$sql .= ', billable_total_ht = '.price2num($this->billable_total_ht, 'MU');
+		$sql .= ', billable_total_ht = '.price2num($this->billable_total_ht, 'MT');
 		$sql .= ', tax_rate = '.price2num($this->tax_rate, 'MU');
 		$sql .= ', description = '.$this->quoteNullableSqlValue($this->description);
 		$sql .= ', raw_hash = '.$this->quoteNullableSqlValue($this->raw_hash);
@@ -246,6 +250,7 @@ class DolistoreOrderLine extends CommonObject
 			return -1;
 		}
 
+		if ($this->validateForWrite($user) < 0) return -1;
 		$sql = 'DELETE FROM '.MAIN_DB_PREFIX.$this->table_element;
 		$sql .= ' WHERE rowid = '.((int) $this->id);
 		$sql .= ' AND entity IN ('.getEntity('dolistoreextract_order').')';
@@ -261,29 +266,53 @@ class DolistoreOrderLine extends CommonObject
 	public function calculateAmounts()
 	{
 		$qty = (float) $this->qty;
-		if (abs($qty) <= 0) {
-			$qty = 1;
-		}
-		$this->qty = $qty;
+		$this->unit_price_ht = (float) price2num($this->unit_price_ht, 'MU');
+		$this->billable_unit_price_ht = (float) price2num($this->billable_unit_price_ht, 'MU');
+		// Imported nonzero amounts are commercial snapshots, not recalculated prices.
+		if (!$this->unit_price_ht && $qty != 0) $this->unit_price_ht = (float) price2num($this->total_ht / $qty, 'MU');
+		if (!$this->billable_unit_price_ht && $qty != 0) $this->billable_unit_price_ht = (float) price2num($this->billable_total_ht / $qty, 'MU');
+		$amounts = calcul_price_total($qty, $this->unit_price_ht, 0, $this->tax_rate, 0, 0, 0, 'HT', 0, 1);
+		$billable = calcul_price_total($qty, $this->billable_unit_price_ht, 0, 0, 0, 0, 0, 'HT', 0, 1);
+		if ((float) $this->total_ht == 0) $this->total_ht = $amounts[0];
+		if ((float) $this->total_tva == 0) $this->total_tva = $amounts[1];
+		if ((float) $this->total_ttc == 0) $this->total_ttc = (float) $this->total_ht + (float) $this->total_tva;
+		if ((float) $this->billable_total_ht == 0) $this->billable_total_ht = $billable[0];
+		foreach (array('total_ht', 'total_tva', 'total_ttc', 'billable_total_ht') as $field) $this->{$field} = (float) price2num($this->{$field}, 'MT');
+	}
 
-		if ((float) $this->total_ht == 0 && (float) $this->unit_price_ht != 0) {
-			$this->total_ht = (float) $this->unit_price_ht * $qty;
+	/** Validate the owning order and native metadata before a line mutation.
+	 * @param User $user Actor @return int
+	 */
+	private function validateForWrite($user)
+	{
+		global $langs;
+		$langs->loadLangs(array('main', 'dolistorextract@dolistorextract'));
+		if (!isModEnabled('dolistorextract') || !empty($user->socid)
+			|| (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'write') && !$user->hasRight('dolistorextract', 'order', 'import'))) {
+			$this->error = $langs->trans('NotEnoughPermissions'); return -1;
 		}
-		if ((float) $this->unit_price_ht == 0 && $qty != 0) {
-			$this->unit_price_ht = (float) $this->total_ht / $qty;
+		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'dolistoreextract_order WHERE rowid = '.(int) $this->fk_order
+			.' AND entity = '.(int) $this->entity.' AND entity IN ('.$this->db->sanitize(getEntity('dolistoreextract_order')).') AND fk_facture IS NULL';
+		$result = $this->db->query($sql);
+		if (!$result || !$this->db->fetch_object($result)) { $this->error = $langs->trans('DolistoreInvalidRelation'); return -1; }
+		$this->db->free($result);
+		if ($this->id) {
+			$previous = new self($this->db);
+			if ($previous->fetch($this->id) <= 0 || (int) $previous->entity !== (int) $this->entity || (int) $previous->fk_order !== (int) $this->fk_order) {
+				$this->error = $langs->trans('DolistoreInvalidRelation'); return -1;
+			}
 		}
-		if ((float) $this->total_tva == 0 && (float) $this->tax_rate != 0) {
-			$this->total_tva = (float) $this->total_ht * ((float) $this->tax_rate / 100);
+		if ($this->fk_product) {
+			$result = $this->db->query('SELECT rowid FROM '.MAIN_DB_PREFIX.'product WHERE rowid = '.(int) $this->fk_product.' AND entity IN ('.$this->db->sanitize(getEntity('product')).')');
+			if (!$result || !$this->db->fetch_object($result)) { $this->error = $langs->trans('DolistoreInvalidRelation'); return -1; }
+			$this->db->free($result);
 		}
-		if ((float) $this->total_ttc == 0) {
-			$this->total_ttc = (float) $this->total_ht + (float) $this->total_tva;
+		foreach ($this->fields as $field => $definition) {
+			if (in_array($field, array('rowid', 'datec', 'tms', 'fk_user_creat', 'fk_user_modif'), true)) continue;
+			if ($this->{$field} === null && empty($definition['notnull'])) continue;
+			if (!$this->validateField($this->fields, $field, (string) $this->{$field})) return -1;
 		}
-		if ((float) $this->billable_total_ht == 0 && (float) $this->billable_unit_price_ht != 0) {
-			$this->billable_total_ht = (float) $this->billable_unit_price_ht * $qty;
-		}
-		if ((float) $this->billable_unit_price_ht == 0 && $qty != 0) {
-			$this->billable_unit_price_ht = (float) $this->billable_total_ht / $qty;
-		}
+		return 1;
 	}
 
 	/**
@@ -297,7 +326,7 @@ class DolistoreOrderLine extends CommonObject
 			(int) $this->fk_order,
 			(string) $this->product_dolistore_ref,
 			(string) $this->product_label,
-			price2num($this->total_ht, 'MU'),
+			price2num($this->total_ht, 'MT'),
 			price2num($this->qty, 'MU')
 		)));
 	}

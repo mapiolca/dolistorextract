@@ -2,10 +2,11 @@ CREATE TABLE llx_dolistoreextract_order (
 	rowid integer AUTO_INCREMENT PRIMARY KEY,
 	entity integer DEFAULT 1 NOT NULL,
 	ref varchar(128) NOT NULL,
+	ref_ext varchar(255) DEFAULT NULL, -- Native CommonObject validation on Dolibarr 20; reserved, not a DoliStore reference mirror.
 	dolistore_order_ref varchar(128) DEFAULT NULL,
 	dolistore_order_date date DEFAULT NULL,
 	release_date date DEFAULT NULL,
-	currency_code varchar(3) DEFAULT 'EUR',
+	currency_code varchar(3) DEFAULT NULL,
 	total_ht double(24,8) DEFAULT 0,
 	total_tva double(24,8) DEFAULT 0,
 	total_ttc double(24,8) DEFAULT 0,

@@ -41,11 +41,21 @@ class InterfaceDolistorextractTriggers extends DolibarrTriggers
 	 */
 	public function runTrigger($action, $object, User $user, Translate $langs, Conf $conf)
 	{
-		if (strpos($action, 'DOLISTOREEXTRACT_') !== 0) {
+		if (!isModEnabled('dolistorextract') || strpos($action, 'DOLISTOREEXTRACT_') !== 0) {
 			return 0;
 		}
 
-		dol_syslog(__METHOD__.' action='.$action.' object='.(is_object($object) ? get_class($object) : '').' id='.(int) ($object->id ?? 0), LOG_DEBUG);
+		if ($action === 'DOLISTOREEXTRACT_ORDER_CREATE' && $object instanceof DolistoreOrder
+			&& ($object->context['trigger_reason'] ?? '') === 'purchase_import_complete') {
+			require_once __DIR__.'/../../class/dolistoreWelcomeMail.class.php';
+			$welcome = new DolistoreWelcomeMail($this->db);
+			$result = $welcome->enqueue($object, $user);
+			if ($result < 0) {
+				$object->error = $langs->trans($welcome->error);
+				return -1;
+			}
+		}
+		dol_syslog(__METHOD__.' action='.$action.' id='.(int) ($object->id ?? 0), LOG_DEBUG);
 
 		return 0;
 	}

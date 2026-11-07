@@ -8,7 +8,24 @@
  */
 
 /**
- * Prepare admin pages header.
+ * Settings contexts shared by page titles and navigation tabs.
+ *
+ * @return array<string,array{url:string,label:string,picto:string}>
+ */
+function dolistorextractAdminPages()
+{
+	return array(
+		'settings' => array('url' => 'setup.php', 'label' => 'Settings', 'picto' => 'dolistore@dolistorextract'),
+		'orders' => array('url' => 'setup.php?mode=orders', 'label' => 'DolistoreOrdersSetup', 'picto' => 'order'),
+		'billing' => array('url' => 'setup.php?mode=billing', 'label' => 'DolistoreBilling', 'picto' => 'bill'),
+		'emailsimap' => array('url' => 'setup.php?mode=emailsimap', 'label' => 'DolistorextractEmailsImap', 'picto' => 'email'),
+		'compatibility' => array('url' => 'compatibility.php', 'label' => 'DolistorextractCompatibility', 'picto' => 'technic'),
+		'about' => array('url' => 'about.php', 'label' => 'DolistorextractAbout', 'picto' => 'info'),
+	);
+}
+
+/**
+ * Prepare admin pages header. Each tab owns its icon, including on mobile.
  *
  * @return array<int,array<int,string>>
  */
@@ -16,40 +33,15 @@ function dolistorextractAdminPrepareHead()
 {
 	global $langs;
 
-	$langs->load('dolistorextract@dolistorextract');
-
+	$langs->loadLangs(array('dolistorextract@dolistorextract', 'admin', 'agenda', 'bills', 'companies'));
 	$head = array();
-	$h = 0;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php', 1);
-	$head[$h][1] = $langs->trans('Settings');
-	$head[$h][2] = 'settings';
-	$h++;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php?mode=orders', 1);
-	$head[$h][1] = $langs->trans('DolistoreOrdersSetup');
-	$head[$h][2] = 'orders';
-	$h++;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php?mode=billing', 1);
-	$head[$h][1] = $langs->trans('DolistoreBilling');
-	$head[$h][2] = 'billing';
-	$h++;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/setup.php?mode=emailsimap', 1);
-	$head[$h][1] = $langs->trans('DolistorextractEmailsImap');
-	$head[$h][2] = 'emailsimap';
-	$h++;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/compatibility.php', 1);
-	$head[$h][1] = $langs->trans('DolistorextractCompatibility');
-	$head[$h][2] = 'compatibility';
-	$h++;
-
-	$head[$h][0] = dol_buildpath('/dolistorextract/admin/about.php', 1);
-	$head[$h][1] = $langs->trans('DolistorextractAbout');
-	$head[$h][2] = 'about';
-
+	foreach (dolistorextractAdminPages() as $code => $page) {
+		$head[] = array(
+			dol_buildpath('/dolistorextract/admin/'.$page['url'], 1),
+			img_picto('', $page['picto'], '', 0, 0, 0, '', 'imgTabTitle pictofixedwidth').$langs->trans($page['label']),
+			$code,
+		);
+	}
 	return $head;
 }
 
@@ -61,16 +53,16 @@ function dolistorextractAdminPrepareHead()
  */
 function dolistoreextractOrderPrepareHead($object)
 {
-	global $langs;
+	global $langs, $user;
 
-	$langs->load('dolistorextract@dolistorextract');
+	$langs->loadLangs(array('dolistorextract@dolistorextract', 'admin', 'agenda', 'bills', 'companies'));
 
 	$head = array();
 	$h = 0;
 	$id = (int) $object->id;
 
 	$head[$h][0] = dol_buildpath('/dolistorextract/card.php', 1).'?id='.$id;
-	$head[$h][1] = img_picto('', 'order', 'class="pictofixedwidth"').' '.$langs->trans('DolistoreOrderCard');
+	$head[$h][1] = $langs->trans('DolistoreOrderCard');
 	$head[$h][2] = 'card';
 	$h++;
 
@@ -93,10 +85,12 @@ function dolistoreextractOrderPrepareHead($object)
 	$head[$h][2] = 'documents';
 	$h++;
 
-	$head[$h][0] = dol_buildpath('/dolistorextract/agenda.php', 1).'?id='.$id;
-	$head[$h][1] = $langs->trans('EventsAgenda');
-	$head[$h][2] = 'agenda';
-	$h++;
+	if (isModEnabled('agenda') && (!empty($user->admin) || $user->hasRight('agenda', 'myactions', 'read'))) {
+		$head[$h][0] = dol_buildpath('/dolistorextract/agenda.php', 1).'?id='.$id;
+		$head[$h][1] = $langs->trans('Module2400Name');
+		$head[$h][2] = 'agenda';
+		$h++;
+	}
 
 	$head[$h][0] = dol_buildpath('/dolistorextract/mail.php', 1).'?id='.$id;
 	$head[$h][1] = $langs->trans('DolistoreMailSource');
@@ -116,26 +110,6 @@ function dolistoreextractOrderPrepareHead($object)
 }
 
 /**
- * Check module right with admin fallback.
- *
- * @param User   $user   User
- * @param string $level1 Level 1
- * @param string $level2 Level 2
- * @return bool
- */
-function dolistoreextractUserHasRight($user, $level1, $level2 = '')
-{
-	if (!is_object($user)) {
-		return false;
-	}
-	if (!empty($user->admin)) {
-		return true;
-	}
-
-	return $level2 !== '' ? (bool) $user->hasRight('dolistorextract', $level1, $level2) : (bool) $user->hasRight('dolistorextract', $level1);
-}
-
-/**
  * Return document directory for a DoliStore order.
  *
  * @param DolistoreOrder $object Order
@@ -143,19 +117,33 @@ function dolistoreextractUserHasRight($user, $level1, $level2 = '')
  */
 function dolistoreextractGetOrderUploadDir($object)
 {
-	global $conf;
-
-	require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
-
-	$objectEntity = !empty($object->entity) ? (int) $object->entity : (int) $conf->entity;
-	$moduleOutput = getMultidirOutput($object, 'dolistorextract', 0);
-	if (empty($moduleOutput) || strpos($moduleOutput, 'error-') === 0) {
-		$moduleOutput = !empty($conf->dolistorextract->multidir_output[$objectEntity])
-			? $conf->dolistorextract->multidir_output[$objectEntity]
-			: $conf->dolistorextract->dir_output;
+	global $conf, $langs;
+	$entity = (int) $object->entity;
+	$module = $conf->dolistorextract ?? null;
+	if ((int) $object->id <= 0 || $entity <= 0 || !is_object($module)
+		|| !isset($module->multidir_output) || !is_array($module->multidir_output)
+		|| !isset($module->multidir_output[$entity]) || !is_string($module->multidir_output[$entity])
+		|| trim($module->multidir_output[$entity]) === '' || trim((string) $object->ref) === ''
+		|| dol_sanitizeFileName($object->ref) !== $object->ref
+		|| !in_array($entity, array_map('intval', explode(',', getEntity($object->table_element))), true)) {
+		$object->error = $langs->trans('DolistoreDocumentDirectoryUnavailable');
+		return '';
 	}
-
-	return rtrim($moduleOutput, '/').'/'.$object->element.'/'.dol_sanitizeFileName($object->ref);
+	$path = getMultidirOutput($object, 'dolistorextract', 1);
+	if (!is_string($path) || $path === '' || strpos($path, 'error-') === 0) {
+		$object->error = $langs->trans('DolistoreDocumentDirectoryUnavailable');
+		return '';
+	}
+	// Reject symlink components, including a redirected entity root.
+	$parent = rtrim($path, '/');
+	while ($parent !== '' && $parent !== '/' && $parent !== '.') {
+		if (is_link($parent)) {
+			$object->error = $langs->trans('DolistoreDocumentDirectoryUnavailable');
+			return '';
+		}
+		$parent = dirname($parent);
+	}
+	return rtrim($path, '/');
 }
 
 /**
@@ -167,11 +155,11 @@ function dolistoreextractGetOrderUploadDir($object)
 function dolistoreextractGetOrderDocumentContext($object)
 {
 	$ref = dol_sanitizeFileName($object->ref);
-	$modulesubdir = $object->element.'/'.$ref;
+	$modulesubdir = $ref;
 
 	return array(
-		'modulepart_card' => 'dolistoreextract:DolistoreOrder',
-		'modulepart_files' => 'dolistoreextract',
+		'modulepart_card' => 'dolistorextract:DolistoreOrder',
+		'modulepart_files' => 'dolistorextract',
 		'modulesubdir' => $modulesubdir,
 		'upload_dir' => dolistoreextractGetOrderUploadDir($object),
 	);
@@ -191,6 +179,7 @@ function dolistoreextractCountOrderAttachedFiles($object)
 	require_once DOL_DOCUMENT_ROOT.'/core/class/link.class.php';
 
 	$uploadDir = dolistoreextractGetOrderUploadDir($object);
+	if ($uploadDir === '') return 0;
 	$filearray = dol_dir_list($uploadDir, 'files', 0, '', '(\.meta|_preview.*\.png)$', 'name', SORT_ASC, 1);
 	$linkCount = Link::count($db, $object->element, (int) $object->id);
 	if ($linkCount < 0) {
@@ -333,7 +322,7 @@ function dolistoreextractAppendDateFilterParam(&$param, $prefix, $date)
  */
 function dolistoreextractArrayFieldChecked($arrayfields, $key)
 {
-	return !empty($arrayfields[$key]['checked']);
+	return !empty($arrayfields[$key]['checked']) && !empty($arrayfields[$key]['enabled']);
 }
 
 /**
@@ -347,7 +336,7 @@ function dolistoreextractVisibleColumnCount($arrayfields, $extra = 0)
 {
 	$count = (int) $extra;
 	foreach ($arrayfields as $val) {
-		if (!empty($val['checked'])) {
+		if (!empty($val['checked']) && !empty($val['enabled'])) {
 			$count++;
 		}
 	}
@@ -374,16 +363,18 @@ function dolistoreextractPrintNoRecordLine($colspan)
  * @param array<string,array<string,mixed>> $arrayfields List arrayfields
  * @param array<string,string>              $totals      HTML totals indexed by field key
  * @param int                              $extra        Extra empty columns not declared in arrayfields
+ * @param bool                             $extraLeft    Put action columns before the data columns
  * @return void
  */
-function dolistoreextractPrintTotalRow($arrayfields, $totals, $extra = 0)
+function dolistoreextractPrintTotalRow($arrayfields, $totals, $extra = 0, $extraLeft = false)
 {
 	global $langs;
 
 	print '<tr class="liste_total">';
+	if ($extraLeft) print str_repeat('<td></td>', $extra);
 	$labelPrinted = false;
 	foreach ($arrayfields as $key => $val) {
-		if (empty($val['checked'])) {
+		if (empty($val['checked']) || empty($val['enabled'])) {
 			continue;
 		}
 		$class = !empty($val['align']) ? ' class="'.$val['align'].'"' : '';
@@ -396,8 +387,31 @@ function dolistoreextractPrintTotalRow($arrayfields, $totals, $extra = 0)
 		}
 		print '</td>';
 	}
-	for ($i = 0; $i < $extra; $i++) {
+	for ($i = 0; !$extraLeft && $i < $extra; $i++) {
 		print '<td></td>';
 	}
 	print '</tr>';
+}
+
+/**
+ * Resolve the shared order environments once for filters and row badges.
+ * getEntity delegates the accessible sharing scope to Multicompany.
+ * @param DoliDB $db Database
+ * @return array<int, string>
+ */
+function dolistoreextractGetEntityOptions($db)
+{
+	global $conf, $mysoc;
+	if (!isModEnabled('multicompany')) {
+		return array((int) $conf->entity => (string) ($mysoc->name ?? ''));
+	}
+	$options = array();
+	$resql = $db->query('SELECT rowid, label FROM '.MAIN_DB_PREFIX.'entity WHERE active = 1 AND rowid IN ('.$db->sanitize(getEntity('dolistoreextract_order')).') ORDER BY label');
+	if (!$resql) {
+		dol_syslog(__FUNCTION__.' '.$db->lasterror(), LOG_ERR);
+		return $options;
+	}
+	while (is_object($row = $db->fetch_object($resql))) $options[(int) $row->rowid] = (string) $row->label;
+	$db->free($resql);
+	return $options;
 }

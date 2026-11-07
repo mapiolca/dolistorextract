@@ -105,14 +105,15 @@ class dolistorextractCron
 
 		$user = new User($this->db);
 		$userId = getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS');
-		if ($userId <= 0) {
-			$userId = 1;
-		}
-		if ($user->fetch($userId) <= 0) {
-			$this->output .= 'Unable to load DoliStore action user';
+		if ($userId <= 0 || $user->fetch($userId) <= 0) {
+			$this->output .= $langs->trans('DolistoreActionUserUnavailable');
 			return -1;
 		}
 		$user->getrights();
+		if (!empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'invoice', 'generate'))) {
+			$this->output .= $langs->trans('NotEnoughPermissions');
+			return -1;
+		}
 
 		$dolistorextractActions = new \ActionsDolistorextract($this->db);
 		$res = $dolistorextractActions->generateMonthlyDolistoreInvoice($user);
@@ -153,5 +154,32 @@ class dolistorextractCron
 
 		$this->output .= $langs->trans('DolistoreDailyNotificationNotImplemented');
 		return 0;
+	}
+
+	/** @return int 0 completed, -1 access/storage error */
+	public function runWelcome(): int
+	{
+		global $langs;
+		$langs->load('dolistorextract@dolistorextract');
+		if (!isModEnabled('dolistorextract') || getDolGlobalInt('DOLISTOREXTRACT_DISABLE_SEND_THANK_YOU')) {
+			return 0;
+		}
+		require_once DOL_DOCUMENT_ROOT.'/user/class/user.class.php';
+		require_once __DIR__.'/dolistoreWelcomeMail.class.php';
+		$user = new User($this->db);
+		$id = getDolGlobalInt('DOLISTOREXTRACT_USER_FOR_ACTIONS');
+		if ($id <= 0 || $user->fetch($id) <= 0) {
+			$this->output = $langs->trans('DolistoreActionUserUnavailable');
+			return -1;
+		}
+		$user->getrights();
+		if (!empty($user->socid) || (empty($user->admin) && !$user->hasRight('dolistorextract', 'order', 'import'))) {
+			$this->output = $langs->trans('NotEnoughPermissions');
+			return -1;
+		}
+		$welcome = new DolistoreWelcomeMail($this->db);
+		$result = $welcome->process($user);
+		$this->output = $result < 0 ? $welcome->error : $langs->trans('DolistoreWelcomeCronResult', $result);
+		return $result < 0 ? -1 : 0;
 	}
 }
